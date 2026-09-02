@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import { authMiddleware } from "@/lib/auth/middleware";
+import { answerFromBones } from "./bones-ask";
 import { buildCanon } from "./canon";
-import { getNativity } from "./nativity";
 import type { ChartId } from "./types";
 
 const SYSTEM = `You are not a horoscope column and you are not a chatbot. You are the natal machine in the source document.
@@ -22,11 +23,13 @@ type AskInput = {
   question: string;
   notes: string[];
   history: { role: "user" | "vault"; text: string }[];
+  focus?: string;
 };
 
 export const askTheChart = createServerFn({ method: "POST" })
   .validator((input: AskInput) => {
-    const chartId = input?.chartId === "joey" ? "joey" : "saige";
+    if (input?.chartId !== "joey" && input?.chartId !== "saige") throw new Error("Not found");
+    const chartId: ChartId = input.chartId;
     const question = (input?.question ?? "").trim().slice(0, 500);
     if (question.length < 2) throw new Error("Ask something the bones can answer.");
     const notes = Array.isArray(input.notes)
@@ -37,15 +40,18 @@ export const askTheChart = createServerFn({ method: "POST" })
           .filter((h) => h && (h.role === "user" || h.role === "vault") && typeof h.text === "string")
           .slice(-8)
       : [];
-    return { chartId, question, notes, history } as AskInput;
+    const focus = typeof input.focus === "string" ? input.focus.trim().slice(0, 80) : "";
+    return { chartId, question, notes, history, focus } as AskInput;
   })
-  .handler(async ({ data }) => {
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { assertResearchOwner, loadResearchNativity } = await import("./nativities/load.server");
+    await assertResearchOwner(context.userId);
+    const nativity = loadResearchNativity(data.chartId);
+    const bones = answerFromBones(nativity, data.question, data.focus);
     const apiKey = process.env.XAI_API_KEY;
-    if (!apiKey) {
-      return { ok: false as const, error: "The machine is quiet in this environment." };
-    }
+    if (!apiKey) return { ok: true as const, text: bones, from: "bones" as const };
 
-    const nativity = getNativity(data.chartId);
     const canon = buildCanon(nativity, data.notes).slice(0, 32000);
     const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
       { role: "system", content: SYSTEM },
@@ -57,30 +63,35 @@ export const askTheChart = createServerFn({ method: "POST" })
         content: turn.text.slice(0, 2500),
       });
     }
+    if (data.focus) {
+      messages.push({
+        role: "system",
+        content: `The querent is looking at ${data.focus}. Answer from that body first. Name the position exactly as tabled.`,
+      });
+    }
     messages.push({ role: "user", content: data.question });
 
-    const res = await fetch("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "grok-4.5",
-        messages,
-        temperature: 0.35,
-        max_tokens: 800,
-      }),
-    });
-
-    if (!res.ok) {
-      return { ok: false as const, error: "The machine did not answer. Try again." };
+    try {
+      const res = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "grok-4.5",
+          messages,
+          temperature: 0.35,
+          max_tokens: 800,
+        }),
+        signal: AbortSignal.timeout(9000),
+      });
+      if (!res.ok) return { ok: true as const, text: bones, from: "bones" as const };
+      const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const text = body.choices?.[0]?.message?.content?.trim() ?? "";
+      if (!text) return { ok: true as const, text: bones, from: "bones" as const };
+      return { ok: true as const, text, from: "machine" as const };
+    } catch {
+      return { ok: true as const, text: bones, from: "bones" as const };
     }
-
-    const body = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    const text = body.choices?.[0]?.message?.content?.trim() ?? "";
-    if (!text) return { ok: false as const, error: "The machine returned silence." };
-    return { ok: true as const, text };
   });

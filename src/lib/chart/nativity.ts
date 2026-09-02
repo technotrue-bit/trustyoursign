@@ -1,24 +1,10 @@
-import type { ChartId } from "./types";
+import type { Nativity } from "./schema";
 import { useVault } from "@/lib/store";
 
-export type ChartIdExport = ChartId;
+export type { Nativity, Meta, ExtraBone } from "./schema";
+export type { ChartId } from "./types";
 
-export const LIBRARY: { id: ChartId; title: string; oneCut: string; date: string }[] = [
-  {
-    id: "saige",
-    title: "Saige K",
-    oneCut: "A fire face, a vault heart, a surgical mind.",
-    date: "Monday, 26 July 2004",
-  },
-  {
-    id: "joey",
-    title: "Joey Devin Norris",
-    oneCut: "Gemini rising, a Sagittarius sun in the 7th, an Aquarius moon.",
-    date: "Monday, 13 December 1999",
-  },
-];
-
-export function useNativity() {
-  const id = useVault((s) => s.chartId) ?? "saige";
-  return LIBRARY.find((c) => c.id === id) ?? LIBRARY[0]!;
+/** Loaded research nativity, or null if this session is not on an owner chart. */
+export function useNativity(): Nativity | null {
+  return useVault((s) => s.research);
 }

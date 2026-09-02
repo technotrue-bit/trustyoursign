@@ -1,13 +1,22 @@
 import { create } from "zustand";
-import { CONSTELLATIONS, nearestSign, wrap12 } from "./constellations";
+import { CONSTELLATIONS } from "./constellations";
+import { stationFromT } from "./temple";
 
 type GalaxyState = {
   t: number;
   moved: boolean;
   signIndex: number;
   born: boolean;
+  chakraNote: string | null;
+  introTitle: number;
+  introChrome: number;
+  introAsk: number;
+  introVeil: number;
+  introSkip: boolean;
+  introDone: boolean;
   setTravel: (t: number, moved?: boolean) => void;
   markBorn: () => void;
+  setChakraNote: (id: string | null) => void;
 };
 
 export const useGalaxy = create<GalaxyState>((set, get) => ({
@@ -15,14 +24,21 @@ export const useGalaxy = create<GalaxyState>((set, get) => ({
   moved: false,
   signIndex: 0,
   born: false,
+  chakraNote: null,
+  introTitle: 0,
+  introChrome: 0,
+  introAsk: 0,
+  introVeil: 0,
+  introSkip: false,
+  introDone: false,
   setTravel: (t, moved) => {
-    const signIndex = nearestSign(t);
+    const signIndex = stationFromT(t);
     const prev = get();
-    if (prev.signIndex === signIndex && prev.moved === !!moved && Math.abs(prev.t - t) < 0.04) {
+    if (prev.signIndex === signIndex && prev.moved === !!moved && Math.abs(prev.t - t) < 0.008) {
       return;
     }
     set({
-      t: wrap12(t),
+      t,
       signIndex,
       moved: moved ?? prev.moved,
     });
@@ -31,6 +47,7 @@ export const useGalaxy = create<GalaxyState>((set, get) => ({
     if (get().born) return;
     set({ born: true });
   },
+  setChakraNote: (id) => set({ chakraNote: id }),
 }));
 
 export function currentConstellation() {

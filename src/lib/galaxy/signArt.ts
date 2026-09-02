@@ -64,7 +64,9 @@ function ensureImage(id: SignId) {
   img = new Image();
   img.decoding = "async";
   img.onload = () => {
-    rasterAll(id);
+    const paint = () => rasterAll(id);
+    if (typeof img.decode === "function") img.decode().then(paint).catch(paint);
+    else paint();
   };
   img.onerror = () => {
     window.setTimeout(() => {
@@ -140,7 +142,14 @@ export function primeSignArt(id: SignId) {
 
 export function preloadSignArt() {
   if (typeof window === "undefined") return;
+  ensureImage("aries");
+  ensureImage("taurus");
+}
+
+export function preloadSignArtRest() {
+  if (typeof window === "undefined") return;
   (Object.keys(SIGN_ART) as SignId[]).forEach((id) => {
+    if (id === "aries" || id === "taurus") return;
     ensureImage(id);
   });
 }

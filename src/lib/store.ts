@@ -1,91 +1,181 @@
 import { create } from "zustand";
 import type { AppMode, ChartId, Selection, SignId } from "@/lib/chart/types";
+import type { Nativity } from "@/lib/chart/schema";
+import type { SkyNatal } from "@/lib/chart/ephemeris";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
-import { galaxyTravel, resetTravel, seekSign } from "@/lib/galaxy/travel";
+import { OPEN_T, resetTravel, seekSign } from "@/lib/galaxy/travel";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { isDateInSign } from "@/lib/chart/sun";
+import { followingBeat, markBeatSeen, markTourDone, nextJoeyBeat } from "@/lib/chart/tour";
 
-export type BirthDate = { year: number; month: number; day: number };
+export type BirthDate = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number | null;
+  minute: number | null;
+  place: string | null;
+};
+
+export type ShelfSketch = {
+  id: string;
+  label: string;
+  signId: SignId;
+  birthMonth: number;
+  birthDay: number;
+  birthYear: number;
+  birthHour: number | null;
+  birthMinute: number | null;
+  birthPlace: string | null;
+  natal: SkyNatal | null;
+  tone: "vault" | "warm";
+  relation: "self" | "other";
+  personName: string | null;
+  from: "galaxy" | "library";
+};
 
 type VaultState = {
   entered: boolean;
   gate: "galaxy" | "library";
   chartId: ChartId | null;
+  research: Nativity | null;
+  shelf: ShelfSketch | null;
   mode: AppMode;
   selection: Selection;
   hovered: Selection;
   chat: boolean;
   pickedSign: SignId | null;
   birth: BirthDate | null;
-  openChart: (id: ChartId) => void;
+  tourBeat: string | null;
+  sheetFolded: boolean;
+  openChart: (id: ChartId, research: Nativity) => void;
   setChart: (id: ChartId) => void;
+  openShelf: (sketch: Omit<ShelfSketch, "id"> & { id?: string }) => void;
   openLibrary: () => void;
   openGalaxy: () => void;
   library: () => void;
   openBirthChat: (sign: SignId) => void;
   closeBirthChat: () => void;
   setBirth: (birth: BirthDate) => void;
+  setShelfNatal: (natal: SkyNatal) => void;
+  setShelfTone: (tone: "vault" | "warm") => void;
   setMode: (mode: AppMode) => void;
   select: (selection: Selection) => void;
   hover: (hovered: Selection) => void;
   clear: () => void;
   goBack: () => void;
+  nextTour: () => void;
+  skipTour: () => void;
+  foldSheet: (folded: boolean) => void;
 };
 
 export const useVault = create<VaultState>((set, get) => ({
   entered: false,
   gate: "galaxy",
   chartId: null,
+  research: null,
+  shelf: null,
   mode: "sky",
   selection: null,
   hovered: null,
   chat: false,
   pickedSign: null,
   birth: null,
-  openChart: (id) =>
+  tourBeat: null,
+  sheetFolded: false,
+  openChart: (id, research) => {
+    const walk = id === "joey";
+    const beat = walk ? nextJoeyBeat() : null;
     set({
       chartId: id,
+      research,
+      shelf: null,
       entered: true,
       gate: "library",
-      mode: "sky",
+      mode: beat?.mode ?? "sky",
+      selection: beat?.selection ?? null,
+      hovered: null,
+      chat: false,
+      tourBeat: beat?.id ?? null,
+    });
+  },
+  setChart: (id) => set({ chartId: id, research: null, shelf: null, mode: "sky", selection: null, hovered: null, tourBeat: null }),
+  openShelf: (sketch) => {
+    const i = CONSTELLATIONS.findIndex((c) => c.id === sketch.signId);
+    if (i >= 0) seekSign(i);
+    const id = sketch.id ?? (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `shelf-${Date.now()}`);
+    set({
+      shelf: {
+        ...sketch,
+        id,
+        natal: sketch.natal ?? null,
+        tone: sketch.tone ?? "vault",
+      },
+      chartId: null,
+      research: null,
+      entered: true,
+      gate: sketch.from === "library" ? "library" : "galaxy",
+      mode: "ask",
       selection: null,
       hovered: null,
       chat: false,
-    }),
-  setChart: (id) => set({ chartId: id, mode: "sky", selection: null, hovered: null }),
+      pickedSign: sketch.signId,
+      birth: {
+        month: sketch.birthMonth,
+        day: sketch.birthDay,
+        year: sketch.birthYear,
+        hour: sketch.birthHour,
+        minute: sketch.birthMinute,
+        place: sketch.birthPlace,
+      },
+      tourBeat: null,
+    });
+  },
   openLibrary: () =>
     set({
       gate: "library",
       entered: false,
       chartId: null,
+      research: null,
+      shelf: null,
       selection: null,
       hovered: null,
       chat: false,
+      tourBeat: null,
+      sheetFolded: false,
     }),
   openGalaxy: () => {
     resetTravel(false);
-    useGalaxy.setState({ born: true, moved: false, t: 0, signIndex: 0 });
+    useGalaxy.setState({ born: true, moved: false, t: OPEN_T, signIndex: 0 });
     set({
       gate: "galaxy",
       entered: false,
       chartId: null,
+      research: null,
+      shelf: null,
       selection: null,
       hovered: null,
       mode: "sky",
       chat: false,
       pickedSign: null,
       birth: null,
+      tourBeat: null,
+      sheetFolded: false,
     });
   },
   library: () =>
     set({
       entered: false,
       chartId: null,
+      research: null,
+      shelf: null,
       selection: null,
       hovered: null,
       mode: "sky",
       gate: "library",
       chat: false,
+      tourBeat: null,
+      sheetFolded: false,
     }),
   openBirthChat: (sign) => {
     const i = CONSTELLATIONS.findIndex((c) => c.id === sign);
@@ -98,12 +188,31 @@ export const useVault = create<VaultState>((set, get) => ({
     if (sign && !isDateInSign(sign, birth.month, birth.day)) return;
     set({ birth });
   },
-  setMode: (mode) => set({ mode, selection: null, hovered: null }),
+  setShelfNatal: (natal) => {
+    const shelf = get().shelf;
+    if (!shelf) return;
+    set({ shelf: { ...shelf, natal, tone: natal.tone } });
+  },
+  setShelfTone: (tone) => {
+    const shelf = get().shelf;
+    if (!shelf) return;
+    const natal = shelf.natal ? { ...shelf.natal, tone } : null;
+    set({ shelf: { ...shelf, tone, natal } });
+  },
+  setMode: (mode) => {
+    if (mode === "ask") set({ mode, hovered: null });
+    else set({ mode, selection: null, hovered: null });
+  },
   select: (selection) => set({ selection }),
   hover: (hovered) => set({ hovered }),
   clear: () => set({ selection: null }),
   goBack: () => {
     const s = get();
+    if (s.shelf) {
+      if (s.shelf.from === "library") s.library();
+      else s.openGalaxy();
+      return;
+    }
     if (s.entered) {
       s.library();
       return;
@@ -114,4 +223,26 @@ export const useVault = create<VaultState>((set, get) => ({
     }
     if (s.gate === "library") s.openGalaxy();
   },
+  nextTour: () => {
+    const id = get().tourBeat;
+    if (!id) return;
+    markBeatSeen(id);
+    const next = followingBeat(id);
+    if (!next) {
+      markTourDone();
+      set({ tourBeat: null });
+      return;
+    }
+    set({
+      tourBeat: next.id,
+      mode: next.mode,
+      selection: next.selection,
+      hovered: null,
+    });
+  },
+  skipTour: () => {
+    markTourDone();
+    set({ tourBeat: null });
+  },
+  foldSheet: (folded) => set({ sheetFolded: folded }),
 }));
