@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy } from "@/lib/galaxy/store";
-import { seekSign } from "@/lib/galaxy/travel";
+import { noteControl, seekSign } from "@/lib/galaxy/travel";
 import { cn } from "@/lib/utils";
 
 function jumpTo(index: number) {
@@ -31,6 +31,8 @@ export function SignStrip() {
   const scrollerRef = useRef<HTMLUListElement>(null);
   const fromStrip = useRef(false);
   const programmatic = useRef(false);
+  const hands = useRef(false);
+  const wheelUntil = useRef(0);
   const settle = useRef(0);
   const mounted = useRef(false);
 
@@ -48,7 +50,7 @@ export function SignStrip() {
         programmatic.current = false;
         fromStrip.current = false;
       },
-      smooth ? 420 : 40,
+      smooth ? 720 : 40,
     );
   };
 
@@ -57,14 +59,26 @@ export function SignStrip() {
     if (!el) return;
     centerItem(useGalaxy.getState().signIndex, false);
     const onWheel = (e: WheelEvent) => {
+      hands.current = true;
+      wheelUntil.current = performance.now() + 280;
+      noteControl();
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
         e.preventDefault();
         el.scrollLeft += e.deltaY;
       }
       e.stopPropagation();
     };
+    const onUp = () => {
+      hands.current = false;
+    };
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
   }, []);
 
   useEffect(() => {
@@ -76,6 +90,7 @@ export function SignStrip() {
 
   const onScroll = () => {
     if (programmatic.current) return;
+    if (!hands.current && performance.now() > wheelUntil.current) return;
     const el = scrollerRef.current;
     if (!el) return;
     fromStrip.current = true;
@@ -88,10 +103,14 @@ export function SignStrip() {
   return (
     <ul
       ref={scrollerRef}
-      className="sign-strip"
+      className="sign-strip pointer-events-auto"
       aria-label="The twelve signs"
       onScroll={onScroll}
-      onPointerDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        hands.current = true;
+        noteControl();
+      }}
     >
       {CONSTELLATIONS.map((c, i) => {
         const on = moved && i === signIndex;
@@ -108,7 +127,7 @@ export function SignStrip() {
                 centerItem(i, true);
               }}
               className={cn(
-                "flex min-h-11 w-full flex-col items-center justify-center px-3 py-2",
+                "flex min-h-12 w-full flex-col items-center justify-center px-3 py-2 md:min-h-11",
                 "transition-[color,opacity] duration-200 ease-out",
                 on ? "text-fg" : "text-fg-subtle hover:text-fg-muted",
               )}

@@ -1,6 +1,8 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
+import { StageLock } from "@/components/StageLock";
+import { OwnerBind } from "@/components/OwnerBind";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "The Vault";
@@ -13,11 +15,13 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       {
         name: "description",
-        content: "Saige · natal machine. A fire face, a vault heart, a surgical mind.",
+        content: "The Vault · kept by Devin Norris. A natal fly-through. Sign in to save a chart.",
       },
       { name: "theme-color", content: "#0c0b0a" },
       { name: "color-scheme", content: "dark" },
-      { name: "apple-mobile-web-app-status-bar-style", content: "black" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -50,7 +54,9 @@ export const Route = createRootRoute({
       </head>
       <body style={{ background: "#0c0b0a", color: "#efe8dc", margin: 0 }}>
         <PreviewHostBridge />
+        <StageLock />
         <AuthProvider>
+          <OwnerBind />
           <Outlet />
         </AuthProvider>
         <Scripts />

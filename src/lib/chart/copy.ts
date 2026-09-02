@@ -97,5 +97,56 @@ export const READINGS: ReadingDef[] = [
   {
     id: "love",
     name: "Love",
-    headline: 
-... 
+    headline: "Not built for casual, even when Gemini Venus knows how to sound casual.",
+    body: [
+      "The descendant is Gemini, so the type is: quick, clever, dual, young-in-the-mouth, a sibling-soul, someone who can talk. Then Pluto opposes that Venus, so the type also is: total, jealous, healing, dangerous, not a game.",
+      "The person who lasts can do both — stay interesting, and not flinch when the vault opens.",
+      "Saturn in the 7th says the real marriage (legal or not) is a grown-up thing: caretaking, time, the unglamorous weather of two nervous systems. If she only chases Pluto and never lets Saturn in, she gets intensity without a house. If she only lets Saturn in and starves Pluto, she gets a house without a pulse.",
+      "Lilith on the descendant: do not marry the person who is ashamed of her intensity. Marry the person who is oriented by it.",
+    ],
+  },
+  {
+    id: "work",
+    name: "Work",
+    headline: "Known for how she handles other people under pressure.",
+    body: [
+      "Midheaven in Libra: the public story wants harmony, design, law, counsel, the art of the in-between, being the one who can sit between two sides.",
+      "Saturn squares it exact: the public story is earned in the 7th. Partnerships, clients, audience, the other chair.",
+      "Jupiter ruler in the 9th Virgo: teacher, editor, analyst, itinerant craftsperson of truth, someone whose job is a standard of quality. 8th-house Sun / Mercury / Mars: psychology, research, finance, crisis work, medicine of the hidden, sex / death / power as subject matter, other people’s resources.",
+      "She does not thrive in a job that is only performance (pure 10th-house Scorpio south node). She thrives in a job that is real in the body (Taurus node) and true in the vault (8th-house Sun).",
+    ],
+  },
+  {
+    id: "wound",
+    name: "Wound",
+    headline: "Not “sad childhood” as a slogan. A specific geometry.",
+    body: [
+      "Chiron retrograde in intercepted Capricorn in the 1st: I must already be solid.",
+      "Moon in fall: comfort is a foreign country.",
+      "Saturn in detriment in the 7th: belonging has a price.",
+      "Jupiter in detriment: faith has to be built by hand.",
+      "The medicine is not more intensity. She already has more intensity than the room. The medicine is Taurus 4th Node: enough, slow, edible, housed, boring in the holy way. The exalted Mercury can help her get there if she lets it schedule the nervous system instead of only autopsying other people.",
+    ],
+  },
+  {
+    id: "becoming",
+    name: "Becoming",
+    headline: "This chart is not a light Leo. It is not a carefree Sagittarius. It is not cursed.",
+    body: [
+      "Detriment and fall are how the power is trained, not a verdict. It is not a lone-wolf chart. The engine is Venus. The square to the MC is Saturn in the 7th. She becomes herself with and against other people.",
+      "Solitude (12th Pluto) is the well she draws from. It is not the whole country.",
+      "When she doesn’t understand a decision, ask: Was Venus driving? Did the 8th house vote? Did Mercury sign? Did the Scorpio Moon get a veto? Did Saturn in the 7th get a structure? Is this south-node proving, or north-node housing?",
+      "When she feels too much: that is Pluto on the rising plus Moon in fall. The work is not to become less. The work is to give the weather a house.",
+      "When she feels fake: Leo Sun in the 8th is being asked to perform 10th-house Scorpio. Go back to the vault. The real Sun is the self that remains after the fusion.",
+    ],
+  },
+];
+
+export const GATE_BY_ID = Object.fromEntries(GATES.map((g) => [g.id, g])) as Record<
+  GateId,
+  GateDef
+>;
+export const READING_BY_ID = Object.fromEntries(READINGS.map((r) => [r.id, r])) as Record<
+  ReadingId,
+  ReadingDef
+>;

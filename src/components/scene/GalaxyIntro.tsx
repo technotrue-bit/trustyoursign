@@ -1,415 +1,629 @@
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import {
+  ACESFilmicToneMapping,
   AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
   Color,
   DoubleSide,
+  FogExp2,
   Group,
+  LinearFilter,
   Mesh,
   MeshBasicMaterial,
+  NoToneMapping,
   PerspectiveCamera,
   Points,
+  SRGBColorSpace,
   Vector3,
 } from "three";
-import { CONSTELLATIONS, constellationDust, pairFigures, type Constellation } from "@/lib/galaxy/constellations";
-import { artAspect, artReady, hydrateSignArt, loadSignArt, preloadSignArt } from "@/lib/galaxy/signArt";
-import { useGalaxy } from "@/lib/galaxy/store";
+import { isSmallGpu } from "@/lib/gpu";
+import { CONSTELLATIONS, ELEMENT_TINT } from "@/lib/galaxy/constellations";
 import {
-  CRUISE,
   HOLD_FLY,
-  MAX_FLY,
-  PLAY_CRUISE,
-  SPACING,
-  alongToGate,
   aimedIndex,
-  birthBoom,
-  birthIgnite,
+  ensureAutoClock,
+  ensureFlyInput,
   galaxyTravel,
-  gateForm,
-  morphBurst,
-  nearestSign,
+  noteControl,
   prefersReducedMotion,
-  signedDelta,
-  signMorph,
-  SEEK_ARRIVE,
   skipBirth,
-  starGather,
-  starSpark,
   stepBirth,
-  stepPlayUntil,
   stepSeek,
+  stepZoom,
 } from "@/lib/galaxy/travel";
-import { canvasDpr, glContextAttrs, isSmallGpu } from "@/lib/gpu";
+import {
+  bootIntro,
+  introCam,
+  introCanSkip,
+  introField,
+  introPlaying,
+  introAries,
+  skipIntro,
+  stepIntro,
+  uAssemble,
+  uBirth,
+} from "@/lib/galaxy/intro";
+import { useGalaxy } from "@/lib/galaxy/store";
+import { fillStationCloud, makeSparkMaterial } from "@/lib/galaxy/starRender";
+import { createDiskSim, disposeDisk, stepDisk, DISK_CHAKRAS } from "@/lib/galaxy/disk";
+import { loadSignArt, preloadSignArt, preloadSignArtRest, hydrateSignArt, artReady, artAspect, primeSignArt, plateReady } from "@/lib/galaxy/signArt";
+import { denseCloud, getSignVolume, primeSignVolumes, volumeChest } from "@/lib/galaxy/signVolume";
+import { buildBirthNebula, makeNebulaMaterial } from "@/lib/galaxy/nebula";
+import { makeStarSprite } from "@/lib/galaxy/celestial";
+import {
+  NAVE,
+  PLATE_WIDE,
+  TEMPLE_CURVE,
+  TEMPLE_SIGNS,
+  TEMPLE_STATIONS,
+  clamp01,
+  heroFrame,
+  viewAspect,
+  lerpAccent,
+  lerpFog,
+  stationFromT,
+  stationT,
+  type TempleSign,
+} from "@/lib/galaxy/temple";
 import { useVault } from "@/lib/store";
+import { CelestialSky } from "./CelestialSky";
+import { CornerGalaxies } from "./CornerGalaxies";
 
-const COUNT = 12;
 const SMALL = typeof window !== "undefined" && isSmallGpu();
-const STAR_N = SMALL ? 2800 : 6400;
-const GALAXY_TINT: Record<string, string> = {
-  fire: "#f3d5b0",
-  earth: "#e6d7b8",
-  air: "#dce6ef",
-  water: "#cfd8ea",
-};
+const DUST_N = SMALL ? 180 : 320;
+const CLOUD_N = SMALL ? 2600 : 4400;
 
+const _cam = new Vector3();
 const _look = new Vector3();
-const _pos = new Vector3();
+const _chest = new Vector3();
+const _fog = new Color();
+const _accent = new Color();
+const _up = new Vector3(0, 1, 0);
 
-function pathAt(t: number, out: Vector3) {
-  out.set(Math.sin(t * 0.17) * 1.6, Math.cos(t * 0.11) * 0.85, -t * SPACING);
+function noopRaycast() {
+  /* never steal sign picks */
 }
 
-function makeSparkTexture() {
-  const c = document.createElement("canvas");
-  c.width = 64;
-  c.height = 64;
-  const ctx = c.getContext("2d")!;
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0, "rgba(255,248,236,1)");
-  g.addColorStop(0.18, "rgba(255,236,210,0.9)");
-  g.addColorStop(0.42, "rgba(255,220,180,0.28)");
-  g.addColorStop(1, "rgba(255,220,180,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 64);
-  const tex = new CanvasTexture(c);
+function smooth(x: number) {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+}
+
+function makeScatter(index: number, n: number) {
+  return Array.from({ length: n }, (_, i) => {
+    const a = index * 1.73 + i * 2.399;
+    const r = 9 + (i % 5) * 1.8;
+    return new Vector3(Math.cos(a) * r, Math.sin(a * 0.7) * 5.2, Math.sin(a) * r * 0.5);
+  });
+}
+
+function finishTexture(tex: CanvasTexture) {
+  tex.colorSpace = SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = LinearFilter;
+  tex.magFilter = LinearFilter;
+  tex.premultiplyAlpha = true;
   tex.needsUpdate = true;
   return tex;
 }
 
-function scatterStar(pos: BufferAttribute, i: number, z: number, tight: boolean) {
-  const spreadX = tight ? 16 : 38;
-  const spreadY = tight ? 9 : 22;
-  pos.setXYZ(
-    i,
-    (Math.random() - 0.5) * spreadX,
-    (Math.random() - 0.5) * spreadY * (Math.random() < 0.55 ? 0.5 : 1),
-    z,
+function makeCircleTexture() {
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, "rgba(255, 248, 236, 0.95)");
+  g.addColorStop(0.12, "rgba(255, 236, 214, 0.55)");
+  g.addColorStop(0.32, "rgba(232, 214, 188, 0.16)");
+  g.addColorStop(0.62, "rgba(160, 140, 110, 0.04)");
+  g.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return finishTexture(new CanvasTexture(canvas));
+}
+
+export function GalaxyIntro() {
+  const { gl, scene } = useThree();
+  const [sky, setSky] = useState(false);
+  const [rest, setRest] = useState(false);
+  useEffect(() => {
+    bootIntro();
+    galaxyTravel.birth = 1;
+    preloadSignArt();
+    primeSignArt("aries");
+    primeSignArt("taurus");
+    const skyT = window.setTimeout(() => setSky(true), 80);
+    const restT = window.setTimeout(() => {
+      setRest(true);
+      preloadSignArtRest();
+      primeSignVolumes();
+      for (const c of CONSTELLATIONS) primeSignArt(c.id);
+    }, SMALL ? 700 : 480);
+    return () => {
+      window.clearTimeout(skyT);
+      window.clearTimeout(restT);
+    };
+  }, []);
+  useEffect(() => {
+    const prev = gl.toneMapping;
+    gl.toneMapping = ACESFilmicToneMapping;
+    gl.toneMappingExposure = 1.05;
+    gl.outputColorSpace = SRGBColorSpace;
+    scene.fog = new FogExp2("#100e0c", 0.01);
+    return () => {
+      gl.toneMapping = prev || NoToneMapping;
+    };
+  }, [gl, scene]);
+  return (
+    <>
+      <color attach="background" args={["#000000"]} />
+      <ambientLight intensity={0.08} color="#c8b8a0" />
+      <hemisphereLight args={["#1a1820", "#080706", 0.18]} />
+      <StationLight />
+      {sky ? <CelestialSky /> : null}
+      {sky ? <CornerGalaxies /> : null}
+      {sky ? <Dust /> : null}
+      <BirthNebula />
+      {TEMPLE_SIGNS.map((sign, i) => (
+        <Station key={sign.id} index={i} sign={sign} eager={i <= 2} />
+      ))}
+      {sky ? <SignDisk /> : null}
+      <ChartRing />
+      <TempleRig />
+    </>
   );
 }
 
-function StarField() {
-  const points = useRef<Points>(null);
-  const geo = useMemo(() => {
-    const g = new BufferGeometry();
-    const pos = new Float32Array(STAR_N * 3);
-    const attr = new BufferAttribute(pos, 3);
-    for (let i = 0; i < STAR_N; i++) scatterStar(attr, i, -Math.random() * 140, i % 5 !== 0);
-    g.setAttribute("position", attr);
-    return g;
-  }, []);
-  const spark = useMemo(() => makeSparkTexture(), []);
-  useEffect(() => () => { geo.dispose(); spark.dispose(); }, [geo, spark]);
-  useFrame(({ camera }) => {
-    const mesh = points.current;
-    if (!mesh) return;
-    const mat = mesh.material;
-    const b = galaxyTravel.birth;
-    if (mat && !Array.isArray(mat) && "opacity" in mat) mat.opacity = 0.28 + b * 0.62;
-    const pos = mesh.geometry.getAttribute("position") as BufferAttribute;
-    const cz = camera.position.z;
-    if (!Number.isFinite(cz)) return;
-    const far = cz - 120;
-    const near = cz + 8;
-    for (let i = 0; i < STAR_N; i++) {
-      let z = pos.getZ(i);
-      if (z > near) z = cz - 118 - Math.random() * 14;
-      if (z < far) z = cz + 4 - Math.random() * 6;
-      pos.setZ(i, z);
+function StationLight() {
+  const light = useRef<import("three").PointLight>(null);
+  useFrame(() => {
+    const l = light.current;
+    if (!l) return;
+    const t = galaxyTravel.t;
+    TEMPLE_CURVE.getPointAt(clamp01(t + 0.012), _chest);
+    l.position.copy(_chest);
+    l.position.y += 2.2;
+    lerpAccent(t, _accent);
+    l.color.copy(_accent);
+  });
+  return <pointLight ref={light} intensity={2.4} distance={48} decay={2} color="#e8c49a" />;
+}
+
+function SignDisk() {
+  const group = useRef<Group>(null);
+  const wells = useRef<Group>(null);
+  const sim = useMemo(() => createDiskSim(), []);
+  useEffect(() => () => disposeDisk(sim), [sim]);
+  useFrame(({ clock, gl }, dt) => {
+    const g = group.current;
+    if (!g) return;
+    const idx = aimedIndex();
+    const sign = TEMPLE_SIGNS[idx];
+    if (!sign) {
+      g.visible = false;
+      return;
     }
-    pos.needsUpdate = true;
+    const sit = TEMPLE_STATIONS[idx]!;
+    const chest = volumeChest(sign.id);
+    const aspect = getSignVolume(sign.id)?.aspect ?? 16 / 9;
+    const dist = Math.abs(galaxyTravel.t - stationT(idx));
+    const gather = 1 - Math.min(1, dist / 0.07);
+    const intro = introPlaying() ? introAries() : 1;
+    const veil = useGalaxy.getState().introVeil;
+    const vault = useVault.getState();
+    const claimed = vault.pickedSign === sign.id && (vault.chat || vault.entered);
+    const show = gather > 0.32 && intro > 0.4 && veil < 0.45;
+    g.visible = show;
+    if (wells.current) wells.current.visible = claimed && show;
+    if (!show) {
+      sim.mat.uniforms.uFade.value = 0;
+      return;
+    }
+    g.position.set(sit.x + chest.x * PLATE_WIDE * 0.55, sit.y + chest.y * (PLATE_WIDE / aspect) * 0.45, sit.z + 0.22);
+    g.scale.setScalar(3.2);
+    const focus = claimed ? useGalaxy.getState().chakraNote : null;
+    stepDisk(
+      sim,
+      dt,
+      sign.id,
+      focus,
+      galaxyTravel.ptrX,
+      galaxyTravel.ptrY,
+      galaxyTravel.ptrOn && !galaxyTravel.dragging,
+      prefersReducedMotion(),
+    );
+    sim.mat.uniforms.uTime.value = clock.elapsedTime;
+    sim.mat.uniforms.uFade.value =
+      Math.min(1, (gather - 0.32) / 0.4) * Math.min(1, (intro - 0.38) / 0.4) * (1 - veil);
+    sim.mat.uniforms.uPixelRatio.value = Math.min(2, gl.getPixelRatio());
   });
   return (
-    <points ref={points} geometry={geo} frustumCulled={false}>
+    <group ref={group} visible={false} frustumCulled={false}>
+      <points geometry={sim.geo} material={sim.mat} frustumCulled={false} renderOrder={16} raycast={noopRaycast} />
+      <group ref={wells} visible={false}>
+        {DISK_CHAKRAS.map((c) => (
+          <mesh
+            key={c.id}
+            position={[0, c.y * 0.72, 0.18]}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!useVault.getState().pickedSign) return;
+              useGalaxy.getState().setChakraNote(c.id);
+            }}
+          >
+            <sphereGeometry args={[0.09, 12, 10]} />
+            <meshBasicMaterial color={c.color} transparent opacity={0.9} toneMapped={false} depthWrite={false} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+function Dust() {
+  const points = useRef<Points>(null);
+  const tex = useMemo(() => makeCircleTexture(), []);
+  const geo = useMemo(() => {
+    const geometry = new BufferGeometry();
+    const pos = new Float32Array(DUST_N * 3);
+    const seed = new Float32Array(DUST_N);
+    for (let i = 0; i < DUST_N; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 28;
+      pos[i * 3 + 1] = Math.random() * 10;
+      pos[i * 3 + 2] = -Math.random() * NAVE * 12;
+      seed[i] = Math.random() * Math.PI * 2;
+    }
+    geometry.setAttribute("position", new BufferAttribute(pos, 3));
+    geometry.setAttribute("aSeed", new BufferAttribute(seed, 1));
+    return geometry;
+  }, []);
+  useEffect(() => () => {
+    tex.dispose();
+    geo.dispose();
+  }, [tex, geo]);
+  useFrame(({ clock }) => {
+    const mesh = points.current;
+    if (!mesh) return;
+    const vis = introField();
+    mesh.visible = vis > 0.02;
+    const mat = mesh.material;
+    if (!Array.isArray(mat) && "opacity" in mat) mat.opacity = 0.35 * vis;
+  });
+  return (
+    <points ref={points} geometry={geo} frustumCulled={false} raycast={noopRaycast}>
       <pointsMaterial
-        map={spark}
-        color="#fff6e8"
-        size={SMALL ? 2.15 : 2.4}
-        sizeAttenuation
+        map={tex}
+        color="#e8d8c0"
+        size={0.16}
         transparent
+        opacity={0.35}
         depthWrite={false}
-        opacity={0.3}
         blending={AdditiveBlending}
+        fog={false}
         toneMapped={false}
-        fog
+        sizeAttenuation
       />
     </points>
   );
 }
 
-function SignFigure({ index, data }: { index: number; data: Constellation }) {
+function BirthNebula() {
+  const points = useRef<Points>(null);
+  const tex = useMemo(() => makeStarSprite(), []);
+  const geo = useMemo(() => buildBirthNebula(), []);
+  const mat = useMemo(() => makeNebulaMaterial(tex), [tex]);
+  useEffect(
+    () => () => {
+      tex.dispose();
+      geo.dispose();
+      mat.dispose();
+    },
+    [tex, geo, mat],
+  );
+  useFrame(({ clock }) => {
+    const mesh = points.current;
+    if (!mesh) return;
+    const assemble = uAssemble();
+    const playing = introPlaying();
+    const hold = playing ? 1 : Math.max(0, 1 - assemble);
+    const fade = playing ? 1 - Math.max(0, (assemble - 0.7) / 0.3) : hold;
+    mesh.visible = fade > 0.02;
+    if (!mesh.visible) return;
+    mesh.position.copy(TEMPLE_STATIONS[0]!);
+    mat.uniforms.uTime.value = clock.elapsedTime;
+    mat.uniforms.uBirth.value = uBirth();
+    mat.uniforms.uAssemble.value = assemble;
+    mat.uniforms.uOpacity.value = fade;
+  });
+  return (
+    <points ref={points} geometry={geo} material={mat} frustumCulled={false} renderOrder={12} raycast={noopRaycast} />
+  );
+}
+
+function Station({ index, sign, eager }: { index: number; sign: TempleSign; eager: boolean }) {
+  const group = useRef<Group>(null);
   const cores = useRef<Points>(null);
   const art = useRef<Mesh>(null);
-  const nova = useRef<Mesh>(null);
-  const group = useRef<Group>(null);
-  const tint = useMemo(() => new Color(GALAXY_TINT[data.element]), [data.element]);
-  const artTex = useMemo(() => loadSignArt(data.id), [data.id]);
-  const spark = useMemo(() => makeSparkTexture(), []);
-  const pairs = useMemo(() => pairFigures(data.animal, data.figure), [data.animal, data.figure]);
-  const figureN = pairs.length;
-  const dustN = SMALL ? 14 : 22;
-  const n = figureN + dustN;
-  const dust = useMemo(() => constellationDust(index, dustN), [index, dustN]);
-  const scatter = useMemo(() => {
-    return Array.from({ length: n }, (_, i) => {
-      const a = index * 1.73 + i * 2.399;
-      const b = index * 0.91 + i * 1.618;
-      const r = 12.5 + (i % 7) * 2.8;
-      return new Vector3(Math.cos(a) * r, Math.sin(b) * (7.4 + (i % 5) * 1.1), Math.sin(a) * r * 0.82);
-    });
-  }, [n, index]);
+  const shown = useRef(false);
+  const hydrated = useRef(false);
+  const wantArt = useRef(eager);
+  const tint = useMemo(() => {
+    const c = new Color(sign.palette.particle);
+    c.lerp(new Color(ELEMENT_TINT[sign.element]), 0.2);
+    return c;
+  }, [sign.palette.particle, sign.element]);
+  const coreMat = useMemo(() => makeSparkMaterial(), []);
+  const [artTex, setArtTex] = useState<CanvasTexture | null>(() => (eager ? loadSignArt(sign.id) : null));
+  const n = CLOUD_N;
+  const scatter = useRef<Vector3[] | null>(null);
   const starGeo = useMemo(() => {
     const g = new BufferGeometry();
-    g.setAttribute("position", new BufferAttribute(new Float32Array(n * 3), 3));
-    g.setAttribute("color", new BufferAttribute(new Float32Array(n * 3), 3));
+    if (eager) {
+      scatter.current = makeScatter(index, n);
+      const cloud = denseCloud(sign.id, n);
+      fillStationCloud(g, cloud, scatter.current, n);
+      hydrated.current = cloud.length > n * 0.4;
+    } else {
+      g.setAttribute("position", new BufferAttribute(new Float32Array(3), 3));
+      g.setDrawRange(0, 0);
+    }
     return g;
-  }, [n]);
-  const pick = () => useVault.getState().openBirthChat(data.id);
+  }, [eager, index, n, sign.id]);
+  const pick = () => useVault.getState().openBirthChat(sign.id);
 
   useEffect(() => {
     return () => {
-      spark.dispose();
+      coreMat.dispose();
       starGeo.dispose();
-      // LOCKED: never dispose artTex / sign canvases.
     };
-  }, [spark, starGeo]);
+  }, [coreMat, starGeo]);
 
-  useFrame(({ camera, clock }) => {
-    const mesh = cores.current;
+  useEffect(() => {
+    if (artTex) return;
+    const id = window.setTimeout(() => setArtTex(loadSignArt(sign.id)), 420 + index * 85);
+    return () => window.clearTimeout(id);
+  }, [artTex, index, sign.id]);
+
+  useFrame(({ clock }) => {
     const g = group.current;
-    if (!mesh || !g) return;
-    hydrateSignArt(data.id, artTex);
+    const mesh = cores.current;
+    if (!g || !mesh) return;
     const chatting = useVault.getState().chat;
-    const held = chatting && useVault.getState().pickedSign === data.id;
-    const along = held ? 0.42 : alongToGate(galaxyTravel.t, index);
-    const nIdx = nearestSign(galaxyTravel.t);
-    const incoming = index === (nIdx + 1) % COUNT;
-    const focused = held || index === aimedIndex() || index === nIdx;
-    pathAt(index, g.position);
-    g.quaternion.copy(camera.quaternion);
-    const local = held ? 1 : gateForm(along, index, galaxyTravel.t);
-    const form =
-      Math.max(
-        local,
-        focused && along < 2.9 && along > -0.35 ? 0.97 : incoming && along < 2.1 && along > 0.15 ? 0.78 : 0,
-      ) * Math.max(galaxyTravel.awaken, held || focused || incoming ? 1 : 0);
-    const cinematic = !held && galaxyTravel.playUntil != null;
-    const morph = held ? 1 : cinematic ? signMorph(along) : focused ? Math.min(signMorph(along), 0.35) : 0;
-    const burst = held ? 0 : cinematic ? morphBurst(along) : 0;
-    const plateOn = artReady(artTex);
+    const shelf = useVault.getState().shelf;
+    const held = (chatting && useVault.getState().pickedSign === sign.id) || (Boolean(shelf) && shelf?.signId === sign.id);
+    const t = galaxyTravel.t;
+    const dest = stationT(index);
+    const dist = Math.abs(t - dest);
+    const incoming = index === Math.min(11, stationFromT(t) + 1);
+    const focused = held || index === aimedIndex() || index === stationFromT(t);
+    const ready = plateReady(sign.id);
+    if (!artTex && (focused || incoming || ready) && !wantArt.current) {
+      wantArt.current = true;
+      queueMicrotask(() => setArtTex(loadSignArt(sign.id)));
+    }
+    if (introPlaying() && index !== 0 && !held) {
+      g.visible = false;
+      return;
+    }
+    const fade = held ? 1 : smooth(1 - Math.min(1, dist / 0.08));
+    const show = held || dist < 0.078;
+    g.visible = show;
+    if (!show) return;
 
-    if (form < 0.008 && !held && !focused && !incoming) {
+    const sit = TEMPLE_STATIONS[index]!;
+    g.position.copy(sit);
+    g.rotation.set(0, 0, 0);
+
+    if (artTex) hydrateSignArt(sign.id, artTex);
+    const vol = getSignVolume(sign.id);
+    if (!hydrated.current && (focused || incoming || held || eager || ready)) {
+      if (!scatter.current) scatter.current = makeScatter(index, n);
+      const cloud = denseCloud(sign.id, n);
+      if (cloud.length > n * 0.4) {
+        fillStationCloud(starGeo, cloud, scatter.current, n);
+        hydrated.current = true;
+      }
+    }
+
+    const aspect = vol?.aspect ?? (artTex ? artAspect(artTex) : 16 / 9) ?? 16 / 9;
+    const wide = PLATE_WIDE;
+    const arrive = index === 0 ? introAries() : 1;
+    const along = smooth(1 - Math.min(1, dist / 0.072));
+    const gather = held
+      ? 1
+      : introPlaying() && index === 0
+        ? Math.max(0.02, arrive)
+        : along;
+    const plateReveal = held ? 1 : introPlaying() && index === 0 ? Math.max(0, (arrive - 0.12) / 0.62) : smooth(Math.max(0, (gather - 0.52) / 0.48));
+
+    if (art.current && artTex) {
+      const mat = art.current.material as MeshBasicMaterial;
+      const plateOn = Boolean(artTex && (artReady(artTex) || ready));
+      const bornIn = plateReveal;
+      const plateOp = plateOn ? (held || focused ? 1 : 0.7) * Math.max(fade, 0.35) * bornIn : 0;
+      art.current.visible = plateOp > 0.04;
+      art.current.scale.set(wide, wide / aspect, 1);
+      mat.opacity = plateOp;
+      mat.map = artTex;
+      mat.alphaTest = 0.04;
+      if (plateOn && !shown.current) {
+        artTex.needsUpdate = true;
+        mat.needsUpdate = true;
+        shown.current = true;
+      }
+    }
+
+    if (!focused && !incoming && !held) {
       mesh.visible = false;
-      if (art.current) art.current.visible = false;
-      if (nova.current) nova.current.visible = false;
+      return;
+    }
+    if (introPlaying() && index === 0 && introAries() < 0.1) {
+      mesh.visible = false;
       return;
     }
     mesh.visible = true;
-
-    const pos = mesh.geometry.getAttribute("position") as BufferAttribute;
-    const col = mesh.geometry.getAttribute("color") as BufferAttribute;
-    const time = clock.elapsedTime;
-    for (let i = 0; i < n; i++) {
-      const isDust = i >= figureN;
-      const gather = starGather(along, i, n);
-      const sc = scatter[i]!;
-      let x: number;
-      let y: number;
-      let z: number;
-      let mag: number;
-      if (isDust) {
-        const d = dust[i - figureN]!;
-        mag = d.mag;
-        if (form < 0.18 || morph < 0.12) {
-          pos.setXYZ(i, 0, 80, 0);
-          col.setXYZ(i, 0, 0, 0);
-          continue;
-        }
-        x = d.x;
-        y = d.y;
-        z = ((i % 3) - 1) * 0.16;
-      } else {
-        const p = pairs[i]!;
-        mag = p.am + (p.gm - p.am) * morph;
-        const fx = (p.ax + (p.gx - p.ax) * morph) * 1.08;
-        const fy = (p.ay + (p.gy - p.ay) * morph) * 1.08;
-        const kick = 1 + burst * 0.82;
-        x = fx * gather * kick + sc.x * (1 - gather);
-        y = fy * gather * kick + sc.y * (1 - gather);
-        z = sc.z * (1 - gather) * 0.4;
-      }
-      pos.setXYZ(i, x, y, z);
-      const sparkle = starSpark(time, i, index * 1.7);
-      const b = Math.min(1.18, sparkle * (0.5 + mag * 0.55) * (0.35 + form * 0.75 + burst * 0.28));
-      const lift = 0.58 + mag * 0.42;
-      col.setXYZ(i, tint.r * lift * b, tint.g * lift * b, tint.b * lift * b);
-    }
-    pos.needsUpdate = true;
-    col.needsUpdate = true;
-
-    if (art.current) {
-      const mat = art.current.material as MeshBasicMaterial;
-      // LOCKED: always-on art for focused/incoming. Do not gate opacity on morph/burst.
-      const plateVis = (focused || incoming || held) && along > -0.55 && along < 2.6;
-      const show = plateVis && plateOn;
-      art.current.visible = show;
-      art.current.frustumCulled = false;
-      art.current.renderOrder = 10;
-      if (show) {
-        const aspect = artAspect(artTex);
-        const wide = (SMALL ? 22.5 : 19.4) + Math.min(Math.max(along, 0), 1.2) * 1.6;
-        art.current.scale.set(wide, wide / aspect, 1);
-        mat.opacity = focused || held ? 1 : incoming ? 0.72 : 0.9;
-        mat.map = artTex;
-        mat.depthTest = false;
-        mat.depthWrite = false;
-        mat.needsUpdate = true;
-      } else {
-        mat.opacity = 0;
-      }
-    }
-    if (nova.current) {
-      nova.current.visible = burst > 0.04;
-      nova.current.scale.setScalar(6.2 + burst * 20);
-      const nm = nova.current.material as MeshBasicMaterial;
-      nm.opacity = burst * 0.58;
-    }
+    const u = coreMat.uniforms;
+    u.uTime.value = clock.elapsedTime;
+    u.uGather.value = gather;
+    u.uWide.value = wide;
+    u.uTall.value = wide / aspect;
+    u.uSwirl.value = prefersReducedMotion() ? 0 : 1;
+    u.uFade.value = fade;
+    u.uHover.value = galaxyTravel.ptrOn && focused ? 1.12 : 1;
+    u.uPxScale.value = SMALL ? 0.9 : 1;
+    u.uBaseSize.value = SMALL ? 2.6 : 2.05;
+    u.uOpacity.value = 0.62 + fade * 0.32;
+    (u.uTint.value as Color).copy(tint);
   });
 
   return (
-    <group ref={group} frustumCulled={false} onClick={(e) => { e.stopPropagation(); pick(); }}>
+    <group ref={group} frustumCulled={false}>
       <mesh
-        ref={art}
-        position={[0, 0.05, -0.06]}
-        visible={false}
-        renderOrder={10}
-        frustumCulled={false}
+        onClick={(e) => {
+          e.stopPropagation();
+          pick();
+        }}
       >
+        <sphereGeometry args={[7.4, 12, 10]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+      </mesh>
+      <mesh ref={art} visible={false} renderOrder={18} frustumCulled={false} raycast={noopRaycast} dispose={null}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
-          map={artTex}
+          map={artTex ?? undefined}
           color="#ffffff"
           transparent
           opacity={0}
           depthWrite={false}
-          depthTest={false}
+          depthTest
           fog={false}
           toneMapped={false}
           side={DoubleSide}
         />
       </mesh>
-      <mesh ref={nova} position={[0, 0, -0.2]} visible={false} renderOrder={5} frustumCulled={false}>
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial
-          map={spark}
-          color={tint}
-          transparent
-          opacity={0}
-          depthWrite={false}
-          blending={AdditiveBlending}
-          fog={false}
-          toneMapped={false}
-        />
-      </mesh>
-      <points ref={cores} geometry={starGeo} frustumCulled={false}>
-        <pointsMaterial
-          map={spark}
-          vertexColors
-          size={SMALL ? 3.1 : 2.6}
-          sizeAttenuation
-          transparent
-          depthWrite={false}
-          blending={AdditiveBlending}
-          toneMapped={false}
-          fog={false}
-        />
-      </points>
+      <points ref={cores} geometry={starGeo} material={coreMat} frustumCulled={false} raycast={noopRaycast} />
+      <BigThreeLights signId={sign.id} />
     </group>
   );
 }
 
-function GalaxyRig() {
-  const { camera } = useThree();
-  const vel = useRef(0);
-  const booted = useRef(false);
-
-  useFrame((_, dt) => {
-    const d = Math.min(0.05, Math.max(0.008, dt));
-    const chatting = useVault.getState().chat;
-    const entered = useVault.getState().entered;
-    const birthing = !entered && galaxyTravel.birth < 1;
-    if (stepBirth(d)) useGalaxy.getState().markBorn();
-    else if (galaxyTravel.birth >= 1) useGalaxy.getState().markBorn();
-
-    galaxyTravel.busy = chatting || entered || birthing;
-    const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
-    galaxyTravel.handsOn = hands || galaxyTravel.hold !== 0;
-
-    if (!booted.current) {
-      booted.current = true;
-      galaxyTravel.t = prefersReducedMotion() ? 0 : galaxyTravel.t;
-    }
-
-    const sought = stepSeek(galaxyTravel.t, d);
-    galaxyTravel.t = sought.t;
-    const playing = stepPlayUntil(galaxyTravel.t);
-    galaxyTravel.traveling = sought.active || playing || galaxyTravel.seek != null;
-
-    if (birthing) vel.current = 0;
-    else if (chatting) {
-      vel.current *= Math.exp(-d * 3.4);
-      if (Math.abs(vel.current) < 0.03) vel.current = 0;
-    } else if (sought.active) {
-      vel.current *= Math.exp(-d * 2.2);
-    } else if ((hands || galaxyTravel.hold !== 0) && !entered) {
-      const want = galaxyTravel.hold !== 0 ? galaxyTravel.hold * HOLD_FLY : galaxyTravel.ptrY > 0.08 ? HOLD_FLY : galaxyTravel.ptrY < -0.08 ? -HOLD_FLY : 0;
-      if (want === 0) vel.current *= Math.exp(-d * 2.6);
-      else vel.current += (want - vel.current) * (1 - Math.exp(-d * 4.2));
-      vel.current = Math.max(-MAX_FLY, Math.min(MAX_FLY, vel.current));
-      galaxyTravel.moved = true;
-      galaxyTravel.awaken = 1;
-    } else if (playing) {
-      vel.current += (PLAY_CRUISE - vel.current) * (1 - Math.exp(-d * 0.55));
-    } else {
-      vel.current += (CRUISE - vel.current) * (1 - Math.exp(-d * 0.35));
-    }
-
-    if (!birthing && !chatting && !entered) {
-      galaxyTravel.t += vel.current * d;
-      if (Math.abs(vel.current) > 0.02) galaxyTravel.moved = true;
-    }
-    galaxyTravel.speed = vel.current;
-    if (galaxyTravel.moved) galaxyTravel.awaken = Math.min(1, galaxyTravel.awaken + d * 0.7);
-
-    pathAt(galaxyTravel.t, _pos);
-    camera.position.lerp(_pos, 1);
-    pathAt(galaxyTravel.t + 0.35, _look);
-    camera.lookAt(_look);
-
-    if (camera instanceof PerspectiveCamera) {
-      if (camera.far < 320) {
-        camera.far = 320;
-        camera.updateProjectionMatrix();
-      }
-      const b = galaxyTravel.birth;
-      const burst = chatting ? 0 : morphBurst(alongToGate(galaxyTravel.t, nearestSign(galaxyTravel.t)));
-      const fovWant = birthing ? 54 + birthIgnite(b) * 4 + birthBoom(b) * 5.5 : chatting ? 56 : 58 + Math.min(4, Math.abs(vel.current) * 2.2) + burst * 2.6;
-      if (Math.abs(camera.fov - fovWant) > 0.05) {
-        camera.fov += (fovWant - camera.fov) * (1 - Math.exp(-d * 4));
-        camera.updateProjectionMatrix();
-      }
-    }
-    useGalaxy.getState().setTravel(galaxyTravel.t, galaxyTravel.moved);
-  });
-  return null;
+function BigThreeLights({ signId }: { signId: string }) {
+  const natal = useVault((s) => s.shelf?.natal);
+  const held = useVault((s) => s.shelf?.signId === signId && s.entered);
+  if (!natal || !held) return null;
+  const spots: { id: "sun" | "moon" | "asc"; p: [number, number, number]; color: string; s: number }[] = [
+    { id: "sun", p: [0, 0.22, 0.55], color: "#e6c98a", s: 0.17 },
+    { id: "moon", p: [-1.32, 0.06, 0.28], color: "#d7c4c8", s: 0.14 },
+    { id: "asc", p: [1.4, 0.42, 0.22], color: "#c5d0e8", s: 0.13 },
+  ];
+  return (
+    <group>
+      {spots.map((sp) => {
+        const b = natal.bodies.find((x) => x.id === sp.id);
+        if (!b) return null;
+        return (
+          <mesh
+            key={sp.id}
+            position={sp.p}
+            renderOrder={20}
+            onClick={(e) => {
+              e.stopPropagation();
+              const v = useVault.getState();
+              v.select({ kind: "planet", id: sp.id });
+              v.setMode("ask");
+            }}
+          >
+            <sphereGeometry args={[sp.s, 12, 10]} />
+            <meshBasicMaterial color={sp.color} toneMapped={false} transparent opacity={0.92} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
 }
 
-function SceneClick() {
+function ChartRing() {
+  const group = useRef<Group>(null);
+  const locked = useVault((s) => s.chat);
+  const picked = useVault((s) => s.pickedSign);
+  const sprites = useMemo(() => makeCircleTexture(), []);
+  useEffect(() => () => sprites.dispose(), [sprites]);
+  useFrame(() => {
+    const g = group.current;
+    if (!g) return;
+    g.visible = locked;
+    if (!locked) return;
+    const i = Math.max(0, TEMPLE_SIGNS.findIndex((s) => s.id === picked));
+    const sit = TEMPLE_STATIONS[i] ?? TEMPLE_STATIONS[0]!;
+    g.position.set(sit.x, sit.y - 1.1, sit.z);
+  });
+  const planets = useMemo(() => {
+    return Array.from({ length: 10 }, (_, k) => {
+      const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+      return { x: Math.cos(a) * 5.2, z: Math.sin(a) * 5.2, s: 0.08 + (k % 3) * 0.03 };
+    });
+  }, []);
+  return (
+    <group ref={group} visible={false}>
+      <mesh rotation={[Math.PI / 2, 0, 0]} raycast={noopRaycast}>
+        <torusGeometry args={[5.2, 0.018, 6, 64]} />
+        <meshBasicMaterial color="#d8cfc0" transparent opacity={0.35} toneMapped={false} />
+      </mesh>
+      {planets.map((p, k) => (
+        <mesh key={k} position={[p.x, 0, p.z]} raycast={noopRaycast}>
+          <sphereGeometry args={[p.s, 8, 6]} />
+          <meshBasicMaterial color="#f0e6d0" toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function TempleRig() {
+  const { camera, scene, size } = useThree();
+  const current = useRef(galaxyTravel.t);
+  const lastStation = useRef(0);
+  const epoch = useRef(galaxyTravel.epoch);
+  const lastPub = useRef(-1);
+  const booted = useRef(false);
+
+  useEffect(() => {
+    ensureAutoClock();
+    ensureFlyInput();
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Enter" && galaxyTravel.birth < 1) {
+      if (useVault.getState().chat) return;
+      if (useVault.getState().entered) return;
+      if (introPlaying()) {
+        if (introCanSkip()) {
+          skipIntro();
+          galaxyTravel.birth = 1;
+          useGalaxy.getState().markBorn();
+        }
+        return;
+      }
+      if (e.key === "ArrowDown" || e.key === "s" || e.key === "S" || e.key === "ArrowRight") {
+        galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + 0.045);
+        galaxyTravel.hold = 1;
+        galaxyTravel.wheelUntil = performance.now() + 220;
+        galaxyTravel.moved = true;
+        galaxyTravel.handsOn = true;
+        noteControl();
+      } else if (e.key === "ArrowUp" || e.key === "w" || e.key === "W" || e.key === "ArrowLeft") {
+        galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget - 0.045);
+        galaxyTravel.hold = -1;
+        galaxyTravel.wheelUntil = performance.now() + 220;
+        galaxyTravel.moved = true;
+        galaxyTravel.handsOn = true;
+        noteControl();
+      } else if (e.key === "Enter" && galaxyTravel.birth < 1) {
         skipBirth();
         useGalaxy.getState().markBorn();
       }
@@ -417,39 +631,107 @@ function SceneClick() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  useFrame((_, delta) => {
+    const d = Math.min(0.05, Math.max(0.001, delta));
+    if (epoch.current !== galaxyTravel.epoch) {
+      epoch.current = galaxyTravel.epoch;
+      current.current = galaxyTravel.t;
+      galaxyTravel.tTarget = galaxyTravel.t;
+      booted.current = false;
+    }
+    if (stepBirth(d)) {
+      useGalaxy.getState().markBorn();
+      galaxyTravel.awaken = 1;
+    } else if (galaxyTravel.birth >= 1) {
+      useGalaxy.getState().markBorn();
+      if (galaxyTravel.awaken < 0.2) galaxyTravel.awaken = 1;
+    }
+    stepIntro(d);
+    const chatting = useVault.getState().chat;
+    const arriving = introPlaying();
+    const sought = stepSeek(current.current, d);
+    if (sought.active) {
+      current.current = sought.t;
+      galaxyTravel.tTarget = sought.t;
+    }
+    if (chatting) {
+      const i = CONSTELLATIONS.findIndex((c) => c.id === useVault.getState().pickedSign);
+      if (i >= 0) galaxyTravel.tTarget = stationT(i);
+    } else if (!arriving && !sought.active) {
+      const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
+      galaxyTravel.handsOn = hands;
+      if (hands && galaxyTravel.hold !== 0) {
+        galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + galaxyTravel.hold * HOLD_FLY * d * 0.22);
+      }
+      galaxyTravel.steer = 0;
+    }
+    galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget);
+    const k = arriving ? 1 : 1 - Math.exp(-d * (sought.active ? 2.6 : 2.9));
+    current.current += (galaxyTravel.tTarget - current.current) * (arriving ? 1 : k);
+    current.current = clamp01(current.current);
+    const t = current.current;
+    TEMPLE_CURVE.getPointAt(t, _chest);
+    const aspect = viewAspect(size);
+    const idx = stationFromT(t);
+    stepZoom(d, idx !== lastStation.current);
+    lastStation.current = idx;
+    const vol = getSignVolume(TEMPLE_SIGNS[idx]!.id);
+    const plateA = vol?.aspect ?? 16 / 9;
+    const shelfOn = Boolean(useVault.getState().entered && useVault.getState().shelf);
+    const well =
+      chatting || shelfOn
+        ? { top: 0.12, bottom: 0.48 }
+        : { top: 0.15, bottom: 0.24 };
+    const frame = heroFrame(aspect, arriving ? introCam() : 1, plateA, PLATE_WIDE, well);
+    const zoom = arriving ? 1 : Math.max(1, galaxyTravel.zoom);
+    const pull = 1 - introCam();
+    _cam.copy(_chest);
+    _cam.z += frame.z / zoom;
+    _cam.y += frame.y / (0.72 + zoom * 0.28) + pull * 0.35;
+    _look.copy(_chest);
+    _look.z -= 1.4 + introCam() * 1.0;
+    _look.y += frame.portrait ? 0.05 : 0.15;
+    if (!arriving) {
+      _look.x += galaxyTravel.ptrX * 1.1;
+      _look.y += -galaxyTravel.ptrY * 0.6;
+      _cam.x += galaxyTravel.ptrX * 0.35;
+      _cam.y += galaxyTravel.ptrY * 0.2;
+    }
+    if (!Number.isFinite(_cam.x) || !Number.isFinite(_look.x)) return;
+    camera.up.copy(_up);
+    if (!booted.current || arriving) {
+      camera.position.copy(_cam);
+      camera.lookAt(_look);
+      booted.current = true;
+    } else {
+      camera.position.lerp(_cam, k);
+      camera.lookAt(_look);
+    }
+    if (camera instanceof PerspectiveCamera) {
+      camera.far = 2500;
+      const fovWant = chatting
+        ? Math.min(52, frame.fov)
+        : arriving
+          ? frame.fov - (1 - introCam()) * 4
+          : frame.fov / (0.92 + (zoom - 1) * 0.18);
+      if (arriving || Math.abs(camera.fov - fovWant) > 3) camera.fov = fovWant;
+      else camera.fov += (fovWant - camera.fov) * k;
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+    }
+    if (scene.fog instanceof FogExp2) {
+      lerpFog(t, _fog);
+      scene.fog.color.copy(_fog);
+      scene.background = _fog.clone().multiplyScalar(0.35);
+    }
+    galaxyTravel.t = t;
+    if (galaxyTravel.moved) galaxyTravel.awaken = 1;
+    if (Math.abs(t - lastPub.current) > 0.004 || galaxyTravel.moved !== useGalaxy.getState().moved) {
+      lastPub.current = t;
+      useGalaxy.getState().setTravel(t, galaxyTravel.moved);
+    }
+  });
+
   return null;
 }
-
-export function GalaxyIntro() {
-  useEffect(() => {
-    preloadSignArt();
-  }, []);
-  return (
-    <Canvas
-      className="canvas-root"
-      dpr={canvasDpr()}
-      gl={glContextAttrs()}
-      camera={{ position: [0, 0, SEEK_ARRIVE * SPACING], fov: 58, near: 0.1, far: 320 }}
-      onCreated={({ gl }) => {
-        gl.setClearColor("#0c0b0a", 0);
-      }}
-      onPointerMissed={() => {
-        if (galaxyTravel.birth < 1) {
-          skipBirth();
-          useGalaxy.getState().markBorn();
-        }
-      }}
-    >
-      <color attach="background" args={["#0c0b0a"]} />
-      <fog attach="fog" args={["#0c0b0a", SPACING * 0.62, SPACING * 3.6]} />
-      <SceneClick />
-      <GalaxyRig />
-      <StarField />
-      {/* LOCKED: all 12 SignFigures stay mounted. Never unmount off-screen into a blank remount. */}
-      {CONSTELLATIONS.map((data, index) => (
-        <SignFigure key={data.id} index={index} data={data} />
-      ))}
-    </Canvas>
-  );
-}
-

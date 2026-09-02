@@ -83,5 +83,55 @@ export const CHAKRAS: ChakraDef[] = [
     name: "Throat",
     sanskrit: "Vishuddha",
     y: 1.74,
-    colo
-... 
+    color: "#6a8aaa",
+    glow: "#3e6280",
+    rulers: ["mercury", "venus"],
+    headline: "The mind is not the wound. The mind is the medicine.",
+    body: [
+      "Mercury in Virgo, domicile and exaltation, in the 8th. The blade that autopsies. Part of Spirit sits on this Mercury — the daimon, the thing the soul is trying to do.",
+      "Venus in Gemini: she falls in love with a mind. Part of Fortune in Aries in the 3rd: body-luck through voice, motion, siblings.",
+      "Moon square Mercury: the stutter between heart and mouth. That stutter is why writing, naming, diagnosing, and dark humor heal her. If she cannot explain a decision in clean sentences, it is not ready.",
+    ],
+    practice: "Let Virgo-Mercury sign. Impulse and feeling will try to skip the audit. The exalted mind is the adult in the room.",
+  },
+  {
+    id: "brow",
+    name: "Third eye",
+    sanskrit: "Ajna",
+    y: 2.08,
+    color: "#6a6e9a",
+    glow: "#3e4270",
+    rulers: ["mercury", "uranus", "pluto"],
+    headline: "Sudden knowing. The room changes before she has a name.",
+    body: [
+      "Mercury opposite Uranus, plus a 0.09° contraparallel — the sky said it twice. Lightning mind. Sleep on it and the answer arrives as a jolt, not a committee.",
+      "Pluto in the 12th conjunct the rising: people feel her before they have a name for her. Animals know. Children know. Liars know. The underworld is behind the curtain of the self.",
+      "This is not intuition as a brand. It is the 12th house, correctly sized. Things that look out of proportion to outsiders are not out of proportion to the invisible.",
+    ],
+    practice: "When she feels too much: that is Pluto on the rising plus Moon in fall. It is not a personality error. Give the weather a house. Do not become less.",
+  },
+  {
+    id: "crown",
+    name: "Crown",
+    sanskrit: "Sahasrara",
+    y: 2.38,
+    color: "#cfc6d4",
+    glow: "#8a8090",
+    rulers: ["jupiter", "neptune"],
+    headline: "Faith that has to be earned with the hands.",
+    body: [
+      "Jupiter, the chart ruler, sits in Virgo in the 9th in detriment. The life-path is not lucky wanderer. It is the craft of meaning: study, skill, apprenticeship.",
+      "Jupiter wants God and the big yes. Virgo says prove it. So blessing arrives as a skill, a diagnosis, a humble useful thing — not as a lottery ticket.",
+      "Neptune in the 2nd: a foggy current in worth, a nose for what a group is dreaming. The danger is preaching past the wound (Jupiter square Pluto). Let Virgo-Jupiter be a craft, not a sermon.",
+    ],
+    practice: "Do not dress a wound as a philosophy. Make the huge idea actually work. That is the sacred.",
+  },
+];
+
+export const CHAKRA_BY_ID: Record<ChakraId, ChakraDef> = CHAKRAS.reduce(
+  (acc, c) => {
+    acc[c.id] = c;
+    return acc;
+  },
+  {} as Record<ChakraId, ChakraDef>,
+);

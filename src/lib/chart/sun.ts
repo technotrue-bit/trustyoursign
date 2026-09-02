@@ -65,3 +65,9 @@ export function formatBirth(month: number, day: number, year: number): string {
   const name = months[month - 1] ?? "";
   return `${day} ${name} ${year}`;
 }
+
+export function formatClock(hour: number, minute: number): string {
+  const mer = hour >= 12 ? "PM" : "AM";
+  const h = hour % 12 || 12;
+  return `${h}:${String(minute).padStart(2, "0")} ${mer}`;
+}

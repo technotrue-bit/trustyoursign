@@ -108,5 +108,71 @@ export const SIGNS: SignDef[] = [
   {
     id: "scorpio",
     name: "Scorpio",
-    abbr: "Sc
-... 
+    abbr: "Sco",
+    startLon: 210,
+    element: "water",
+    modality: "fixed",
+    intercepted: false,
+    headline: "All or nothing. Never halfway.",
+    body: "Scorpio does not soothe in the factory setting. Safety is not softness. Safety is truth that cannot be taken. Devotion will be the first language; comfort will not.",
+    inChart:
+      "Moon at 27° Scorpio in the 11th, in fall. South Node at 7° Scorpio in the 10th. The feeling-nature plays out through friends, allies, the future, the scene.",
+  },
+  {
+    id: "sagittarius",
+    name: "Sagittarius",
+    abbr: "Sag",
+    startLon: 240,
+    element: "fire",
+    modality: "mutable",
+    intercepted: false,
+    headline: "Fire at the door.",
+    body: "The face the world gets: heat, horizon, honesty, a future-tense walk. People meet the archer first. They do not meet the vault. Duplicated (houses 12 and 1).",
+    inChart:
+      "Ascendant 24° Sagittarius. Pluto at 19° Sagittarius in the 12th, 4°43′ behind the rising. The room changes before anyone has a name for her.",
+  },
+  {
+    id: "capricorn",
+    name: "Capricorn",
+    abbr: "Cap",
+    startLon: 270,
+    element: "earth",
+    modality: "cardinal",
+    intercepted: true,
+    headline: "Locked inside the self.",
+    body: "Intercepted: Capricorn has no house door. Authority, father, competence, time live inside the body of identity. She may not even name this as the wound.",
+    inChart:
+      "Chiron retrograde at 22° Capricorn in the intercepted 1st. Juno retrograde in the same room. I must already be solid — and I am supposed to already be the adult.",
+  },
+  {
+    id: "aquarius",
+    name: "Aquarius",
+    abbr: "Aqu",
+    startLon: 300,
+    element: "air",
+    modality: "fixed",
+    intercepted: false,
+    headline: "The future’s atmosphere.",
+    body: "Aquarius on the 2nd-house door: worth that belongs to a collective as much as to a wallet. The danger is leaking value. The gift is a nose for what a group is dreaming.",
+    inChart:
+      "2nd cusp at 2° Aquarius. Neptune at 14° Aquarius, retrograde, in the 2nd. Idealism about what she owes. Undercharging, overgiving, getting paid in vibes — or naming the weather first.",
+  },
+  {
+    id: "pisces",
+    name: "Pisces",
+    abbr: "Pis",
+    startLon: 330,
+    element: "water",
+    modality: "mutable",
+    intercepted: false,
+    headline: "The floor that rewrites itself.",
+    body: "Pisces dissolves the orthodox. In the 2nd/3rd it is money, values, and the mind’s weather that will not stay put. Revolution happens inside first.",
+    inChart:
+      "Uranus at 6° Pisces retrograde in the 2nd, opposite Mercury. Vesta at 28° Pisces in the 3rd. Sudden knowing. Cannot be forced into a stupid consensus.",
+  },
+];
+
+export function signAtLon(lon: number): SignDef {
+  const i = Math.floor((((lon % 360) + 360) % 360) / 30);
+  return SIGNS[i] ?? SIGNS[0];
+}
