@@ -36,7 +36,7 @@ A friend on mid iPhone Safari can, without coaching:
 
 ## Architecture
 
-Four coordinated fixes on the existing path. No new shell.
+Five coordinated fixes on the existing path. No new shell.
 
 ```text
 Intro / galaxy fly → Claim → BirthChat sheet → Cast → Open natal → Sky land
@@ -50,12 +50,12 @@ Intro / galaxy fly → Claim → BirthChat sheet → Cast → Open natal → Sky
 
 **File:** [`src/components/StageLock.tsx`](src/components/StageLock.tsx)
 
-While a path text field or select is focused (BirthChat; shared hook usable later by Ask), **do not** write keyboard-shrunk `visualViewport.height` into `--app-h`. Continue updating width and `offsetTop` as today. The BirthChat sheet scrolls inside the fixed stage.
+While a path text field or select is focused (BirthChat; shared helper usable later by Ask), **do not** write keyboard-shrunk `visualViewport.height` into `--app-h`. Continue updating width and `offsetTop` as today. The BirthChat sheet scrolls inside the fixed stage.
 
-Implementation sketch:
+Implementation:
 
-- Document-level `focusin` / `focusout` (capture) on `input, textarea, select` inside `.birth-chat` (and later `.ask` if needed).
-- When focused: freeze `--app-h` at the last non-keyboard height (or `window.innerHeight` layout viewport).
+- Document-level `focusin` / `focusout` (capture) on `input, textarea, select` inside `.birth-chat`.
+- When focused: freeze `--app-h` at the last non-keyboard height (capture `visualViewport.height` just before focus, or fall back to `window.innerHeight`).
 - When focus leaves: resume normal `visualViewport` height sync.
 - Dispatch `resize` only when width or unfrozen height actually changes (avoid thrash).
 
@@ -63,26 +63,26 @@ Implementation sketch:
 
 **Files:** [`src/components/overlay/BirthChat.tsx`](src/components/overlay/BirthChat.tsx), [`src/styles.css`](src/styles.css)
 
-- All BirthChat `input` / `select` / `textarea`: computed font-size **≥ 16px**, min tap height **~48px** (already mostly true; audit and lock with a shared class e.g. `.path-field`).
-- Any other control on the fly→cast path that still uses `text-sm` (~14px) must be raised to 16px on phone.
+- Add `.path-field` for BirthChat `input` / `select` / `textarea`: `font-size: 16px`, `min-height: 48px`.
+- Audit fly→cast path; any remaining `text-sm` controls on that path become `.path-field` on phone.
 
 ### 3. Galaxy bottom chrome budget
 
 **Files:** [`src/components/overlay/VaultApp.tsx`](src/components/overlay/VaultApp.tsx) (`GalaxyCopy`), [`src/components/overlay/SignStrip.tsx`](src/components/overlay/SignStrip.tsx), [`src/components/overlay/LegalFooter.tsx`](src/components/overlay/LegalFooter.tsx), [`src/styles.css`](src/styles.css)
 
 - One thumb band: SignStrip + short hint + **This is my sign**, all clear of `--safe-bottom`.
-- Legal/cookie: compact single line or dismiss-first so it never stacks under the CTA on first visit.
-- `--overlay-hit`: do not charge real Safari the full preview-chrome inset; keep enough clearance for Skip/Auth/StarBack without shoving the title into mid-sky. Prefer detecting preview host if already available; otherwise reduce the ≤720px blanket inset to a safer minimum.
+- Legal/cookie on galaxy: render as a single compact dismissible row **above** the strip band (not stacked under the CTA). First visit must leave the CTA fully tappable.
+- `--overlay-hit`: change the phone media query from `max-width: 720px` to `max-width: 767px` (align with 768). Cap `--overlay-hit` at `2.75rem` on real Safari; if `PreviewHostBridge` / preview query already marks the document as preview-hosted, keep the larger inset only in that case.
 - Title / Skip / Auth: one top row; no second competing CTA in the first viewport.
 
 ### 4. BirthChat content + lift correctness
 
 **Files:** [`src/components/overlay/BirthChat.tsx`](src/components/overlay/BirthChat.tsx), [`src/lib/galaxy/birthchat-slide.ts`](src/lib/galaxy/birthchat-slide.ts), [`src/components/scene/GalaxyIntro.tsx`](src/components/scene/GalaxyIntro.tsx), [`src/styles.css`](src/styles.css)
 
-- Phone first paint: date controls visible without scrolling past a wall of temple copy. Keep essence; limit default visible temple lines on phone (remaining lines via scroll).
+- Phone first paint (`max-width: 767px`): show essence + **2** temple lines above the date form; remaining lines stay in the scrollable sheet below. Chakra note moves below the form or into scroll.
 - Sheet scrolls inside the stage; keyboard does not resize the canvas (see §1).
 - **SignDisk** passes the same lerped `scaleBoost` into clamp math as **Station** (today SignDisk uses hard `1.4` while Station uses lerped scale — drift source).
-- Unify phone breakpoint: CSS mobile rules that affect BirthChat / strip layout use **768** to match `PHONE_MAX_WIDTH` and Tailwind `md`.
+- Unify phone breakpoint: CSS rules that affect BirthChat / strip / overlay-hit use **767px max** to match `PHONE_MAX_WIDTH = 768` and Tailwind `md`.
 - Keep existing `lerpToward` rates (`rate: 2.2` for slide). Stability = no drift/teleport, not new easing curves.
 - Cast → rest → **Open this natal** remains the single full-width primary action.
 
@@ -90,7 +90,7 @@ Implementation sketch:
 
 **Files:** [`src/components/scene/ChartCanvas.tsx`](src/components/scene/ChartCanvas.tsx) (`SceneGate`), [`src/components/overlay/VaultApp.tsx`](src/components/overlay/VaultApp.tsx) (`Chrome`)
 
-- Shorten Apple black-gap timeout when entering visitor Sky (today ~160ms on modest/Apple).
+- On Apple / modest GPU, cut `SceneGate` black-gap timeout from **160ms to 48ms** (same as desktop non-modest path).
 - Visitor phone header: title + Auth; trust meta stays in the sheet, not a third header row.
 - Dock (Sky · Body · Bones · Ask) already correct; ensure first Sky frame is not covered by overlapping absolute chrome.
 
