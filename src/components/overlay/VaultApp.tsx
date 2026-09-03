@@ -292,6 +292,7 @@ function GalaxyCopy() {
         className="galaxy-chrome pointer-events-none absolute inset-x-0 bottom-[var(--chrome-bottom)] flex flex-col items-center gap-2 md:bottom-8 md:gap-3"
         style={{ opacity: asking ? 0 : introChrome, animation: "none" }}
       >
+        <LegalFooter />
         <SignStrip />
         <p className="px-4 text-center text-[0.7rem] tracking-wide text-fg-subtle md:text-xs">
           <span className="md:hidden">Slide to fly. Pinch to zoom the sign. Swipe the names to jump.</span>
@@ -310,7 +311,6 @@ function GalaxyCopy() {
         >
           This is my sign
         </button>
-        <LegalFooter />
       </div>
     </div>
   );

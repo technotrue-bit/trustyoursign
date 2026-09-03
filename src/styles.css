@@ -111,10 +111,14 @@
   color: #efe8dc;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   :root {
-    --overlay-hit: 4.35rem;
+    --overlay-hit: 2.75rem;
     --dock-h: 4.5rem;
+  }
+
+  :root[data-preview-host="1"] {
+    --overlay-hit: 4.35rem;
   }
 }
 
@@ -526,7 +530,7 @@
   border-radius: var(--radius-sm);
 }
 
-@media (min-width: 721px) {
+@media (min-width: 768px) {
   .sign-strip-belt {
     min-height: 5.25rem;
   }
@@ -563,13 +567,14 @@
 }
 
 .birth-chat select,
-.birth-chat input {
+.birth-chat input,
+.path-field {
   color-scheme: dark;
-  font-size: 16px;
-  min-height: 44px;
+  font-size: 16px !important;
+  min-height: 48px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .sign-strip-item {
     min-width: 7.75rem;
   }
@@ -587,10 +592,15 @@
 
   .galaxy-chrome {
     padding-bottom: 0.15rem;
+    gap: 0.35rem;
+  }
+
+  .birth-chat-lines-extra {
+    display: none;
   }
 }
 
-@media (min-width: 721px) {
+@media (min-width: 768px) {
   .galaxy-title {
     font-size: 3.75rem;
   }
