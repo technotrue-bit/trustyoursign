@@ -208,6 +208,7 @@ function SignDisk() {
   const group = useRef<Group>(null);
   const slideX = useRef(0);
   const slideY = useRef(0);
+  const scaleBoost = useRef(1);
   const sim = useMemo(() => createDiskSim(), []);
   useEffect(() => () => disposeDisk(sim), [sim]);
   useFrame(({ clock, gl, camera }, dt) => {
@@ -247,10 +248,11 @@ function SignDisk() {
       cssWidth: cssViewWidth(),
       plateWide: PLATE_WIDE,
       plateAspect: aspect,
-      currentScale: picked ? 1.4 : 1,
+      currentScale: scaleBoost.current,
     });
     slideX.current = lerpToward({ current: slideX.current, target: slide.offsetX, dt, rate: 2.2 });
     slideY.current = lerpToward({ current: slideY.current, target: slide.offsetY, dt, rate: 2.2 });
+    scaleBoost.current = lerpToward({ current: scaleBoost.current, target: slide.targetScale, dt, rate: 2.2 });
     g.position.set(sit.x + chest.x * PLATE_WIDE * 0.55, sit.y + chest.y * (PLATE_WIDE / aspect) * 0.45, sit.z + 0.22);
     _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
     _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
