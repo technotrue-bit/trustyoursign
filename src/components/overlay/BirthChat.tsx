@@ -7,8 +7,9 @@ import { useVault } from "@/lib/store";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
 import { saveChart } from "@/lib/charts";
-import { computeSky } from "@/lib/chart/sky";
+import { computeVisitorNatal } from "@/lib/chart/sky";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
+import type { Nativity } from "@/lib/chart/schema";
 import { cn } from "@/lib/utils";
 import { Gloss, GlossRoot } from "./Gloss";
 
@@ -33,6 +34,7 @@ export function BirthChat() {
   const setBirth = useVault((s) => s.setBirth);
   const openLibrary = useVault((s) => s.openLibrary);
   const openShelf = useVault((s) => s.openShelf);
+  const openVisitor = useVault((s) => s.openVisitor);
   const closeBirthChat = useVault((s) => s.closeBirthChat);
   const sign = CONSTELLATIONS.find((c) => c.id === picked) ?? CONSTELLATIONS[0]!;
   const temple = TEMPLE_SIGNS.find((c) => c.id === sign.id) ?? TEMPLE_SIGNS[0]!;
@@ -52,6 +54,7 @@ export function BirthChat() {
   const [meridiem, setMeridiem] = useState<"am" | "pm">("am");
   const [place, setPlace] = useState("");
   const [natal, setNatal] = useState<SkyNatal | null>(null);
+  const [visitorBook, setVisitorBook] = useState<Nativity | null>(null);
   const [casting, setCasting] = useState(false);
   const [castErr, setCastErr] = useState<string | null>(null);
 
@@ -108,7 +111,7 @@ export function BirthChat() {
     setCasting(true);
     setCastErr(null);
     try {
-      const sky = await computeSky({
+      const { sky, nativity } = await computeVisitorNatal({
         data: {
           year: next.year,
           month: next.month,
@@ -117,13 +120,16 @@ export function BirthChat() {
           minute: m,
           place: loc,
           tone: "vault",
+          label: "Your natal",
         },
       });
       setNatal(sky);
+      setVisitorBook(nativity);
       setStep("rest");
     } catch (e) {
       setCastErr(e instanceof Error ? e.message : "The place could not be read.");
       setNatal(null);
+      setVisitorBook(null);
       setStep("rest");
     } finally {
       setCasting(false);
@@ -379,11 +385,13 @@ export function BirthChat() {
               {birth.place ? ` · ${birth.place}` : ""}.
             </p>
             <p className="font-display text-xl tracking-tight text-fg italic">
-              {natal
-                ? "The Big Three are tabled. Sun, Moon, Rising."
-                : birth.place
-                  ? "The clock is held. Planets wait until the sky is calculated."
-                  : `The sun was in ${sunName}. You reached for what was already yours.`}
+              {visitorBook
+                ? "Your natal is tabled. Planets, houses, rising."
+                : natal
+                  ? "The Big Three are tabled. Sun, Moon, Rising."
+                  : birth.place
+                    ? "The clock is held. Planets wait until the sky is calculated."
+                    : `The sun was in ${sunName}. You reached for what was already yours.`}
             </p>
             {castErr ? <p className="text-sm text-wine">{castErr}</p> : null}
             {natal ? (
@@ -395,15 +403,24 @@ export function BirthChat() {
                 ))}
               </ul>
             ) : null}
+            {visitorBook ? (
+              <p className="text-xs leading-relaxed text-fg-subtle">
+                Tropical · Whole Sign · {natal?.timeZone ?? "birth place timezone"} · astronomy-engine. Entertainment, not advice.
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={() => {
+                if (visitorBook) {
+                  openVisitor(visitorBook, natal);
+                  return;
+                }
                 const s = sketch();
                 if (s) openShelf(s);
               }}
               className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase hover:bg-fg md:min-h-11"
             >
-              Ask this sun
+              {visitorBook ? "Open this natal" : "Ask this sun"}
             </button>
             {owner ? (
               <button

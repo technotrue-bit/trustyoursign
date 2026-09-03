@@ -32,12 +32,14 @@ import { LegalFooter } from "./LegalFooter";
 import { TourGuide } from "./TourGuide";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { listCharts, type SavedChart } from "@/lib/charts";
+import { computeVisitorNatal } from "@/lib/chart/sky";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { Link } from "@tanstack/react-router";
 
 function chartRole(id: ChartId | null, date?: string) {
   if (id === "saige") return date ? `Premium house · ${date}` : "Premium house";
   if (id === "joey") return date ? `Walkthrough · ${date}` : "Walkthrough";
+  if (id === "visitor") return date ? `Your natal · ${date}` : "Your natal";
   return date ?? "The Vault";
 }
 
@@ -50,6 +52,8 @@ const MODES: { id: AppMode; label: string; icon: typeof Compass }[] = [
   { id: "bones", label: "Bones", icon: Table2 },
   { id: "ask", label: "Ask", icon: MessageCircle },
 ];
+
+const VISITOR_ROOMS = new Set<AppMode>(["sky", "body", "bones", "ask"]);
 
 export function VaultApp() {
   const [Scene, setScene] = useState<ComponentType | null>(null);
@@ -431,7 +435,32 @@ function SavedShelf() {
           <li key={c.id}>
             <button
               type="button"
-              onClick={() =>
+              onClick={async () => {
+                if (
+                  c.natal &&
+                  c.birthHour != null &&
+                  c.birthMinute != null &&
+                  c.birthPlace
+                ) {
+                  try {
+                    const { sky, nativity } = await computeVisitorNatal({
+                      data: {
+                        year: c.birthYear,
+                        month: c.birthMonth,
+                        day: c.birthDay,
+                        hour: c.birthHour,
+                        minute: c.birthMinute,
+                        place: c.birthPlace,
+                        tone: c.tone,
+                        label: c.label,
+                      },
+                    });
+                    useVault.getState().openVisitor(nativity, sky);
+                    return;
+                  } catch {
+                    /* fall through to shelf */
+                  }
+                }
                 useVault.getState().openShelf({
                   id: c.id,
                   label: c.label,
@@ -447,15 +476,15 @@ function SavedShelf() {
                   relation: c.relation,
                   personName: c.personName,
                   from: "library",
-                })
-              }
+                });
+              }}
               className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-bg-subtle"
             >
               <p className="font-display text-lg text-fg italic">{c.label}</p>
               <p className="text-xs tracking-wide text-fg-subtle uppercase">
                 {c.signId} · {c.birthMonth}/{c.birthDay}/{c.birthYear}
                 {c.birthPlace ? ` · ${c.birthPlace}` : ""}
-                {c.natal ? " · Big Three" : " · sun-sign shelf"}
+                {c.natal ? " · natal" : " · sun-sign shelf"}
               </p>
             </button>
           </li>
@@ -475,7 +504,11 @@ function Chrome() {
   const shelf = useVault((s) => s.shelf);
   const chartId = useVault((s) => s.chartId);
   const nat = useNativity();
-  const rooms = shelf ? MODES.filter((m) => m.id === "sky" || m.id === "ask") : MODES;
+  const rooms = shelf
+    ? MODES.filter((m) => m.id === "sky" || m.id === "ask")
+    : chartId === "visitor"
+      ? MODES.filter((m) => VISITOR_ROOMS.has(m.id))
+      : MODES;
   const title = shelf ? shelf.label : nat?.meta.name ?? "The Vault";
   const who = shelf
     ? `${shelf.signId} · ${shelf.birthMonth}/${shelf.birthDay}/${shelf.birthYear}`
@@ -493,6 +526,14 @@ function Chrome() {
           <p className="hidden max-w-56 text-right text-xs leading-relaxed text-fg-subtle md:block">
             {shelf ? (
               "Sun-sign shelf. Not a natal."
+            ) : chartId === "visitor" && nat ? (
+              <>
+                {nat.meta.zodiac} · {nat.meta.houses}
+                <br />
+                {nat.meta.engine}
+                <br />
+                {nat.meta.zone}
+              </>
             ) : (
               <>
                 {nat?.meta.date}
