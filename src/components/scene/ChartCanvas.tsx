@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
 import { Color, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { buryWebGLCanvas, canvasDpr, glContextAttrs, isAppleTouch, isSmallGpu } from "@/lib/gpu";
+import { buryWebGLCanvas, canvasDpr, glContextAttrs, isSmallGpu } from "@/lib/gpu";
 import { lonToXZ } from "@/lib/chart/geometry";
 import type { AppMode, ChakraId, PlanetId } from "@/lib/chart/types";
 import { useVault } from "@/lib/store";
@@ -202,7 +202,6 @@ function contextLost(el: HTMLCanvasElement | null): boolean {
 
 function SceneGate({ charted }: { charted: boolean }) {
   const { camera } = useThree();
-  const modest = isSmallGpu() || isAppleTouch();
   const [view, setView] = useState<"gap" | "galaxy" | "chart">(charted ? "chart" : "galaxy");
   const shown = useRef(charted);
 
@@ -221,9 +220,9 @@ function SceneGate({ charted }: { charted: boolean }) {
     const t = window.setTimeout(() => {
       shown.current = charted;
       setView(charted ? "chart" : "galaxy");
-    }, modest ? 160 : 48);
+    }, 48);
     return () => window.clearTimeout(t);
-  }, [charted, camera, modest]);
+  }, [charted, camera]);
 
   return (
     <>

@@ -172,13 +172,15 @@ export function BirthChat() {
           </GlossRoot>
         </p>
         <ul className="mt-4 max-w-sm space-y-2 text-sm leading-relaxed text-fg-muted">
-          {temple.lines.slice(0, 4).map((line) => (
+          {temple.lines.slice(0, 2).map((line) => (
             <li key={line.slice(0, 24)}>{line}</li>
           ))}
+          {temple.lines.slice(2, 4).map((line) => (
+            <li key={line.slice(0, 24)} className="birth-chat-lines-extra">
+              {line}
+            </li>
+          ))}
         </ul>
-        <p className="mt-4 max-w-sm text-xs leading-relaxed text-fg-subtle">
-          {temple.chakraNote}
-        </p>
 
         {!birth ? (
           <form
@@ -198,7 +200,7 @@ export function BirthChat() {
                 <select
                   value={month}
                   onChange={(e) => pickMonth(e.target.value)}
-                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-base text-fg md:min-h-11 md:text-sm"
+                  className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
                   required
                 >
                   <option value="">—</option>
@@ -214,7 +216,7 @@ export function BirthChat() {
                 <select
                   value={day}
                   onChange={(e) => setDay(e.target.value)}
-                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-base text-fg md:min-h-11 md:text-sm"
+                  className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
                   required
                   disabled={!monthN}
                 >
@@ -231,7 +233,7 @@ export function BirthChat() {
                 <select
                   value={year}
                   onChange={(e) => pickYear(e.target.value)}
-                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-base text-fg md:min-h-11 md:text-sm"
+                  className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
                   required
                 >
                   <option value="">—</option>
@@ -262,6 +264,7 @@ export function BirthChat() {
             >
               Keep flying
             </button>
+            <p className="max-w-sm text-xs leading-relaxed text-fg-subtle">{temple.chakraNote}</p>
           </form>
         ) : step === "offer" ? (
           <div className="mt-8 space-y-5">
@@ -288,6 +291,7 @@ export function BirthChat() {
             >
               Not yet — keep the sun
             </button>
+            <p className="max-w-sm text-xs leading-relaxed text-fg-subtle">{temple.chakraNote}</p>
           </div>
         ) : step === "deeper" ? (
           <form
@@ -307,7 +311,7 @@ export function BirthChat() {
                 <select
                   value={hour12}
                   onChange={(e) => setHour12(e.target.value)}
-                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-base text-fg md:min-h-11 md:text-sm"
+                  className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
                   required
                 >
                   <option value="">—</option>
@@ -323,7 +327,7 @@ export function BirthChat() {
                 <select
                   value={minute}
                   onChange={(e) => setMinute(e.target.value)}
-                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-base text-fg md:min-h-11 md:text-sm"
+                  className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
                   required
                 >
                   <option value="">—</option>
@@ -339,7 +343,7 @@ export function BirthChat() {
                 <select
                   value={meridiem}
                   onChange={(e) => setMeridiem(e.target.value === "pm" ? "pm" : "am")}
-                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-base text-fg md:min-h-11 md:text-sm"
+                  className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
                 >
                   <option value="am">AM</option>
                   <option value="pm">PM</option>
@@ -353,7 +357,7 @@ export function BirthChat() {
                 onChange={(e) => setPlace(e.target.value)}
                 placeholder="City, country"
                 maxLength={120}
-                className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg outline-none placeholder:text-fg-subtle focus:border-accent md:min-h-11 md:text-sm"
+                className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-fg outline-none placeholder:text-fg-subtle focus:border-accent"
                 required
               />
             </label>
