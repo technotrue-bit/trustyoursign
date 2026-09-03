@@ -180,6 +180,7 @@ export function DecisionMachine({ active }: { active: boolean }) {
   const nat = useNativity();
   if (!nat) return null;
   const venus = nat.planetById.venus;
+  if (!venus || nat.steps.length === 0) return null;
   const [vx, vz] = lonToXZ(venus.lon, 0, nat.angles);
   const count = nat.steps.length;
   const nodes = useMemo(() => {

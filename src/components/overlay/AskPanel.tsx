@@ -7,6 +7,7 @@ import { formatBirth, formatClock } from "@/lib/chart/sun";
 import { useNativity } from "@/lib/chart/nativity";
 import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import type { ChakraId, GateId, PlanetId, ReadingId, Selection } from "@/lib/chart/types";
+import { isResearchChartId } from "@/lib/chart/types";
 import {
   loadNotes,
   loadThread,
@@ -28,6 +29,7 @@ export function AskPanel() {
   const nat = useNativity();
   const chartIdLib = useVault((s) => s.chartId);
   const shelf = useVault((s) => s.shelf);
+  const skyNatal = useVault((s) => s.skyNatal);
   const chartId = shelf?.id ?? chartIdLib ?? "";
   const selection = useVault((s) => s.selection);
   const { user, isPending } = useCurrentUserState();
@@ -39,14 +41,15 @@ export function AskPanel() {
   const [fieldDraft, setFieldDraft] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [guestAsks, setGuestAsks] = useState(0);
   const scroller = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const sky = shelf?.natal ?? null;
-  const about = sky
+  const sky = shelf?.natal ?? (chartIdLib === "visitor" ? skyNatal : null);
+  const about = sky && shelf
     ? (() => {
         const body = sky.bodies.find((b) => selection?.kind === "planet" && selection.id === b.id) ?? sky.bodies[0]!;
         return {
-          key: `sky:${shelf!.id}:${body.id}`,
+          key: `sky:${shelf.id}:${body.id}`,
           label: body.name,
           focus: body.id,
           ask: `What is my ${body.name.toLowerCase()} holding?`,
@@ -60,15 +63,17 @@ export function AskPanel() {
           ask: `What does this sun sign hold?`,
         }
       : questionFor(selection, nat);
-  const doors = sky
-    ? ["What is my sun holding?", "What is my moon holding?", "What is my rising holding?"]
-    : shelf
-      ? [
-          "What does this sun sign hold?",
-          "What don't you have for me yet?",
-          "What is the chakra for this sign?",
-        ]
-      : (nat?.suggested ?? []);
+  const doors = nat && chartIdLib === "visitor"
+    ? (nat.suggested ?? [])
+    : sky && shelf
+      ? ["What is my sun holding?", "What is my moon holding?", "What is my rising holding?"]
+      : shelf
+        ? [
+            "What does this sun sign hold?",
+            "What don't you have for me yet?",
+            "What is the chakra for this sign?",
+          ]
+        : (nat?.suggested ?? []);
   const notesRef = useRef(notes);
   notesRef.current = notes;
 
@@ -135,7 +140,20 @@ export function AskPanel() {
     setPending(true);
     try {
       let text = "";
-      if (sky) {
+      if (nat && chartIdLib === "visitor") {
+        if (signedIn && skyNatal) {
+          const result = await askTheSky({
+            data: { natal: skyNatal, question: q, history: thread, focus: about?.focus },
+          });
+          text = result.text;
+        } else if (!signedIn && guestAsks >= 2) {
+          text =
+            "The bones answered twice as a guest. Sign in to keep the thread, ask the machine, and save this natal.";
+        } else {
+          text = answerFromBones(nat, q, about?.focus);
+          if (!signedIn) setGuestAsks((n) => n + 1);
+        }
+      } else if (sky && shelf) {
         if (signedIn) {
           const result = await askTheSky({
             data: { natal: sky, question: q, history: thread, focus: about?.focus },
@@ -155,7 +173,7 @@ export function AskPanel() {
           .filter(Boolean)
           .join(" · ");
         text = answerFromShelf(sign, q, when, who, Boolean(shelf.birthPlace));
-      } else if (nat && chartIdLib) {
+      } else if (nat && isResearchChartId(chartIdLib)) {
         const result = await askTheChart({
           data: {
             chartId: chartIdLib,
@@ -166,6 +184,8 @@ export function AskPanel() {
           },
         });
         text = result.ok ? result.text : answerFromBones(nat, q, about?.focus);
+      } else if (nat) {
+        text = answerFromBones(nat, q, about?.focus);
       } else {
         text = "The bones do not hold that.";
       }
@@ -174,27 +194,27 @@ export function AskPanel() {
       persist(done, notesRef.current);
       setError(null);
     } catch {
-      const skyN = shelf?.natal;
+      const skyN = shelf?.natal ?? skyNatal;
       const sign = shelf ? TEMPLE_SIGNS.find((s) => s.id === shelf.signId) : null;
-      const text = skyN
-        ? answerFromSky(skyN, q, about?.focus)
-        : sign
-        ? answerFromShelf(
-            sign,
-            q,
-            [
-              formatBirth(shelf!.birthMonth, shelf!.birthDay, shelf!.birthYear),
-              shelf!.birthHour != null && shelf!.birthMinute != null ? formatClock(shelf!.birthHour, shelf!.birthMinute) : "",
-              shelf!.birthPlace ?? "",
-            ]
-              .filter(Boolean)
-              .join(" · "),
-            shelf!.personName || shelf!.label,
-            Boolean(shelf!.birthPlace),
-          )
-        : nat
-          ? answerFromBones(nat, q, about?.focus)
-          : "The bones do not hold that.";
+      const text = nat
+        ? answerFromBones(nat, q, about?.focus)
+        : skyN
+          ? answerFromSky(skyN, q, about?.focus)
+          : sign
+            ? answerFromShelf(
+                sign,
+                q,
+                [
+                  formatBirth(shelf!.birthMonth, shelf!.birthDay, shelf!.birthYear),
+                  shelf!.birthHour != null && shelf!.birthMinute != null ? formatClock(shelf!.birthHour, shelf!.birthMinute) : "",
+                  shelf!.birthPlace ?? "",
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+                shelf!.personName || shelf!.label,
+                Boolean(shelf!.birthPlace),
+              )
+            : "The bones do not hold that.";
       const done: ThreadTurn[] = [...nextThread, { role: "vault", text }];
       setThread(done);
       persist(done, notesRef.current);

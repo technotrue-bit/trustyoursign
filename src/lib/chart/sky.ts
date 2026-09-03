@@ -3,13 +3,15 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { formatBirth, formatClock } from "./sun";
 import {
-  computeBigThree,
+  computeNatalCast,
   geocodePlace,
   localToUtc,
   type SkyBody,
   type SkyNatal,
 } from "./ephemeris";
 import { answerFromSky } from "./bones-ask";
+import { buildVisitorNativity, skyNatalFromCast } from "./visitor-nativity";
+import type { Nativity } from "./schema";
 
 export type { SkyNatal, SkyBody };
 
@@ -22,11 +24,37 @@ function seedCopy(bodies: SkyBody[]): SkyBody[] {
     if (b.headline) return b;
     return {
       ...b,
-      headline: `${b.name} in ${b.signName}.`,
+      headline: `${b.name} in ${b.signName}, house ${b.house}.`,
       why: b.note,
-      body: [`${b.name} at ${b.note}. The rest of the book is not written yet.`],
+      body: [
+        `${b.name} at ${b.note}.`,
+        "Degree and house are tabled. Meaning waits on the bones — not on a blank book.",
+      ],
     };
   });
+}
+
+function birthInput(input: {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  place: string;
+  tone?: string;
+  label?: string;
+}) {
+  const year = Math.floor(Number(input.year));
+  const month = Math.floor(Number(input.month));
+  const day = Math.floor(Number(input.day));
+  const hour = Math.floor(Number(input.hour));
+  const minute = Math.floor(Number(input.minute));
+  const place = (input.place ?? "").trim().slice(0, 120);
+  const label = (input.label ?? "Your natal").trim().slice(0, 80) || "Your natal";
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1926) throw new Error("That date cannot be read.");
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) throw new Error("That time cannot be read.");
+  if (place.length < 2) throw new Error("Name the place.");
+  return { year, month, day, hour, minute, place, tone: asTone(input.tone ?? "vault"), label };
 }
 
 export const computeSky = createServerFn({ method: "POST" })
@@ -38,31 +66,50 @@ export const computeSky = createServerFn({ method: "POST" })
     minute: number;
     place: string;
     tone?: string;
-  }) => {
-    const year = Math.floor(Number(input.year));
-    const month = Math.floor(Number(input.month));
-    const day = Math.floor(Number(input.day));
-    const hour = Math.floor(Number(input.hour));
-    const minute = Math.floor(Number(input.minute));
-    const place = (input.place ?? "").trim().slice(0, 120);
-    if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1926) throw new Error("That date cannot be read.");
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) throw new Error("That time cannot be read.");
-    if (place.length < 2) throw new Error("Name the place.");
-    return { year, month, day, hour, minute, place, tone: asTone(input.tone ?? "vault") };
-  })
+  }) => birthInput(input))
   .handler(async ({ data }): Promise<SkyNatal> => {
     const geo = await geocodePlace(data.place);
     const utc = localToUtc(data.year, data.month, data.day, data.hour, data.minute, geo.timeZone);
-    const sky = computeBigThree(utc, geo);
+    const cast = computeNatalCast(utc, geo);
     const when = `${formatBirth(data.month, data.day, data.year)} · ${formatClock(data.hour, data.minute)}`;
-    return {
-      ...sky,
-      bodies: seedCopy(sky.bodies),
-      depth: "three",
-      tone: data.tone,
+    const sky = skyNatalFromCast(cast, when, data.tone);
+    return { ...sky, bodies: seedCopy(sky.bodies) };
+  });
+
+export type VisitorChartPayload = {
+  sky: SkyNatal;
+  nativity: Nativity;
+};
+
+/** Timed visitor chart: Big Three save payload + full room-ready Nativity. */
+export const computeVisitorNatal = createServerFn({ method: "POST" })
+  .validator((input: {
+    year: number;
+    month: number;
+    day: number;
+    hour: number;
+    minute: number;
+    place: string;
+    tone?: string;
+    label?: string;
+  }) => birthInput(input))
+  .handler(async ({ data }): Promise<VisitorChartPayload> => {
+    const geo = await geocodePlace(data.place);
+    const utc = localToUtc(data.year, data.month, data.day, data.hour, data.minute, geo.timeZone);
+    const cast = computeNatalCast(utc, geo);
+    const dateLabel = formatBirth(data.month, data.day, data.year);
+    const timeLabel = formatClock(data.hour, data.minute);
+    const when = `${dateLabel} · ${timeLabel}`;
+    const raw = skyNatalFromCast(cast, when, data.tone);
+    const sky = { ...raw, bodies: seedCopy(raw.bodies) };
+    const nativity = buildVisitorNativity(cast, {
+      label: data.label,
       when,
-      writtenAt: null,
-    };
+      dateLabel,
+      timeLabel,
+      tone: data.tone,
+    });
+    return { sky, nativity };
   });
 
 export const getSkyPass = createServerFn({ method: "GET" })
