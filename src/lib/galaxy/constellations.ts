@@ -658,6 +658,27 @@ export const CONSTELLATIONS: Constellation[] = [
   },
 ];
 
+/** Civil-year order for UI (Jan→Dec). Capricorn first — January opens in this sign. */
+export const CALENDAR_SIGN_ORDER: SignId[] = [
+  "capricorn",
+  "aquarius",
+  "pisces",
+  "aries",
+  "taurus",
+  "gemini",
+  "cancer",
+  "leo",
+  "virgo",
+  "libra",
+  "scorpio",
+  "sagittarius",
+];
+
+/** Index into CONSTELLATIONS for each calendar slot. The 3D travel ring stays Aries-first. */
+export const CALENDAR_SIGN_INDICES: number[] = CALENDAR_SIGN_ORDER.map((id) =>
+  CONSTELLATIONS.findIndex((c) => c.id === id),
+);
+
 /** Faint field companions so each sign sits in a real patch of sky. */
 export function constellationDust(index: number, count: number): StarPt[] {
   const out: StarPt[] = [];

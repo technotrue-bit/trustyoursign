@@ -13,7 +13,6 @@ import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
 import { beatById } from "@/lib/chart/tour";
 import type { AppMode, ChartId } from "@/lib/chart/types";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
-import { TEMPLE_CHAKRAS } from "@/lib/galaxy/temple";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
 import { ensureAutoClock, ensureFlyInput, galaxyTravel, noteControl, skipBirth } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
@@ -175,32 +174,11 @@ export function VaultApp() {
       )}
       {entered && !shelf || chat || gate === "library" ? <StarBack /> : null}
       {!entered && gate === "galaxy" && !chat ? <GalaxyCopy /> : null}
-      {!entered && gate === "galaxy" && chat ? <ChakraNote /> : null}
       {!entered && gate === "galaxy" && chat ? <BirthChat /> : null}
       {!entered && gate === "library" ? <Intro /> : null}
       {entered ? <Chrome /> : null}
       {entered ? <TourGuide /> : null}
     </main>
-  );
-}
-
-function ChakraNote() {
-  const id = useGalaxy((s) => s.chakraNote);
-  if (!id) return null;
-  const c = TEMPLE_CHAKRAS.find((n) => n.id === id);
-  if (!c) return null;
-  return (
-    <div className="vault-overlay pointer-events-none absolute inset-x-0 top-[38%] z-40 flex justify-center px-6">
-      <button
-        type="button"
-        className="pointer-events-auto min-h-12 max-w-sm rounded-md border border-border bg-bg/80 px-4 py-3 text-left"
-        onClick={() => useGalaxy.getState().setChakraNote(null)}
-      >
-        <p className="text-[0.7rem] tracking-[0.2em] text-fg-subtle uppercase">{c.sanskrit}</p>
-        <p className="mt-1 font-display text-xl tracking-tight text-fg italic">{c.name}</p>
-        <p className="mt-2 text-sm leading-relaxed text-fg-muted">A well in the body. The sign holds the rest.</p>
-      </button>
-    </div>
   );
 }
 
@@ -215,13 +193,14 @@ function GalaxyCopy() {
   const introSkip = useGalaxy((s) => s.introSkip);
   const introDone = useGalaxy((s) => s.introDone);
   const asking = introVeil > 0.04;
+  const titleAnimating = !introDone && introTitle > 0.08;
   const openBirthChat = useVault((s) => s.openBirthChat);
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
 
   if (!born) {
     return (
       <div className="vault-overlay pointer-events-none absolute inset-0 z-30">
-        <h1 className="sr-only">what&rsquo;s your sign</h1>
+        <h1 className="sr-only">what&rsquo;s your sign?</h1>
       </div>
     );
   }
@@ -273,7 +252,8 @@ function GalaxyCopy() {
           <div className="relative mx-auto grid min-h-14 place-items-center md:min-h-44">
             <h1
               className={cn(
-                "galaxy-title col-start-1 row-start-1 font-display leading-[1.08] font-medium tracking-tight text-fg italic intro-hold",
+                "galaxy-title col-start-1 row-start-1 font-display leading-[1.08] font-medium tracking-tight text-fg italic",
+                titleAnimating ? "sign-soft" : "intro-hold",
                 "transition-[opacity,filter] duration-500 ease-out",
                 moved ? "pointer-events-none opacity-0 blur-sm" : "opacity-100",
               )}
@@ -284,6 +264,7 @@ function GalaxyCopy() {
               <span className="word pointer-events-auto">
                 <Gloss card={false}>sign</Gloss>
               </span>
+              <span className="word">?</span>
             </h1>
             {moved && sign ? (
               <div key={sign.id} className="sign-swap pointer-events-auto col-start-1 row-start-1">
@@ -317,8 +298,10 @@ function GalaxyCopy() {
           disabled={!moved}
           onClick={() => sign && openBirthChat(sign.id)}
           className={cn(
-            "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase transition-colors duration-150 md:min-h-11 md:w-auto",
-            moved ? "text-fg hover:text-accent active:text-accent" : "text-fg-subtle/50",
+            "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase md:min-h-11 md:w-auto",
+            moved
+              ? "sign-claim text-fg hover:text-accent active:text-accent"
+              : "text-fg-subtle/50 transition-colors duration-150",
           )}
         >
           This is my sign

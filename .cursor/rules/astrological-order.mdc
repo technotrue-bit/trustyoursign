@@ -1,0 +1,45 @@
+---
+description: Keep astrological (Aries-first) order for computation; calendar order is UI-only
+alwaysApply: true
+---
+
+# Astrological order (canonical)
+
+Trust Your Sign uses **tropical zodiac order** (Aries → Pisces) as the single source of truth for all math, 3D travel, ephemeris, and chart pipelines. Index `0` is always Aries.
+
+## Canonical data — never reorder for UI
+
+- `CONSTELLATIONS` in `src/lib/galaxy/constellations.ts` stays **Aries-first**.
+- `SIGN_IDS` in `src/lib/chart/ephemeris.ts` and any sign-index math (`signIndex`, `wrap12`, `seekSign`, house/planet longitude) assume this order.
+- 3D travel, sign stations, fly-through, and galaxy store index into `CONSTELLATIONS` directly — do **not** reorder that array or rewrite these pipelines for display convenience.
+
+## Calendar-year display — UI mapping only
+
+Civil-year UI (Jan → Dec, Capricorn first) is **display-only**:
+
+- Use `CALENDAR_SIGN_ORDER` and `CALENDAR_SIGN_INDICES` from `constellations.ts`.
+- Map calendar slot → astrological index; keep computation on astrological indices.
+
+```tsx
+// ✅ GOOD — SignStrip pattern
+{CALENDAR_SIGN_INDICES.map((i) => {
+  const c = CONSTELLATIONS[i]!;
+  // render; seekSign / scroll sync use `i`
+})}
+
+// ❌ BAD — reordering canonical data
+export const CONSTELLATIONS = [capricorn, aquarius, ...]; // breaks travel + ephemeris
+CONSTELLATIONS.sort(/* calendar order */); // mutates shared pipeline data
+```
+
+## Adding sign lists, pickers, or strips
+
+1. Iterate `CONSTELLATIONS` (or `SIGN_IDS`) when order must match chart/sky math.
+2. For calendar-year presentation, iterate `CALENDAR_SIGN_INDICES` (or map via helpers) — never sort or reorder source arrays inline.
+3. When syncing UI to sky state, pass **astrological indices** (`signIndex`), not calendar slot numbers.
+
+## Do not
+
+- Reorder `CONSTELLATIONS`, `SIGN_IDS`, or ephemeris/chart arrays to match a UI layout.
+- Conflate calendar slot index with astrological sign index without explicit mapping.
+- Refactor locked sky/travel/chart code solely to change how signs appear in a strip or picker.
