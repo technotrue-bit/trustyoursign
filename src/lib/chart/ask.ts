@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { answerFromBones } from "./bones-ask";
 import { buildCanon } from "./canon";
-import type { ChartId } from "./types";
+import type { ResearchChartId } from "./types";
 
 const SYSTEM = `You are not a horoscope column and you are not a chatbot. You are the natal machine in the source document.
 
@@ -19,7 +19,7 @@ LAW:
 - Match the source’s person: she/her for Saige; you/your for Joey. Do not mix charts.`;
 
 type AskInput = {
-  chartId: ChartId;
+  chartId: ResearchChartId;
   question: string;
   notes: string[];
   history: { role: "user" | "vault"; text: string }[];
@@ -29,7 +29,7 @@ type AskInput = {
 export const askTheChart = createServerFn({ method: "POST" })
   .validator((input: AskInput) => {
     if (input?.chartId !== "joey" && input?.chartId !== "saige") throw new Error("Not found");
-    const chartId: ChartId = input.chartId;
+    const chartId: ResearchChartId = input.chartId;
     const question = (input?.question ?? "").trim().slice(0, 500);
     if (question.length < 2) throw new Error("Ask something the bones can answer.");
     const notes = Array.isArray(input.notes)

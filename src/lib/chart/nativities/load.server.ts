@@ -1,13 +1,13 @@
 import { OWNER_USER_ID, SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { getSql } from "@/lib/db";
-import type { ChartId } from "../types";
+import type { ResearchChartId } from "../types";
 import type { Nativity } from "../schema";
 import { SAIGE } from "./saige";
 import { JOEY } from "./joey";
 
-const RESEARCH: Record<ChartId, Nativity> = { saige: SAIGE, joey: JOEY };
+const RESEARCH: Record<ResearchChartId, Nativity> = { saige: SAIGE, joey: JOEY };
 
-export function loadResearchNativity(id: ChartId): Nativity {
+export function loadResearchNativity(id: ResearchChartId): Nativity {
   return RESEARCH[id];
 }
 

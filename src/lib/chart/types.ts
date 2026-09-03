@@ -1,4 +1,8 @@
-export type ChartId = "saige" | "joey";
+export type ResearchChartId = "saige" | "joey";
+export type ChartId = ResearchChartId | "visitor";
+export function isResearchChartId(id: string | null | undefined): id is ResearchChartId {
+  return id === "saige" || id === "joey";
+}
 export type Element = "fire" | "earth" | "air" | "water";
 export type Modality = "cardinal" | "fixed" | "mutable";
 export type Dignity = "domicile" | "exaltation" | "detriment" | "fall" | "peregrine" | "angle";

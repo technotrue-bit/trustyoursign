@@ -48,7 +48,10 @@ type VaultState = {
   birth: BirthDate | null;
   tourBeat: string | null;
   sheetFolded: boolean;
+  /** Big Three payload kept beside a visitor Nativity for Ask / deep-cut. */
+  skyNatal: SkyNatal | null;
   openChart: (id: ChartId, research: Nativity) => void;
+  openVisitor: (research: Nativity, sky: SkyNatal | null) => void;
   setChart: (id: ChartId) => void;
   openShelf: (sketch: Omit<ShelfSketch, "id"> & { id?: string }) => void;
   openLibrary: () => void;
@@ -83,6 +86,7 @@ export const useVault = create<VaultState>((set, get) => ({
   birth: null,
   tourBeat: null,
   sheetFolded: false,
+  skyNatal: null,
   openChart: (id, research) => {
     const walk = id === "joey";
     const beat = walk ? nextJoeyBeat() : null;
@@ -90,6 +94,7 @@ export const useVault = create<VaultState>((set, get) => ({
       chartId: id,
       research,
       shelf: null,
+      skyNatal: null,
       entered: true,
       gate: "library",
       mode: beat?.mode ?? "sky",
@@ -99,7 +104,33 @@ export const useVault = create<VaultState>((set, get) => ({
       tourBeat: beat?.id ?? null,
     });
   },
-  setChart: (id) => set({ chartId: id, research: null, shelf: null, mode: "sky", selection: null, hovered: null, tourBeat: null }),
+  openVisitor: (research, sky) => {
+    set({
+      chartId: "visitor",
+      research,
+      shelf: null,
+      skyNatal: sky,
+      entered: true,
+      gate: "galaxy",
+      mode: "sky",
+      selection: null,
+      hovered: null,
+      chat: false,
+      tourBeat: null,
+      sheetFolded: false,
+    });
+  },
+  setChart: (id) =>
+    set({
+      chartId: id,
+      research: null,
+      shelf: null,
+      skyNatal: null,
+      mode: "sky",
+      selection: null,
+      hovered: null,
+      tourBeat: null,
+    }),
   openShelf: (sketch) => {
     const i = CONSTELLATIONS.findIndex((c) => c.id === sketch.signId);
     if (i >= 0) seekSign(i);
@@ -113,6 +144,7 @@ export const useVault = create<VaultState>((set, get) => ({
       },
       chartId: null,
       research: null,
+      skyNatal: sketch.natal ?? null,
       entered: true,
       gate: sketch.from === "library" ? "library" : "galaxy",
       mode: "ask",
@@ -138,6 +170,7 @@ export const useVault = create<VaultState>((set, get) => ({
       chartId: null,
       research: null,
       shelf: null,
+      skyNatal: null,
       selection: null,
       hovered: null,
       chat: false,
@@ -153,6 +186,7 @@ export const useVault = create<VaultState>((set, get) => ({
       chartId: null,
       research: null,
       shelf: null,
+      skyNatal: null,
       selection: null,
       hovered: null,
       mode: "sky",
@@ -169,6 +203,7 @@ export const useVault = create<VaultState>((set, get) => ({
       chartId: null,
       research: null,
       shelf: null,
+      skyNatal: null,
       selection: null,
       hovered: null,
       mode: "sky",
@@ -214,6 +249,10 @@ export const useVault = create<VaultState>((set, get) => ({
       return;
     }
     if (s.entered) {
+      if (s.chartId === "visitor") {
+        s.openGalaxy();
+        return;
+      }
       s.library();
       return;
     }

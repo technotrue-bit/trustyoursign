@@ -95,7 +95,7 @@ function Account() {
           <p className="mt-2 text-sm leading-relaxed text-fg-muted">
             {isSiteOwner(user)
               ? "You hold the house. No subscription sits on this account."
-              : "The Big Three and one deep cut a week are free. Paid bones are not billed yet — this house is still being built. When billing opens, it will live here."}
+              : "The Big Three, a timed natal (Sky · Body · Bones · Ask), and one deep cut a week are free. Paid bones are not billed yet — this house is still being built."}
           </p>
         </section>
 

@@ -98,12 +98,12 @@ const PLANET_WORDS = ["moon", "sun", "mercury", "venus", "mars", "jupiter", "sat
 export function answerFromShelf(sign: TempleSign, question: string, dateLabel: string, who: string, heldClock = false): string {
   const q = needle(question);
   const honest = heldClock
-    ? `The sun was in ${sign.name} on ${dateLabel}. The clock and the place are held for ${who}. Planets and houses are not calculated yet.`
-    : `The sun was in ${sign.name} on ${dateLabel}. This vault does not hold time, place, planets, or houses for ${who}. Full timed nativities stay on a private research desk. Yours is a sun-sign shelf.`;
+    ? `The sun was in ${sign.name} on ${dateLabel}. The clock and the place are held for ${who}. Offer time and place in BirthChat to open a timed natal.`
+    : `The sun was in ${sign.name} on ${dateLabel}. This vault does not hold time, place, planets, or houses for ${who}. Yours is a sun-sign shelf until you bring the clock.`;
   const wantsSky = PLANET_WORDS.some((w) => has(q, w));
   if (wantsSky) {
     return heldClock
-      ? `${honest}\n\nThe bones do not hold that yet. The sky is not calculated.`
+      ? `${honest}\n\nThe bones do not hold that yet. Open the timed natal from BirthChat.`
       : `${honest}\n\nThe bones do not hold that. Bring the clock and the place.`;
   }
   if (has(q, "chakra") || has(q, sign.chakra)) {
