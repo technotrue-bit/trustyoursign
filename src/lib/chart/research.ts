@@ -1,9 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import type { ChartId } from "./types";
+import type { ResearchChartId } from "./types";
 import type { Nativity } from "./schema";
 
-function asChartId(id: string): ChartId {
+function asChartId(id: string): ResearchChartId {
   if (id === "joey") return "joey";
   if (id === "saige") return "saige";
   throw new Error("Not found");
