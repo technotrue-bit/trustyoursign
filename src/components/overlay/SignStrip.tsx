@@ -1,11 +1,10 @@
 import { useEffect, useRef } from "react";
-import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
+import { CALENDAR_SIGN_INDICES, CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { noteControl, seekSign } from "@/lib/galaxy/travel";
-import { cn } from "@/lib/utils";
 
-function jumpTo(index: number) {
-  return seekSign(index);
+function jumpTo(index: number, direct = false) {
+  return seekSign(index, direct ? { direct: true } : undefined);
 }
 
 function nearestFromScroll(scroller: HTMLElement) {
@@ -101,45 +100,43 @@ export function SignStrip() {
   };
 
   return (
-    <ul
-      ref={scrollerRef}
-      className="sign-strip pointer-events-auto"
-      aria-label="The twelve signs"
-      onScroll={onScroll}
-      onPointerDown={(e) => {
-        e.stopPropagation();
-        hands.current = true;
-        noteControl();
-      }}
-    >
-      {CONSTELLATIONS.map((c, i) => {
-        const on = moved && i === signIndex;
-        return (
-          <li key={c.id} className="sign-strip-item" data-sign-index={i}>
-            <button
-              type="button"
-              aria-label={`${c.name}, ${c.month}`}
-              aria-pressed={on}
-              aria-current={on ? "true" : undefined}
-              onClick={() => {
-                fromStrip.current = true;
-                jumpTo(i);
-                centerItem(i, true);
-              }}
-              className={cn(
-                "flex min-h-12 w-full flex-col items-center justify-center px-3 py-2 md:min-h-11",
-                "transition-[color,opacity] duration-200 ease-out",
-                on ? "text-fg" : "text-fg-subtle hover:text-fg-muted",
-              )}
-            >
-              <span className={cn("font-display text-base tracking-tight italic md:text-lg", on && "text-accent")}>
-                {c.name}
-              </span>
-              <span className="mt-0.5 text-xs tracking-wide">{c.span}</span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="sign-strip-belt pointer-events-auto">
+      <ul
+        ref={scrollerRef}
+        className="sign-strip"
+        aria-label="The twelve signs"
+        onScroll={onScroll}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          hands.current = true;
+          noteControl();
+        }}
+      >
+        {CALENDAR_SIGN_INDICES.map((i) => {
+          const c = CONSTELLATIONS[i]!;
+          const on = moved && i === signIndex;
+          return (
+            <li key={c.id} className="sign-strip-item" data-sign-index={i}>
+              <button
+                type="button"
+                aria-label={`${c.name}, ${c.month}`}
+                aria-pressed={on}
+                aria-current={on ? "true" : undefined}
+                onClick={() => {
+                  fromStrip.current = true;
+                  noteControl();
+                  jumpTo(i, true);
+                  centerItem(i, true);
+                }}
+                className="sign-strip-btn"
+              >
+                <span className="sign-strip-name">{c.name}</span>
+                <span className="sign-strip-span">{c.span}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

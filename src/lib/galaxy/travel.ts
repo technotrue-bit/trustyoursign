@@ -35,6 +35,8 @@ export const SEEK_ARRIVE = 0.55;
 export const SEEK_THROUGH = 0.34;
 /** Never skip more than ~2 frames of birth, even after a load hitch. */
 const BIRTH_DT_CAP = 0.032;
+/** Strip click: fly straight to the sign without station-hopping. */
+const DIRECT_SEEK_SEC = 0.85;
 /** First look starts on the ram, before the Aries station. */
 export const OPEN_T = 0;
 
@@ -83,6 +85,11 @@ export const galaxyTravel = {
   /** 1 = rest hero. >1 pulls into the current sign. Pinch on mobile. */
   zoom: 1,
   zoomTarget: 1,
+  /** Strip click — ease camera without stepping signIndex through intermediates. */
+  seekDirect: false,
+  seekTargetIndex: null as number | null,
+  seekStartT: null as number | null,
+  seekElapsed: 0,
 };
 
 export function prefersReducedMotion() {
@@ -156,6 +163,10 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.epoch += 1;
   galaxyTravel.zoom = 1;
   galaxyTravel.zoomTarget = 1;
+  galaxyTravel.seekDirect = false;
+  galaxyTravel.seekTargetIndex = null;
+  galaxyTravel.seekStartT = null;
+  galaxyTravel.seekElapsed = 0;
   restIdle();
 }
 
@@ -179,15 +190,33 @@ export function starSpark(time: number, i: number, seed: number) {
   return breathe + flash * 0.2;
 }
 
+export type SeekOptions = { direct?: boolean };
+
+function clearDirectSeek() {
+  galaxyTravel.seekDirect = false;
+  galaxyTravel.seekTargetIndex = null;
+  galaxyTravel.seekStartT = null;
+  galaxyTravel.seekElapsed = 0;
+}
+
 /** Jump the flight path to a sign. Arrive as the animal and hold until they fly or rest. */
-export function seekSign(index: number) {
+export function seekSign(index: number, opts?: SeekOptions) {
   const i = ((Math.round(index) % 12) + 12) % 12;
   const dest = stationT(i);
+  const direct = opts?.direct ?? false;
   galaxyTravel.seek = dest;
   galaxyTravel.tTarget = dest;
   galaxyTravel.playUntil = null;
   galaxyTravel.moved = true;
   galaxyTravel.awaken = 1;
+  if (direct) {
+    galaxyTravel.seekDirect = true;
+    galaxyTravel.seekTargetIndex = i;
+    galaxyTravel.seekStartT = galaxyTravel.t;
+    galaxyTravel.seekElapsed = 0;
+  } else {
+    clearDirectSeek();
+  }
   const sign = CONSTELLATIONS[i];
   if (sign) primeSignArt(sign.id);
   const nxt = CONSTELLATIONS[(i + 1) % 12];
@@ -195,9 +224,16 @@ export function seekSign(index: number) {
   const prev = CONSTELLATIONS[(i + 11) % 12];
   if (prev) primeSignArt(prev.id);
   restIdle();
-  useGalaxy.getState().setTravel(dest, true);
+  publishTravel(dest, true);
   primeSignArt(currentConstellation().id);
   return i;
+}
+
+/** Publish camera t to React — during a direct seek, signIndex stays on the target. */
+export function publishTravel(t: number, moved?: boolean) {
+  const override =
+    galaxyTravel.seekDirect && galaxyTravel.seek != null ? galaxyTravel.seekTargetIndex : undefined;
+  useGalaxy.getState().setTravel(t, moved, override ?? undefined);
 }
 
 /** Hands on the sky — don't auto-advance until they let go. */
@@ -474,15 +510,32 @@ export function ensureFlyInput() {
 }
 
 
+function finishSeek(dest: number) {
+  galaxyTravel.seek = null;
+  galaxyTravel.tTarget = dest;
+  clearDirectSeek();
+}
+
 /** Cruise toward a strip jump. Fly through the sky — never teleport into a blank. */
 export function stepSeek(t: number, dt: number) {
   const dest = galaxyTravel.seek;
   if (dest == null) return { t, active: false };
+  if (galaxyTravel.seekDirect) {
+    const start = galaxyTravel.seekStartT ?? t;
+    galaxyTravel.seekElapsed += dt;
+    const duration = prefersReducedMotion() ? 0.01 : DIRECT_SEEK_SEC;
+    const u = smooth01(Math.min(1, galaxyTravel.seekElapsed / duration));
+    const next = start + (dest - start) * u;
+    if (u >= 1 || Math.abs(dest - next) < 0.004) {
+      finishSeek(dest);
+      return { t: dest, active: false };
+    }
+    return { t: next, active: true };
+  }
   const gap = dest - t;
   const dist = Math.abs(gap);
   if (dist < 0.004) {
-    galaxyTravel.seek = null;
-    galaxyTravel.tTarget = dest;
+    finishSeek(dest);
     return { t: dest, active: false };
   }
   const k = dist > 0.22 ? 2.1 : dist > 0.08 ? 3.4 : 5.2;

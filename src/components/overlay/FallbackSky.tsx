@@ -4,7 +4,7 @@ import { lonToXZ } from "@/lib/chart/geometry";
 import { CONSTELLATIONS, constellationDust, nearestSign, pairFigures } from "@/lib/galaxy/constellations";
 import { preloadSignArt, signArtImage } from "@/lib/galaxy/signArt";
 import { getSignVolume } from "@/lib/galaxy/signVolume";
-import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, ensureAutoClock, ensureFlyInput, galaxyTravel, gateForm, morphBurst, pinchQuiet, signMorph, starGather, starSpark, stepBirth, stepPlayUntil, stepSeek, stepZoom } from "@/lib/galaxy/travel";
+import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, ensureAutoClock, ensureFlyInput, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepPlayUntil, stepSeek, stepZoom } from "@/lib/galaxy/travel";
 import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
@@ -332,9 +332,8 @@ export function FallbackSky() {
       const spread = 0.105;
       const reach = Math.min(w, h) * 0.2;
       const companions = constellationDust(seed, 12);
-      const cinematic = !held && showPlate;
-      const morph = held ? 1 : cinematic ? signMorph(along) : 0;
-      const burst = held ? 0 : cinematic ? morphBurst(along) : 0;
+      const morph = held ? 1 : 0;
+      const burst = 0;
       const pairs = morphPairs(sign);
       const assembled = held || along < 1.9 ? Math.max(0.88, starGather(along, Math.floor(pairs.length * 0.08), pairs.length + companions.length)) : starGather(along, Math.floor(pairs.length * 0.18), pairs.length + companions.length);
       ctx.save();
@@ -414,7 +413,8 @@ export function FallbackSky() {
             const gath = held ? 1 : starGather(along, i, total);
             const ox = Math.sin(seed * 1.2 + i * 2.399) * 10.2;
             const oy = Math.cos(seed * 0.8 + i * 1.618) * 7.1;
-            const sx = (p.ax + (p.gx - p.ax) * morph) * gath + ox * (1 - gath);
+            const rightShift = held ? 2.2 : 0;
+            const sx = (p.ax + (p.gx - p.ax) * morph + rightShift * morph) * gath + ox * (1 - gath);
             const sy = (p.ay + (p.gy - p.ay) * morph) * gath + oy * (1 - gath);
             paintStar(sx, sy, p.am + (p.gm - p.am) * morph, i);
           }
@@ -581,7 +581,7 @@ export function FallbackSky() {
           1,
           galaxyTravel.awaken + dt * (galaxyTravel.moved ? 0.45 : 0.16),
         );
-        useGalaxy.getState().setTravel(galaxyTravel.t, galaxyTravel.moved);
+        publishTravel(galaxyTravel.t, galaxyTravel.moved);
       } else if (chatting) {
         vel *= Math.exp(-dt * 3.2);
         if (vel < 0.04) vel = 0;
@@ -654,6 +654,12 @@ export function FallbackSky() {
           const holdIdx = CONSTELLATIONS.findIndex((c) => c.id === picked);
           const hold = holdIdx >= 0 ? CONSTELLATIONS[holdIdx] : undefined;
           if (hold) drawConstellation(hold, 0.42, 1, depth, skyTime, holdIdx, true, true);
+        } else if (galaxyTravel.seekDirect && galaxyTravel.seek != null) {
+          const aim = aimedIndex(t);
+          const dest = stationT(aim);
+          const along = Math.max(0.12, Math.abs(t - dest) * 8 + 0.35);
+          const sign = CONSTELLATIONS[aim];
+          if (sign) drawConstellation(sign, along, 0.95 * awaken, depth, skyTime, aim, false, true);
         } else {
           const cur = stationFromT(t);
           const nxt = Math.min(11, cur + 1);
