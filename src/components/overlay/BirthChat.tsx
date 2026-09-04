@@ -9,7 +9,7 @@ import { isSiteOwner } from "@/lib/owner";
 import { saveChart } from "@/lib/charts";
 import { computeVisitorNatal } from "@/lib/chart/sky";
 import { getForgeAnonKey } from "@/lib/chart/forge-anon";
-import { startOrResumeForge } from "@/lib/chart/forge.server";
+import { startOrResumeForge } from "@/lib/chart/forge-api";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { Nativity } from "@/lib/chart/schema";
 import { cn } from "@/lib/utils";

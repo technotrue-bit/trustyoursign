@@ -5,7 +5,7 @@ import {
   abandonForge,
   advanceForge,
   getForgeStatus,
-} from "@/lib/chart/forge.server";
+} from "@/lib/chart/forge-api";
 import type { ForgeJobView } from "@/lib/chart/forge";
 import { useVault } from "@/lib/store";
 
@@ -158,7 +158,7 @@ export async function resumeForgeIfAny(
   openVisitor: (n: NonNullable<ForgeJobView["nativity"]>, sky: ForgeJobView["sky"]) => void,
 ): Promise<boolean> {
   try {
-    const { findActiveForge } = await import("@/lib/chart/forge.server");
+    const { findActiveForge } = await import("@/lib/chart/forge-api");
     const job = await findActiveForge({ data: { anonKey: getForgeAnonKey() } });
     if (!job) return false;
     if (job.status === "ready" && job.nativity) {

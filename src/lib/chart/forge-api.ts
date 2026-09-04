@@ -19,7 +19,6 @@ import {
   type ForgeProseChunks,
   type ForgeStatus,
 } from "./forge";
-import { generateForgeProseChunk } from "./forge-prose.server";
 
 type ForgeRow = {
   id: string;
@@ -334,6 +333,7 @@ export const advanceForge = createServerFn({ method: "POST" })
     let nativity = JSON.parse(row.nativity_json!) as Nativity;
     const sky = JSON.parse(row.cast_json!) as SkyNatal;
     try {
+      const { generateForgeProseChunk } = await import("./forge-prose.server");
       const text = await generateForgeProseChunk(key, nativity, sky, birth);
       if (!text) {
         proseError = "Prose could not be written for this room.";
