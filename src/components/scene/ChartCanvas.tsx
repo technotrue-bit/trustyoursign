@@ -5,8 +5,15 @@ import { Color, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { buryWebGLCanvas, canvasDpr, glContextAttrs, isSmallGpu } from "@/lib/gpu";
 import { lonToXZ } from "@/lib/chart/geometry";
+import {
+  useIsEntered,
+  useNativity,
+  useSession,
+  useSessionMode,
+  useSessionSelection,
+} from "@/lib/chart/session/hooks";
+import { useSessionStore } from "@/lib/chart/session/store";
 import type { AppMode, ChakraId, PlanetId } from "@/lib/chart/types";
-import { useVault } from "@/lib/store";
 import { ChakraBody, DecisionMachine, GatePortals } from "./Figures";
 import { GalaxyIntro } from "./GalaxyIntro";
 import { SkyWheel } from "./SkyWheel";
@@ -30,8 +37,10 @@ const SKY: [number, number, number] = [0, 6.4, 9.6];
 const GALAXY_CAM: [number, number, number] = [0, 0.35, 2];
 
 function poseFor(): Pose {
-  const { mode, selection, research } = useVault.getState();
-  const nat = research;
+  const session = useSessionStore.getState().session;
+  const mode = session?.mode ?? "sky";
+  const selection = session?.selection ?? null;
+  const nat = session?.nativity ?? null;
   if (nat && selection?.kind === "planet") {
     const p = nat.planetById[selection.id as PlanetId];
     if (p) {
@@ -65,9 +74,9 @@ function poseFor(): Pose {
 function CameraRig() {
   const { camera } = useThree();
   const controls = useRef<OrbitControlsImpl>(null);
-  const mode = useVault((s) => s.mode);
-  const selection = useVault((s) => s.selection);
-  const entered = useVault((s) => s.entered);
+  const mode = useSessionMode();
+  const selection = useSessionSelection();
+  const entered = useIsEntered();
   const lerpUntil = useRef(0);
   const booted = useRef(false);
   const hold = useRef(12);
@@ -157,8 +166,8 @@ function CameraRig() {
 }
 
 function ChartWorld() {
-  const mode = useVault((s) => s.mode);
-  const selection = useVault((s) => s.selection);
+  const mode = useSessionMode();
+  const selection = useSessionSelection();
   const ask = mode === "ask";
   const skyOn = mode === "sky" || mode === "bones" || mode === "readings" || ask;
   const bodyOn = mode === "body" || (ask && selection?.kind === "chakra");
@@ -237,9 +246,9 @@ function failGl() {
 }
 
 export function ChartCanvas() {
-  const entered = useVault((s) => s.entered);
-  const shelf = useVault((s) => s.shelf);
-  const research = useVault((s) => s.research);
+  const entered = useIsEntered();
+  const session = useSession();
+  const nativity = useNativity();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -296,7 +305,7 @@ export function ChartCanvas() {
               { capture: true },
             );
           }
-          if (useVault.getState().entered) {
+          if (useSessionStore.getState().session) {
             camera.position.set(...SKY);
             camera.lookAt(0, 0.1, 0);
           } else {
@@ -306,10 +315,10 @@ export function ChartCanvas() {
           setReady(true);
         }}
         onPointerMissed={(e) => {
-          if (e.type === "click") useVault.getState().clear();
+          if (e.type === "click") useSessionStore.getState().clear();
         }}
       >
-        <SceneGate charted={Boolean(entered && !shelf && research)} />
+        <SceneGate charted={Boolean(entered && session?.kind !== "shelf" && nativity)} />
       </Canvas>
     </div>
   );
