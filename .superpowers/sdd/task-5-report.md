@@ -46,3 +46,30 @@
 ## Concerns
 
 None.
+
+## Important review findings follow-up
+
+- Added `openLibraryVisitor` as a dedicated store entry so legacy
+  `openChart("visitor", research)` creates a visitor session with
+  `origin: "library"`, `skyNatal: null`, and no tour beat.
+- Kept `openVisitor` unchanged as the F&F galaxy entry.
+- Added a compatibility regression asserting `gate === "library"` and
+  `chartId === "visitor"`.
+- Added `src/lib/chart/session/store-compat.test.ts` to the `npm test` session
+  test phase.
+
+### Follow-up verification
+
+- `npx tsx --test src/lib/chart/session/store-compat.test.ts`: PASS — 6/6 tests.
+- `npx tsx --test src/lib/chart/visitor-nativity.test.ts src/lib/chart/session/selectors.test.ts src/lib/chart/session/factories.test.ts src/lib/chart/session/actions.test.ts src/lib/chart/session/store-compat.test.ts`:
+  PASS — 20/20 tests.
+- `npm run typecheck`: PASS.
+- `npm test`: FAIL in the pre-existing script-test phase — 178/195 passed and
+  the chained session phase did not run. The unrelated failures include
+  `scripts/write-atomic.test.mjs` requiring the absent
+  `.grok/skills/og/references` fixture, as well as other absent template
+  fixtures such as `.grok/skills/og/SKILL.md` and the default app-env data.
+
+### Follow-up commit
+
+- `94bd3b8` — `fix(session): preserve visitor library compatibility`
