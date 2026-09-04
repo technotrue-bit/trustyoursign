@@ -1,13 +1,13 @@
-import { useVault } from "@/lib/store";
+import { useSessionStore } from "@/lib/chart/session/store";
 import { cn } from "@/lib/utils";
 
 export function StarBack({ className }: { className?: string }) {
-  const goBack = useVault((s) => s.goBack);
+  const closeSession = useSessionStore((s) => s.close);
 
   return (
     <button
       type="button"
-      onClick={goBack}
+      onClick={closeSession}
       aria-label="Back"
       className={cn("star-back pointer-events-auto", className)}
     >

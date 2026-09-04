@@ -1,12 +1,13 @@
 import { beatById, followingBeat } from "@/lib/chart/tour";
-import { useVault } from "@/lib/store";
+import { useSession, useTourBeat } from "@/lib/chart/session/hooks";
+import { useSessionStore } from "@/lib/chart/session/store";
 
 export function TourGuide() {
-  const chartId = useVault((s) => s.chartId);
-  const tourBeat = useVault((s) => s.tourBeat);
-  const nextTour = useVault((s) => s.nextTour);
-  const skipTour = useVault((s) => s.skipTour);
-  if (chartId !== "joey" || !tourBeat) return null;
+  const session = useSession();
+  const tourBeat = useTourBeat();
+  const nextTour = useSessionStore((s) => s.nextTour);
+  const skipTour = useSessionStore((s) => s.skipTour);
+  if (session?.chartKey !== "joey" || !tourBeat) return null;
   const beat = beatById(tourBeat);
   if (!beat) return null;
   const more = Boolean(followingBeat(beat.id));

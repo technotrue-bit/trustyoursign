@@ -10,6 +10,15 @@ import {
 } from "lucide-react";
 import { useNativity } from "@/lib/chart/nativity";
 import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
+import {
+  useClaim,
+  useSession,
+  useSessionHovered,
+  useSessionMode,
+  useSurface,
+  useTourBeat,
+} from "@/lib/chart/session/hooks";
+import { useSessionStore } from "@/lib/chart/session/store";
 import { beatById } from "@/lib/chart/tour";
 import type { AppMode, ChartId } from "@/lib/chart/types";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
@@ -58,10 +67,13 @@ const VISITOR_ROOMS = new Set<AppMode>(["sky", "body", "bones", "ask"]);
 export function VaultApp() {
   const [Scene, setScene] = useState<ComponentType | null>(null);
   const [sceneFailed, setSceneFailed] = useState(false);
-  const entered = useVault((s) => s.entered);
-  const gate = useVault((s) => s.gate);
-  const chat = useVault((s) => s.chat);
-  const shelf = useVault((s) => s.shelf);
+  const session = useSession();
+  const claim = useClaim();
+  const surface = useSurface();
+  const entered = session !== null;
+  const chat = claim !== null && session === null;
+  const gate = session?.origin ?? surface;
+  const shelf = session?.kind === "shelf" ? session : null;
 
   useEffect(() => {
     if (!shouldUse3D()) {
@@ -93,15 +105,14 @@ export function VaultApp() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const st = useSessionStore.getState();
       if (e.key === "Escape") {
-        const st = useVault.getState();
-        if (st.selection) st.clear();
-        else st.goBack();
+        if (st.session?.selection) st.clear();
+        else st.close();
       }
-      if (e.key === "Enter" && !useVault.getState().entered) {
-        const st = useVault.getState();
-        if (st.gate === "galaxy") {
-          if (st.chat) return;
+      if (e.key === "Enter" && !st.session) {
+        if (st.surface === "galaxy") {
+          if (st.claim) return;
           if (galaxyTravel.birth < 1) {
             skipBirth();
             useGalaxy.getState().markBorn();
@@ -110,14 +121,14 @@ export function VaultApp() {
           const g = useGalaxy.getState();
           if (g.moved) {
             const sign = CONSTELLATIONS[g.signIndex];
-            if (sign) st.openBirthChat(sign.id);
+            if (sign) st.openClaim(sign.id);
           } else st.openLibrary();
         }
       }
       const n = Number(e.key);
       if (n >= 1 && n <= 7) {
         const mode = MODES[n - 1];
-        if (mode && useVault.getState().entered) useVault.getState().setMode(mode.id);
+        if (mode && st.session) st.setMode(mode.id);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -498,22 +509,28 @@ function SavedShelf() {
 }
 
 function Chrome() {
-  const mode = useVault((s) => s.mode);
-  const setMode = useVault((s) => s.setMode);
-  const hovered = useVault((s) => s.hovered);
-  const shelf = useVault((s) => s.shelf);
-  const chartId = useVault((s) => s.chartId);
+  const session = useSession();
+  const mode = useSessionMode();
+  const setMode = useSessionStore((s) => s.setMode);
+  const hovered = useSessionHovered();
+  const shelf = session?.kind === "shelf" ? session : null;
+  const chartKey =
+    session?.kind === "visitor"
+      ? "visitor"
+      : session?.kind === "research"
+        ? (session.chartKey as ChartId)
+        : null;
   const nat = useNativity();
   const rooms = shelf
     ? MODES.filter((m) => m.id === "sky" || m.id === "ask")
-    : chartId === "visitor"
+    : chartKey === "visitor"
       ? MODES.filter((m) => VISITOR_ROOMS.has(m.id))
       : MODES;
   const title = shelf ? shelf.label : nat?.meta.name ?? "The Vault";
   const who = shelf
-    ? `${shelf.signId} · ${shelf.birthMonth}/${shelf.birthDay}/${shelf.birthYear}`
-    : chartRole(chartId, nat?.meta.date);
-  const tourBeat = useVault((s) => s.tourBeat);
+    ? `${shelf.signId} · ${shelf.birth.month}/${shelf.birth.day}/${shelf.birth.year}`
+    : chartRole(chartKey, nat?.meta.date);
+  const tourBeat = useTourBeat();
   const tourRoom = beatById(tourBeat)?.mode;
   return (
     <>
@@ -526,7 +543,7 @@ function Chrome() {
           <p className="hidden max-w-56 text-right text-xs leading-relaxed text-fg-subtle md:block">
             {shelf ? (
               "Sun-sign shelf. Not a natal."
-            ) : chartId === "visitor" && nat ? (
+            ) : chartKey === "visitor" && nat ? (
               <>
                 {nat.meta.zodiac} · {nat.meta.houses}
                 <br />
