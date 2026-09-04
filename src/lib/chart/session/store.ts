@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Nativity } from "@/lib/chart/schema";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
-import type { AppMode, ChartId, ResearchChartId, Selection, SignId } from "@/lib/chart/types";
+import type { AppMode, ResearchChartId, Selection, SignId } from "@/lib/chart/types";
 import { isDateInSign } from "@/lib/chart/sun";
 import { followingBeat, markBeatSeen, markTourDone, nextJoeyBeat } from "@/lib/chart/tour";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
@@ -24,8 +24,8 @@ import {
   skipTourState,
   type VaultDomainState,
 } from "./actions";
-import { fromResearch, fromShelf, fromVisitor } from "./factories";
-import type { BirthFacts, ChartSession, Surface } from "./types";
+import { fromResearch, fromShelf, fromVisitor, visitorBirth, visitorSign } from "./factories";
+import type { BirthFacts, Surface } from "./types";
 
 export type ShelfSessionInput = {
   id?: string;
@@ -33,7 +33,6 @@ export type ShelfSessionInput = {
   signId: SignId;
   birth: BirthFacts;
   skyNatal: SkyNatal | null;
-  nativity?: Nativity | null;
   tone?: "vault" | "warm";
   relation?: "self" | "other";
   personName?: string | null;
@@ -43,12 +42,9 @@ export type ShelfSessionInput = {
 
 export type SessionStore = VaultDomainState & {
   openVisitor: (nativity: Nativity, skyNatal: SkyNatal | null) => void;
-  openLibraryVisitor: (nativity: Nativity) => void;
   openResearch: (id: ResearchChartId, nativity: Nativity) => void;
   openShelf: (input: ShelfSessionInput) => void;
-  setChart: (id: ChartId) => void;
   openLibrary: () => void;
-  openGalaxy: () => void;
   openClaim: (signId: SignId) => void;
   closeClaim: () => void;
   setClaimBirth: (birth: BirthFacts) => void;
@@ -76,66 +72,6 @@ export function resetGalaxyTravel(): void {
   useGalaxy.setState({ born: true, moved: false, t: OPEN_T, signIndex: 0 });
 }
 
-const MONTHS = [
-  "january",
-  "february",
-  "march",
-  "april",
-  "may",
-  "june",
-  "july",
-  "august",
-  "september",
-  "october",
-  "november",
-  "december",
-] as const;
-
-function visitorBirth(nativity: Nativity): BirthFacts {
-  const date = nativity.meta.date.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})/i);
-  const time = nativity.meta.time.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
-  const month = date ? MONTHS.indexOf(date[2]!.toLowerCase() as (typeof MONTHS)[number]) + 1 : 1;
-  let hour = time ? Number(time[1]) : null;
-  const minute = time ? Number(time[2]) : null;
-  if (hour != null && time?.[3]) {
-    hour %= 12;
-    if (time[3].toLowerCase() === "pm") hour += 12;
-  }
-  return {
-    year: date ? Number(date[3]) : 0,
-    month: month > 0 ? month : 1,
-    day: date ? Number(date[1]) : 1,
-    hour,
-    minute,
-    place: nativity.meta.place || null,
-  };
-}
-
-function visitorSign(nativity: Nativity, birth: BirthFacts): SignId {
-  const sun = nativity.planets?.find((planet) => planet.id === "sun");
-  if (sun) {
-    const longitude = ((sun.lon % 360) + 360) % 360;
-    return CONSTELLATIONS[Math.floor(longitude / 30)]!.id;
-  }
-  return (
-    CONSTELLATIONS.find((constellation) => isDateInSign(constellation.id, birth.month, birth.day))
-      ?.id ?? "aries"
-  );
-}
-
-function resetSessionPresentation(session: ChartSession, id: ChartId): Partial<ChartSession> {
-  return {
-    kind: id === "visitor" ? "visitor" : "research",
-    chartKey: id,
-    nativity: null,
-    skyNatal: null,
-    mode: "sky",
-    selection: null,
-    hovered: null,
-    tourBeat: null,
-  };
-}
-
 export const useSessionStore = create<SessionStore>((set, get) => ({
   session: null,
   claim: null,
@@ -151,20 +87,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       birth,
       signId,
       origin: "galaxy",
-    });
-    set((current) => openSessionState(current, session));
-  },
-
-  openLibraryVisitor: (nativity) => {
-    const state = get();
-    const birth = state.claim?.birth ?? visitorBirth(nativity);
-    const signId = state.claim?.signId ?? visitorSign(nativity, birth);
-    const session = fromVisitor({
-      nativity,
-      skyNatal: null,
-      birth,
-      signId,
-      origin: "library",
     });
     set((current) => openSessionState(current, session));
   },
@@ -188,18 +110,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     set((state) => openSessionState(state, session));
   },
 
-  setChart: (id) =>
-    set((state) => {
-      if (!state.session) return state;
-      return patchSessionState(state, resetSessionPresentation(state.session, id));
-    }),
-
   openLibrary: () => set((state) => setSurfaceState(state, "library")),
-
-  openGalaxy: () => {
-    resetGalaxyTravel();
-    set((state) => setSurfaceState(state, "galaxy"));
-  },
 
   openClaim: (signId) => {
     seekSignFor(signId);

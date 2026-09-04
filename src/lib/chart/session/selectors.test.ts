@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ChartSession, ClaimDraft, Surface } from "./types.ts";
 import {
+  chartKeyOf,
   closeTarget,
+  equalShelfSession,
   isEntered,
-  isResearch,
-  isShelf,
-  isVisitor,
   nativityOf,
   originOf,
+  sessionKindOf,
+  shelfSessionOf,
   skyNatalOf,
 } from "./selectors.ts";
 
@@ -61,11 +62,29 @@ describe("session selectors", () => {
     assert.equal(nativityOf(null), null);
   });
 
-  it("kind guards", () => {
-    assert.equal(isVisitor(baseSession({ kind: "visitor" })), true);
-    assert.equal(isResearch(baseSession({ kind: "research", chartKey: "joey" })), true);
-    assert.equal(isShelf(baseSession({ kind: "shelf" })), true);
-    assert.equal(isResearch(baseSession({ kind: "visitor" })), false);
+  it("reads session kind and shelf session", () => {
+    const shelf = baseSession({ kind: "shelf" });
+    assert.equal(chartKeyOf(baseSession()), "visitor");
+    assert.equal(chartKeyOf(null), null);
+    assert.equal(sessionKindOf(baseSession()), "visitor");
+    assert.equal(sessionKindOf(null), null);
+    assert.equal(shelfSessionOf(shelf), shelf);
+    assert.equal(shelfSessionOf(baseSession()), null);
+  });
+
+  it("compares shelf sessions only by shelf-facing fields", () => {
+    const shelf = shelfSessionOf(baseSession({ kind: "shelf" }));
+    assert.ok(shelf);
+    assert.equal(
+      equalShelfSession(shelf, {
+        ...shelf,
+        hovered: { kind: "planet", id: "sun" },
+        selection: { kind: "sign", id: "leo" },
+      }),
+      true,
+    );
+    assert.equal(equalShelfSession(shelf, { ...shelf, label: "Changed" }), false);
+    assert.equal(equalShelfSession(shelf, null), false);
   });
 
   it("closeTarget prefers session.origin, then claim clear, then surface", () => {
@@ -74,13 +93,13 @@ describe("session selectors", () => {
       closeTarget({ session: baseSession({ origin: "library" }), claim: null, surface: "galaxy" }),
       { surface: "library" as Surface, clearClaim: true },
     );
-    assert.deepEqual(
-      closeTarget({ session: null, claim, surface: "galaxy" }),
-      { surface: "galaxy", clearClaim: true },
-    );
-    assert.deepEqual(
-      closeTarget({ session: null, claim: null, surface: "library" }),
-      { surface: "galaxy", clearClaim: false },
-    );
+    assert.deepEqual(closeTarget({ session: null, claim, surface: "galaxy" }), {
+      surface: "galaxy",
+      clearClaim: true,
+    });
+    assert.deepEqual(closeTarget({ session: null, claim: null, surface: "library" }), {
+      surface: "galaxy",
+      clearClaim: false,
+    });
   });
 });

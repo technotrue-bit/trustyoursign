@@ -1,26 +1,56 @@
 import type { Nativity } from "@/lib/chart/schema";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { AppMode, ResearchChartId, Selection, SignId } from "@/lib/chart/types";
+import { isDateInSign } from "@/lib/chart/sun";
+import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import type { BirthFacts, ChartSession, Surface } from "./types";
 
-const SIGN_IDS = [
-  "aries",
-  "taurus",
-  "gemini",
-  "cancer",
-  "leo",
-  "virgo",
-  "libra",
-  "scorpio",
-  "sagittarius",
-  "capricorn",
-  "aquarius",
-  "pisces",
-] as const satisfies readonly SignId[];
+const MONTHS = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+] as const;
 
-function signIdFromLon(lon: number): SignId {
-  const L = ((lon % 360) + 360) % 360;
-  return SIGN_IDS[Math.min(11, Math.floor(L / 30))]!;
+export function visitorBirth(nativity: Nativity): BirthFacts {
+  const date = (nativity.meta.date || "").match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})/i);
+  const time = (nativity.meta.time || "").match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  const month = date ? MONTHS.indexOf(date[2]!.toLowerCase() as (typeof MONTHS)[number]) + 1 : 1;
+  let hour = time ? Number(time[1]) : null;
+  const minute = time ? Number(time[2]) : null;
+  if (hour != null && time?.[3]) {
+    hour %= 12;
+    if (time[3].toLowerCase() === "pm") hour += 12;
+  }
+  return {
+    year: date ? Number(date[3]) : 0,
+    month: month > 0 ? month : 1,
+    day: date ? Number(date[1]) : 1,
+    hour,
+    minute,
+    place: nativity.meta.place || null,
+  };
+}
+
+export function visitorSign(nativity: Nativity, birth: BirthFacts): SignId {
+  const sun = nativity.planets?.find((planet) => planet.id === "sun");
+  if (sun) {
+    const longitude = ((sun.lon % 360) + 360) % 360;
+    return CONSTELLATIONS[Math.floor(longitude / 30)]!.id;
+  }
+  if (birth.year === 0) return "aries";
+  return (
+    CONSTELLATIONS.find((constellation) => isDateInSign(constellation.id, birth.month, birth.day))
+      ?.id ?? "aries"
+  );
 }
 
 export function newSessionId(): string {
@@ -74,8 +104,10 @@ export function fromResearch(input: {
   selection?: Selection;
   id?: string;
 }): ChartSession {
-  const sun = input.nativity.planets?.find((p) => p.id === "sun");
-  const signId: SignId = sun ? signIdFromLon(sun.lon) : "aries";
+  // Research files may omit birth metadata or the sun; these non-null fields remain
+  // placeholders until session identity becomes nullable in architecture #2.
+  const birth = visitorBirth(input.nativity);
+  const signId = visitorSign(input.nativity, birth);
   return {
     id: input.id ?? `research-${input.chartKey}`,
     kind: "research",
@@ -85,14 +117,7 @@ export function fromResearch(input: {
     personName: input.nativity.meta.name,
     signId,
     tone: "vault",
-    birth: {
-      year: 0,
-      month: 1,
-      day: 1,
-      hour: null,
-      minute: null,
-      place: input.nativity.meta.place || null,
-    },
+    birth,
     nativity: input.nativity,
     skyNatal: null,
     origin: input.origin ?? "library",

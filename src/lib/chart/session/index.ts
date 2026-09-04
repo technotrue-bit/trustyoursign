@@ -4,13 +4,26 @@ export {
   nativityOf,
   skyNatalOf,
   originOf,
-  isVisitor,
-  isResearch,
-  isShelf,
+  sessionKindOf,
+  chartKeyOf,
+  sessionModeOf,
+  sessionSelectionOf,
+  sessionHoveredOf,
+  tourBeatOf,
+  sheetFoldedOf,
+  shelfSessionOf,
+  equalShelfSession,
   closeTarget,
 } from "./selectors";
-export type { CloseTarget } from "./selectors";
-export { fromVisitor, fromResearch, fromShelf, newSessionId } from "./factories";
+export type { CloseTarget, ShelfSession } from "./selectors";
+export {
+  fromVisitor,
+  fromResearch,
+  fromShelf,
+  newSessionId,
+  visitorBirth,
+  visitorSign,
+} from "./factories";
 export {
   openSessionState,
   patchSessionState,
@@ -35,11 +48,14 @@ export {
   useNativity,
   useClaim,
   useSurface,
+  useSessionOrigin,
   useSessionMode,
   useSessionSelection,
   useSessionHovered,
   useIsEntered,
   useSessionKind,
+  useSessionChartKey,
+  useShelfSession,
   useSkyNatal,
   useTourBeat,
   useSheetFolded,

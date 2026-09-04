@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Nativity } from "@/lib/chart/schema";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
-import { fromResearch, fromShelf, fromVisitor, newSessionId } from "./factories.ts";
+import {
+  fromResearch,
+  fromShelf,
+  fromVisitor,
+  newSessionId,
+  visitorBirth,
+  visitorSign,
+} from "./factories.ts";
 
 const birth = {
   year: 2004,
@@ -64,6 +71,25 @@ describe("session factories", () => {
     assert.equal(s.signId, "aries");
   });
 
+  it("fromResearch derives birth and sign when research metadata supplies them", () => {
+    const book = {
+      id: "saige",
+      meta: {
+        name: "Saige",
+        date: "2 September 1990",
+        time: "9:05 AM",
+        place: "Detroit",
+      },
+      planets: [],
+    } as unknown as Nativity;
+    const s = fromResearch({ chartKey: "saige", nativity: book });
+
+    assert.equal(s.birth.year, 1990);
+    assert.equal(s.birth.month, 9);
+    assert.equal(s.birth.day, 2);
+    assert.equal(s.signId, "virgo");
+  });
+
   it("fromShelf allows null nativity and defaults mode ask", () => {
     const s = fromShelf({
       id: "saved-1",
@@ -88,5 +114,29 @@ describe("session factories", () => {
   it("newSessionId returns a string", () => {
     assert.equal(typeof newSessionId(), "string");
     assert.ok(newSessionId().length > 4);
+  });
+
+  it("derives visitor birth facts and sign from nativity metadata", () => {
+    const visitor = {
+      id: "visitor",
+      meta: {
+        name: "Visitor",
+        date: "26 July 2004",
+        time: "6:21 PM",
+        place: "Port Huron",
+      },
+      planets: [{ id: "sun", lon: 124 }],
+    } as Nativity;
+
+    const facts = visitorBirth(visitor);
+    assert.deepEqual(facts, {
+      year: 2004,
+      month: 7,
+      day: 26,
+      hour: 18,
+      minute: 21,
+      place: "Port Huron",
+    });
+    assert.equal(visitorSign(visitor, facts), "leo");
   });
 });

@@ -1,13 +1,13 @@
 import { beatById, followingBeat } from "@/lib/chart/tour";
-import { useSession, useTourBeat } from "@/lib/chart/session/hooks";
+import { useSessionChartKey, useTourBeat } from "@/lib/chart/session/hooks";
 import { useSessionStore } from "@/lib/chart/session/store";
 
 export function TourGuide() {
-  const session = useSession();
+  const chartKey = useSessionChartKey();
   const tourBeat = useTourBeat();
   const nextTour = useSessionStore((s) => s.nextTour);
   const skipTour = useSessionStore((s) => s.skipTour);
-  if (session?.chartKey !== "joey" || !tourBeat) return null;
+  if (chartKey !== "joey" || !tourBeat) return null;
   const beat = beatById(tourBeat);
   if (!beat) return null;
   const more = Boolean(followingBeat(beat.id));
@@ -17,7 +17,9 @@ export function TourGuide() {
       data-no-fly
     >
       <div className="rounded-xl border border-border bg-bg-elevated/96 p-4 shadow-[var(--shadow-border)] backdrop-blur-sm md:p-5">
-        <p className="text-[0.7rem] tracking-[0.22em] text-accent uppercase">{beat.kicker} · Joey</p>
+        <p className="text-[0.7rem] tracking-[0.22em] text-accent uppercase">
+          {beat.kicker} · Joey
+        </p>
         <h2 className="mt-2 font-display text-2xl tracking-tight text-fg italic">{beat.title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-fg-muted">{beat.body}</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">

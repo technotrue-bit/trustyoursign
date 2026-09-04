@@ -8,7 +8,7 @@ import { lonToXZ } from "@/lib/chart/geometry";
 import {
   useIsEntered,
   useNativity,
-  useSession,
+  useSessionKind,
   useSessionMode,
   useSessionSelection,
 } from "@/lib/chart/session/hooks";
@@ -247,7 +247,7 @@ function failGl() {
 
 export function ChartCanvas() {
   const entered = useIsEntered();
-  const session = useSession();
+  const sessionKind = useSessionKind();
   const nativity = useNativity();
   const [ready, setReady] = useState(false);
 
@@ -281,7 +281,11 @@ export function ChartCanvas() {
       <Canvas
         flat
         fallback={null}
-        style={{ background: "#0c0b0a", opacity: ready ? 1 : 0, transition: "opacity 0.85s cubic-bezier(0.22, 1, 0.36, 1)" }}
+        style={{
+          background: "#0c0b0a",
+          opacity: ready ? 1 : 0,
+          transition: "opacity 0.85s cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
         camera={{
           position: entered ? SKY : GALAXY_CAM,
           fov: entered ? 51 : 64,
@@ -318,7 +322,7 @@ export function ChartCanvas() {
           if (e.type === "click") useSessionStore.getState().clear();
         }}
       >
-        <SceneGate charted={Boolean(entered && session?.kind !== "shelf" && nativity)} />
+        <SceneGate charted={Boolean(entered && sessionKind !== "shelf" && nativity)} />
       </Canvas>
     </div>
   );
