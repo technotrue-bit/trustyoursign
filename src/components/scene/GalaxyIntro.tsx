@@ -70,7 +70,8 @@ import {
   stationT,
   type TempleSign,
 } from "@/lib/galaxy/temple";
-import { useVault } from "@/lib/store";
+import { useIsEntered, useSession } from "@/lib/chart/session/hooks";
+import { useSessionStore } from "@/lib/chart/session/store";
 import { CelestialSky } from "./CelestialSky";
 import { CornerGalaxies } from "./CornerGalaxies";
 
@@ -227,8 +228,9 @@ function SignDisk() {
     const gather = 1 - Math.min(1, dist / 0.07);
     const intro = introPlaying() ? introAries() : 1;
     const veil = useGalaxy.getState().introVeil;
-    const chatting = useVault.getState().chat;
-    const picked = chatting && useVault.getState().pickedSign === sign.id;
+    const state = useSessionStore.getState();
+    const chatting = state.claim !== null && state.session === null;
+    const picked = chatting && state.claim?.signId === sign.id;
     const show = gather > 0.32 && intro > 0.4 && veil < 0.45;
     g.visible = show;
     if (!show) {
@@ -398,7 +400,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     }
     return g;
   }, [eager, index, n, sign.id, morphPairs]);
-  const pick = () => useVault.getState().openBirthChat(sign.id);
+  const pick = () => useSessionStore.getState().openClaim(sign.id);
 
   useEffect(() => {
     return () => {
@@ -417,10 +419,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const g = group.current;
     const mesh = cores.current;
     if (!g || !mesh) return;
-    const chatting = useVault.getState().chat;
-    const shelf = useVault.getState().shelf;
-    const picked = chatting && useVault.getState().pickedSign === sign.id;
-    const held = picked || (Boolean(shelf) && shelf?.signId === sign.id);
+    const state = useSessionStore.getState();
+    const chatting = state.claim !== null && state.session === null;
+    const shelf = state.session?.kind === "shelf" ? state.session : null;
+    const picked = chatting && state.claim?.signId === sign.id;
+    const held = picked || shelf?.signId === sign.id;
     const t = galaxyTravel.t;
     const direct = galaxyTravel.seekDirect && galaxyTravel.seek != null;
     const dest = stationT(index);
@@ -595,8 +598,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
 }
 
 function BigThreeLights({ signId }: { signId: string }) {
-  const natal = useVault((s) => s.shelf?.natal);
-  const held = useVault((s) => s.shelf?.signId === signId && s.entered);
+  const session = useSession();
+  const entered = useIsEntered();
+  const shelf = session?.kind === "shelf" ? session : null;
+  const natal = shelf?.skyNatal;
+  const held = entered && shelf?.signId === signId;
   if (!natal || !held) return null;
   const spots: { id: "sun" | "moon" | "asc"; p: [number, number, number]; color: string; s: number }[] = [
     { id: "sun", p: [0, 0.22, 0.55], color: "#e6c98a", s: 0.17 },
@@ -615,9 +621,9 @@ function BigThreeLights({ signId }: { signId: string }) {
             renderOrder={20}
             onClick={(e) => {
               e.stopPropagation();
-              const v = useVault.getState();
-              v.select({ kind: "planet", id: sp.id });
-              v.setMode("ask");
+              const state = useSessionStore.getState();
+              state.select({ kind: "planet", id: sp.id });
+              state.setMode("ask");
             }}
           >
             <sphereGeometry args={[sp.s, 12, 10]} />
@@ -631,8 +637,11 @@ function BigThreeLights({ signId }: { signId: string }) {
 
 function ChartRing() {
   const group = useRef<Group>(null);
-  const show = useVault((s) => s.entered && Boolean(s.shelf?.natal));
-  const signId = useVault((s) => s.shelf?.signId ?? s.pickedSign);
+  const session = useSession();
+  const entered = useIsEntered();
+  const shelf = session?.kind === "shelf" ? session : null;
+  const show = entered && Boolean(shelf?.skyNatal);
+  const signId = shelf?.signId;
   const sprites = useMemo(() => makeCircleTexture(), []);
   useEffect(() => () => sprites.dispose(), [sprites]);
   useFrame(() => {
@@ -681,8 +690,9 @@ function TempleRig() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (useVault.getState().chat) return;
-      if (useVault.getState().entered) return;
+      const state = useSessionStore.getState();
+      if (state.claim) return;
+      if (state.session) return;
       if (introPlaying()) {
         if (introCanSkip()) {
           skipIntro();
@@ -730,7 +740,8 @@ function TempleRig() {
       if (galaxyTravel.awaken < 0.2) galaxyTravel.awaken = 1;
     }
     stepIntro(d);
-    const chatting = useVault.getState().chat;
+    const state = useSessionStore.getState();
+    const chatting = state.claim !== null && state.session === null;
     const arriving = introPlaying();
     const sought = stepSeek(current.current, d);
     if (sought.active) {
@@ -738,7 +749,7 @@ function TempleRig() {
       galaxyTravel.tTarget = sought.t;
     }
     if (chatting) {
-      const i = CONSTELLATIONS.findIndex((c) => c.id === useVault.getState().pickedSign);
+      const i = CONSTELLATIONS.findIndex((c) => c.id === state.claim?.signId);
       if (i >= 0) galaxyTravel.tTarget = stationT(i);
     } else if (!arriving && !sought.active) {
       const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
@@ -760,7 +771,7 @@ function TempleRig() {
     lastStation.current = idx;
     const vol = getSignVolume(TEMPLE_SIGNS[idx]!.id);
     const plateA = vol?.aspect ?? 16 / 9;
-    const shelfOn = Boolean(useVault.getState().entered && useVault.getState().shelf);
+    const shelfOn = state.session?.kind === "shelf";
     const well =
       chatting || shelfOn
         ? { top: 0.12, bottom: 0.48 }
