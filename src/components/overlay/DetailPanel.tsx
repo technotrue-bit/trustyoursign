@@ -11,7 +11,12 @@ import type {
   PlanetId,
   ReadingId,
 } from "@/lib/chart/types";
-import { useVault } from "@/lib/store";
+import {
+  useSession,
+  useSessionMode,
+  useSessionSelection,
+} from "@/lib/chart/session/hooks";
+import { useSessionStore } from "@/lib/chart/session/store";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { getSkyPass, persistNatal, saveChartTone, sitWithTheSky } from "@/lib/chart/sky";
 import { Gloss, GlossRoot } from "./Gloss";
@@ -19,10 +24,11 @@ import { ChartSheet } from "./ChartSheet";
 import { cn } from "@/lib/utils";
 
 export function DetailPanel() {
-  const mode = useVault((s) => s.mode);
-  const selection = useVault((s) => s.selection);
-  const shelf = useVault((s) => s.shelf);
-  const clear = useVault((s) => s.clear);
+  const session = useSession();
+  const mode = useSessionMode();
+  const selection = useSessionSelection();
+  const shelf = session?.kind === "shelf" ? session : null;
+  const clear = useSessionStore((s) => s.clear);
   const nat = useNativity();
 
   if (mode === "ask") return null;
@@ -62,9 +68,10 @@ export function DetailPanel() {
 }
 
 function ShelfPanel() {
-  const shelf = useVault((s) => s.shelf);
-  const setTone = useVault((s) => s.setShelfTone);
-  const setNatal = useVault((s) => s.setShelfNatal);
+  const session = useSession();
+  const shelf = session?.kind === "shelf" ? session : null;
+  const setTone = useSessionStore((s) => s.setShelfTone);
+  const setNatal = useSessionStore((s) => s.setShelfNatal);
   const user = useCurrentUser();
   const [deepLeft, setDeepLeft] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,16 +87,16 @@ function ShelfPanel() {
   }, [user]);
   if (!shelf) return null;
   const sign = TEMPLE_SIGNS.find((s) => s.id === shelf.signId);
-  const natal = shelf.natal;
+  const natal = shelf.skyNatal;
   return (
     <ChartSheet label="the shelf">
       <div className="panel-enter">
         <Kicker>{natal ? "The Big Three" : "Sun-sign shelf"}</Kicker>
         <Title>{shelf.label}</Title>
         <p className="mt-2 text-sm text-fg-muted">
-          {formatBirth(shelf.birthMonth, shelf.birthDay, shelf.birthYear)}
-          {shelf.birthHour != null && shelf.birthMinute != null ? ` · ${formatClock(shelf.birthHour, shelf.birthMinute)}` : ""}
-          {shelf.birthPlace ? ` · ${shelf.birthPlace}` : ""} · {sign?.name ?? shelf.signId}
+          {formatBirth(shelf.birth.month, shelf.birth.day, shelf.birth.year)}
+          {shelf.birth.hour != null && shelf.birth.minute != null ? ` · ${formatClock(shelf.birth.hour, shelf.birth.minute)}` : ""}
+          {shelf.birth.place ? ` · ${shelf.birth.place}` : ""} · {sign?.name ?? shelf.signId}
         </p>
         {natal ? (
           <ul className="mt-3 space-y-1 text-sm text-fg">
@@ -101,7 +108,7 @@ function ShelfPanel() {
           </ul>
         ) : (
           <p className="mt-3 text-sm leading-relaxed text-fg">
-            {shelf.birthPlace
+            {shelf.birth.place
               ? "The clock and the place are held. The Big Three wait on a reading of the sky."
               : `Yours is the sun in ${sign?.name ?? shelf.signId}. No time, no place, no planets.`}
           </p>
@@ -366,8 +373,8 @@ function ListPanel({
 function SkyIndex() {
   const nat = useNativity();
   if (!nat) return null;
-  const select = useVault((s) => s.select);
-  const chartId = useVault((s) => s.chartId);
+  const session = useSession();
+  const select = useSessionStore((s) => s.select);
   const mains: PlanetId[] = [
     "sun",
     "moon",
@@ -382,7 +389,7 @@ function SkyIndex() {
   ];
   return (
     <ListPanel kicker="The sky" title={nat.meta.oneCut}>
-      {chartId === "visitor" ? (
+      {session?.kind === "visitor" ? (
         <p className="mb-3 text-xs leading-relaxed text-fg-subtle">
           {nat.meta.zodiac} · {nat.meta.houses} · {nat.meta.zone} · {nat.meta.engine}. Entertainment, not advice.
         </p>
@@ -418,7 +425,7 @@ function SkyIndex() {
 function BodyIndex() {
   const nat = useNativity();
   if (!nat) return null;
-  const select = useVault((s) => s.select);
+  const select = useSessionStore((s) => s.select);
   return (
     <ListPanel kicker="The body" title="Seven centers. One chart.">
       <ul className="space-y-1">
@@ -442,7 +449,7 @@ function BodyIndex() {
 function GatesIndex() {
   const nat = useNativity();
   if (!nat) return null;
-  const select = useVault((s) => s.select);
+  const select = useSessionStore((s) => s.select);
   return (
     <ListPanel kicker="The three gates" title="What you are, in one cut.">
       <ul className="space-y-1">
@@ -467,7 +474,7 @@ function GatesIndex() {
 function MachineIndex() {
   const nat = useNativity();
   if (!nat) return null;
-  const select = useVault((s) => s.select);
+  const select = useSessionStore((s) => s.select);
   return (
     <ListPanel kicker="The machine" title={nat.machineTitle}>
       <ul className="space-y-1">
@@ -494,7 +501,7 @@ function MachineIndex() {
 function ReadingsIndex() {
   const nat = useNativity();
   if (!nat) return null;
-  const select = useVault((s) => s.select);
+  const select = useSessionStore((s) => s.select);
   return (
     <ListPanel kicker="Readings" title={nat.readingsTitle}>
       <ul className="space-y-1">
@@ -517,7 +524,7 @@ function ReadingsIndex() {
 function BonesPanel() {
   const nat = useNativity();
   if (!nat) return null;
-  const chartId = useVault((s) => s.chartId);
+  const session = useSession();
   return (
     <ChartSheet label="the bones" wide>
       <Kicker>The bones</Kicker>
@@ -529,7 +536,7 @@ function BonesPanel() {
           </Gloss>
         </GlossRoot>
       </p>
-      {chartId === "visitor" ? (
+      {session?.kind === "visitor" ? (
         <p className="mt-2 max-w-2xl text-xs leading-relaxed text-fg-subtle">
           {nat.meta.engine} · timezone from birth place · degrees before meaning. This is not medical or legal advice.
         </p>
