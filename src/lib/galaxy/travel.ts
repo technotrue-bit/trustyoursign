@@ -21,6 +21,10 @@ export const SPACING = 50;
 export const GATE = 0.55;
 /** Hands off: dwell, then walk to the next sign. */
 export const AUTO_SIGN = 7;
+/** Wait after the sign plate appears before the title fades in. */
+export const SIGN_COPY_DELAY = 1.7;
+/** Match `.sign-swap` animation duration — 7s dwell starts after this. */
+export const SIGN_COPY_ANIM = 0.8;
 /** Animal holds until this along. */
 export const MORPH_FAR = 0.92;
 /** Glyph is complete by this along — middle of the remaining approach. */
@@ -72,6 +76,12 @@ export const galaxyTravel = {
   traveling: false,
   /** Chat, vault, or still birthing — don't auto-walk. */
   busy: false,
+  /** Station whose plate has appeared (for title delay + auto-arm). */
+  signImageIndex: -1,
+  /** performance.now() when that plate first appeared. */
+  signImageAt: 0,
+  /** True after title has finished its delayed entrance — 7s may run. */
+  copyReady: false,
   /** −1 reverse, 0 none, +1 forward. Held while a finger or the wheel is down. */
   hold: 0,
   /** Impulse consumed once per frame by the camera. */
@@ -121,6 +131,40 @@ function restIdle() {
   galaxyTravel.idleAt = nowMs();
 }
 
+/** Drop plate/title arming so the next arrival can sequence again. */
+export function clearSignReveal() {
+  galaxyTravel.signImageIndex = -1;
+  galaxyTravel.signImageAt = 0;
+  galaxyTravel.copyReady = false;
+  useGalaxy.setState({ signPlateIndex: null });
+}
+
+/**
+ * Plate for this station is on screen. Arms the title delay; keeps the 7s clock
+ * paused until `noteSignCopyReady`.
+ */
+export function noteSignImage(index: number) {
+  if (!galaxyTravel.moved) return;
+  if (galaxyTravel.busy) return;
+  if (galaxyTravel.traveling || galaxyTravel.seek != null || galaxyTravel.playUntil != null) return;
+  if (galaxyTravel.handsOn || galaxyTravel.hold !== 0) return;
+  const i = ((Math.round(index) % 12) + 12) % 12;
+  if (galaxyTravel.signImageIndex === i && galaxyTravel.signImageAt > 0) return;
+  galaxyTravel.signImageIndex = i;
+  galaxyTravel.signImageAt = nowMs();
+  galaxyTravel.copyReady = false;
+  restIdle();
+  useGalaxy.setState({ signPlateIndex: i });
+}
+
+/** Title finished its entrance — start the hands-off 7s dwell from now. */
+export function noteSignCopyReady() {
+  if (galaxyTravel.signImageIndex < 0) return;
+  if (galaxyTravel.copyReady) return;
+  galaxyTravel.copyReady = true;
+  restIdle();
+}
+
 /** Advance the opening birth one display frame. Capped so a hitch never jumps the boom. */
 export function stepBirth(dt?: number) {
   if (galaxyTravel.birth >= 1) return false;
@@ -167,6 +211,7 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.seekTargetIndex = null;
   galaxyTravel.seekStartT = null;
   galaxyTravel.seekElapsed = 0;
+  clearSignReveal();
   restIdle();
 }
 
@@ -209,6 +254,7 @@ export function seekSign(index: number, opts?: SeekOptions) {
   galaxyTravel.playUntil = null;
   galaxyTravel.moved = true;
   galaxyTravel.awaken = 1;
+  if (galaxyTravel.signImageIndex !== i) clearSignReveal();
   if (direct) {
     galaxyTravel.seekDirect = true;
     galaxyTravel.seekTargetIndex = i;
@@ -573,14 +619,18 @@ export function stepAutoSign(
     restIdle();
     return false;
   }
+  const here = stationFromT(galaxyTravel.t);
+  if (!galaxyTravel.copyReady || galaxyTravel.signImageIndex !== here) {
+    restIdle();
+    return false;
+  }
   const now = nowMs();
   if (!galaxyTravel.idleAt) galaxyTravel.idleAt = now;
   galaxyTravel.idle = (now - galaxyTravel.idleAt) / 1000;
   if (galaxyTravel.idle < AUTO_SIGN) return false;
   restIdle();
-  const i = stationFromT(galaxyTravel.t);
-  if (i >= 11) return false;
-  seekSign(i + 1);
+  if (here >= 11) return false;
+  seekSign(here + 1);
   return true;
 }
 

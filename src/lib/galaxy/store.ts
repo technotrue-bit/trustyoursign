@@ -6,6 +6,8 @@ type GalaxyState = {
   t: number;
   moved: boolean;
   signIndex: number;
+  /** Station whose plate is on screen — drives delayed sign title. */
+  signPlateIndex: number | null;
   born: boolean;
   chakraNote: string | null;
   introTitle: number;
@@ -23,6 +25,7 @@ export const useGalaxy = create<GalaxyState>((set, get) => ({
   t: 0,
   moved: false,
   signIndex: 0,
+  signPlateIndex: null,
   born: false,
   chakraNote: null,
   introTitle: 0,

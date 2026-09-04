@@ -10,6 +10,7 @@ import { MIN_AGE } from "@/lib/legal";
 import { claimSite } from "@/lib/site";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
+import { VaultPageShell } from "@/components/overlay/VaultPageShell";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/account")({ component: Account });
@@ -50,9 +51,9 @@ function Account() {
 
   if (isPending) {
     return (
-      <main className="grid vault-page place-items-center bg-bg text-fg">
+      <VaultPageShell center>
         <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
-      </main>
+      </VaultPageShell>
     );
   }
   if (!user) return <RedirectToSignIn />;
@@ -61,7 +62,7 @@ function Account() {
   const others = charts?.filter((c) => c.relation === "other") ?? [];
 
   return (
-    <main className="vault-page bg-bg px-5 py-10 text-fg">
+    <VaultPageShell className="px-5 py-10">
       <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[max(2rem,var(--chrome-bottom))]">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -179,7 +180,7 @@ function Account() {
           </p>
         </section>
       </div>
-    </main>
+    </VaultPageShell>
   );
 }
 

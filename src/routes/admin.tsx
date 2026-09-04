@@ -8,6 +8,7 @@ import { PRIVACY_VERSION, TERMS_VERSION, CONTACT_HANDLE } from "@/lib/legal";
 import { getAiDesk, grantSkyPass, saveAiDesk } from "@/lib/chart/sky";
 import { listResearchLibrary } from "@/lib/chart/research";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
+import { VaultPageShell } from "@/components/overlay/VaultPageShell";
 
 export const Route = createFileRoute("/admin")({ component: Admin });
 
@@ -24,15 +25,15 @@ function Admin() {
 
   if (isPending) {
     return (
-      <main className="grid vault-page place-items-center bg-bg text-fg">
+      <VaultPageShell center>
         <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
-      </main>
+      </VaultPageShell>
     );
   }
   if (!user) return <RedirectToSignIn />;
   if (!isSiteOwner(user) && claimed !== true) {
     return (
-      <main className="vault-page bg-bg px-5 py-16 text-fg">
+      <VaultPageShell className="px-5 py-16">
         <div className="mx-auto max-w-md pt-[var(--chrome-top)]">
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">Closed</p>
           <h1 className="mt-2 font-display text-4xl italic">This desk is taken.</h1>
@@ -44,12 +45,12 @@ function Admin() {
             Back to the sky
           </Link>
         </div>
-      </main>
+      </VaultPageShell>
     );
   }
 
   return (
-    <main className="vault-page bg-bg px-5 py-10 text-fg">
+    <VaultPageShell className="px-5 py-10">
       <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[max(2rem,var(--chrome-bottom))]">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -98,7 +99,7 @@ function Admin() {
         <ResearchBooks />
         <AiDeskForm />
       </div>
-    </main>
+    </VaultPageShell>
   );
 }
 

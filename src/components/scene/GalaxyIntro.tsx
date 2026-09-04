@@ -28,6 +28,7 @@ import {
   ensureFlyInput,
   galaxyTravel,
   noteControl,
+  noteSignImage,
   prefersReducedMotion,
   publishTravel,
   skipBirth,
@@ -520,6 +521,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         mat.needsUpdate = true;
         shown.current = true;
       }
+      if (plateOp > 0.28 && focused) {
+        noteSignImage(index);
+      }
     }
 
     if (!focused && !incoming && !held) {
@@ -737,6 +741,7 @@ function TempleRig() {
       current.current = sought.t;
       galaxyTravel.tTarget = sought.t;
     }
+    galaxyTravel.traveling = sought.active;
     if (chatting) {
       const i = CONSTELLATIONS.findIndex((c) => c.id === useVault.getState().pickedSign);
       if (i >= 0) galaxyTravel.tTarget = stationT(i);

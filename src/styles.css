@@ -107,8 +107,48 @@
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  background: #0c0b0a;
+  background: transparent;
   color: #efe8dc;
+}
+
+.vault-page-shell {
+  isolation: isolate;
+}
+
+.vault-sky {
+  position: fixed;
+  top: var(--app-top, 0px);
+  left: 0;
+  z-index: 0;
+  width: var(--app-w, 100%);
+  height: var(--app-h, 100dvh);
+  background: #0c0b0a;
+}
+
+.vault-sky-nebula {
+  background:
+    radial-gradient(ellipse 80% 55% at 20% 80%, rgba(98, 72, 128, 0.14), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 85% 25%, rgba(184, 120, 72, 0.1), transparent 50%),
+    radial-gradient(ellipse 90% 70% at 50% 100%, rgba(40, 36, 48, 0.35), transparent 60%);
+}
+
+.vault-sky-galaxy {
+  background:
+    radial-gradient(ellipse 42% 28% at 50% 48%, rgba(232, 196, 154, 0.09), transparent 70%),
+    radial-gradient(ellipse 55% 40% at 50% 52%, rgba(120, 100, 160, 0.06), transparent 75%);
+}
+
+.vault-page-shell [class*="bg-bg-elevated/"] {
+  backdrop-filter: blur(8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vault-page-shell .stagger-in > * {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+  }
 }
 
 @media (max-width: 767px) {

@@ -1,11 +1,12 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { CONTACT_EMAIL, CONTACT_HANDLE, MIN_AGE, OPERATOR, TERMS_VERSION } from "@/lib/legal";
+import { VaultPageShell } from "@/components/overlay/VaultPageShell";
 
 export const Route = createFileRoute("/terms")({ component: Terms });
 
 function Terms() {
   return (
-    <main className="vault-page bg-bg px-5 py-10 text-fg">
+    <VaultPageShell className="px-5 py-10">
       <article className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[max(2rem,var(--chrome-bottom))] text-sm leading-relaxed text-fg-muted">
         <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">The Vault</p>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Terms of Use</h1>
@@ -75,6 +76,6 @@ function Terms() {
           </Link>
         </p>
       </article>
-    </main>
+    </VaultPageShell>
   );
 }

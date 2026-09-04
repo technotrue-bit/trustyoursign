@@ -14,7 +14,7 @@ import { beatById } from "@/lib/chart/tour";
 import type { AppMode, ChartId } from "@/lib/chart/types";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
-import { ensureAutoClock, ensureFlyInput, galaxyTravel, noteControl, skipBirth } from "@/lib/galaxy/travel";
+import { ensureAutoClock, ensureFlyInput, galaxyTravel, noteControl, noteSignCopyReady, prefersReducedMotion, SIGN_COPY_ANIM, SIGN_COPY_DELAY, skipBirth } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
 import { useVault } from "@/lib/store";
@@ -270,19 +270,7 @@ function GalaxyCopy() {
               </span>
               <span className="word">?</span>
             </h1>
-            {moved && sign ? (
-              <div key={sign.id} className="sign-swap pointer-events-auto col-start-1 row-start-1">
-                <button type="button" onClick={() => openBirthChat(sign.id)} className="w-full min-h-11">
-                  <p className="text-[0.65rem] tracking-[0.28em] text-fg-muted uppercase md:text-xs">{sign.month}</p>
-                  <h1 className="galaxy-sign-name mt-1 font-display leading-[1.05] font-medium tracking-tight text-fg italic">
-                    {sign.name}
-                  </h1>
-                </button>
-                <p className="mx-auto mt-2 line-clamp-3 max-w-md px-1 text-sm leading-relaxed text-fg-muted md:mt-3 md:line-clamp-none md:text-base">
-                  <Gloss card={false}>{sign.essence}</Gloss>
-                </p>
-              </div>
-            ) : null}
+            {moved && sign ? <SignSwap sign={sign} signIndex={signIndex} onOpen={() => openBirthChat(sign.id)} /> : null}
           </div>
           <GlossStage className="relative z-10 mx-auto mt-3 max-w-md px-2" />
         </div>
@@ -312,6 +300,50 @@ function GalaxyCopy() {
           This is my sign
         </button>
       </div>
+    </div>
+  );
+}
+
+function SignSwap({
+  sign,
+  signIndex,
+  onOpen,
+}: {
+  sign: (typeof CONSTELLATIONS)[number];
+  signIndex: number;
+  onOpen: () => void;
+}) {
+  const plateIndex = useGalaxy((s) => s.signPlateIndex);
+  const [visible, setVisible] = useState(false);
+  const plateReady = plateIndex === signIndex;
+
+  useEffect(() => {
+    setVisible(false);
+    if (!plateReady) return;
+    const reduced = prefersReducedMotion();
+    const remain = reduced ? 0 : Math.max(0, galaxyTravel.signImageAt + SIGN_COPY_DELAY * 1000 - performance.now());
+    const anim = reduced ? 0 : SIGN_COPY_ANIM * 1000;
+    const showT = window.setTimeout(() => setVisible(true), remain);
+    const readyT = window.setTimeout(() => noteSignCopyReady(), remain + anim);
+    return () => {
+      window.clearTimeout(showT);
+      window.clearTimeout(readyT);
+    };
+  }, [plateReady, sign.id, signIndex]);
+
+  if (!visible) return null;
+
+  return (
+    <div key={sign.id} className="sign-swap pointer-events-auto col-start-1 row-start-1">
+      <button type="button" onClick={onOpen} className="w-full min-h-11">
+        <p className="text-[0.65rem] tracking-[0.28em] text-fg-muted uppercase md:text-xs">{sign.month}</p>
+        <h1 className="galaxy-sign-name mt-1 font-display leading-[1.05] font-medium tracking-tight text-fg italic">
+          {sign.name}
+        </h1>
+      </button>
+      <p className="mx-auto mt-2 line-clamp-3 max-w-md px-1 text-sm leading-relaxed text-fg-muted md:mt-3 md:line-clamp-none md:text-base">
+        <Gloss card={false}>{sign.essence}</Gloss>
+      </p>
     </div>
   );
 }
