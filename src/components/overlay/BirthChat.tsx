@@ -3,8 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { daysForSign, formatBirth, formatClock, isDateInSign, monthsForSign, sunSignOn } from "@/lib/chart/sun";
-import { useClaim } from "@/lib/chart/session/hooks";
-import { useVault } from "@/lib/store";
+import { useClaim, useSessionStore } from "@/lib/chart/session";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
 import { saveChart } from "@/lib/charts";
@@ -33,11 +32,11 @@ export function BirthChat() {
   const claim = useClaim();
   const picked = claim?.signId;
   const birth = claim?.birth ?? null;
-  const setBirth = useVault((s) => s.setBirth);
-  const openLibrary = useVault((s) => s.openLibrary);
-  const openShelf = useVault((s) => s.openShelf);
-  const openVisitor = useVault((s) => s.openVisitor);
-  const closeBirthChat = useVault((s) => s.closeBirthChat);
+  const setClaimBirth = useSessionStore((s) => s.setClaimBirth);
+  const openLibrary = useSessionStore((s) => s.openLibrary);
+  const openShelf = useSessionStore((s) => s.openShelf);
+  const openVisitor = useSessionStore((s) => s.openVisitor);
+  const closeClaim = useSessionStore((s) => s.closeClaim);
   const sign = CONSTELLATIONS.find((c) => c.id === picked) ?? CONSTELLATIONS[0]!;
   const temple = TEMPLE_SIGNS.find((c) => c.id === sign.id) ?? TEMPLE_SIGNS[0]!;
 
@@ -91,7 +90,7 @@ export function BirthChat() {
 
   const submit = () => {
     if (!ready) return;
-    setBirth({ month: monthN, day: dayN, year: yearN, hour: null, minute: null, place: null });
+    setClaimBirth({ month: monthN, day: dayN, year: yearN, hour: null, minute: null, place: null });
     setStep("offer");
   };
 
@@ -109,7 +108,7 @@ export function BirthChat() {
     const loc = place.trim();
     if (h == null || m < 0 || m > 59 || loc.length < 2) return;
     const next = { ...birth, hour: h, minute: m, place: loc.slice(0, 120) };
-    setBirth(next);
+    setClaimBirth(next);
     setCasting(true);
     setCastErr(null);
     try {
@@ -143,17 +142,12 @@ export function BirthChat() {
       ? {
           label: "My chart",
           signId: sign.id,
-          birthMonth: birth.month,
-          birthDay: birth.day,
-          birthYear: birth.year,
-          birthHour: birth.hour,
-          birthMinute: birth.minute,
-          birthPlace: birth.place,
-          natal,
+          birth,
+          skyNatal: natal,
           tone: natal?.tone ?? "vault",
           relation: "self" as const,
           personName: null,
-          from: "galaxy" as const,
+          origin: "galaxy" as const,
         }
       : null;
 
@@ -261,7 +255,7 @@ export function BirthChat() {
             </button>
             <button
               type="button"
-              onClick={closeBirthChat}
+              onClick={closeClaim}
               className="min-h-12 w-full text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg md:min-h-11"
             >
               Keep flying

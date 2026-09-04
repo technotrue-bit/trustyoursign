@@ -15,18 +15,17 @@ import {
   useSession,
   useSessionHovered,
   useSessionMode,
+  useSessionStore,
   useSurface,
   useTourBeat,
-} from "@/lib/chart/session/hooks";
-import { useSessionStore } from "@/lib/chart/session/store";
+} from "@/lib/chart/session";
 import { beatById } from "@/lib/chart/tour";
-import type { AppMode, ChartId } from "@/lib/chart/types";
+import { isResearchChartId, type AppMode, type ChartId } from "@/lib/chart/types";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
 import { ensureAutoClock, ensureFlyInput, galaxyTravel, noteControl, skipBirth } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
-import { useVault } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { AskPanel } from "./AskPanel";
@@ -158,7 +157,7 @@ export function VaultApp() {
       skipIntro();
       skipBirth();
       useGalaxy.getState().markBorn();
-      useVault.getState().openLibrary();
+      useSessionStore.getState().openLibrary();
       clean();
       return;
     }
@@ -168,7 +167,7 @@ export function VaultApp() {
       useGalaxy.getState().markBorn();
       void getResearchChart({ data: q })
         .then((nat) => {
-          useVault.getState().openChart(q, nat);
+          useSessionStore.getState().openResearch(q, nat);
           clean();
         })
         .catch(() => clean());
@@ -209,7 +208,7 @@ function GalaxyCopy() {
   const introDone = useGalaxy((s) => s.introDone);
   const asking = introVeil > 0.04;
   const titleAnimating = !introDone && introTitle > 0.08;
-  const openBirthChat = useVault((s) => s.openBirthChat);
+  const openClaim = useSessionStore((s) => s.openClaim);
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
 
   if (!born) {
@@ -283,7 +282,7 @@ function GalaxyCopy() {
             </h1>
             {moved && sign ? (
               <div key={sign.id} className="sign-swap pointer-events-auto col-start-1 row-start-1">
-                <button type="button" onClick={() => openBirthChat(sign.id)} className="w-full min-h-11">
+                <button type="button" onClick={() => openClaim(sign.id)} className="w-full min-h-11">
                   <p className="text-[0.65rem] tracking-[0.28em] text-fg-muted uppercase md:text-xs">{sign.month}</p>
                   <h1 className="galaxy-sign-name mt-1 font-display leading-[1.05] font-medium tracking-tight text-fg italic">
                     {sign.name}
@@ -312,7 +311,7 @@ function GalaxyCopy() {
         <button
           type="button"
           disabled={!moved}
-          onClick={() => sign && openBirthChat(sign.id)}
+          onClick={() => sign && openClaim(sign.id)}
           className={cn(
             "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase md:min-h-11 md:w-auto",
             moved
@@ -343,8 +342,9 @@ function Intro() {
   }, [owner]);
 
   const openResearch = async (id: ChartId) => {
+    if (!isResearchChartId(id)) return;
     const nat = await getResearchChart({ data: id });
-    useVault.getState().openChart(id, nat);
+    useSessionStore.getState().openResearch(id, nat);
   };
 
   return (
@@ -466,27 +466,30 @@ function SavedShelf() {
                         label: c.label,
                       },
                     });
-                    useVault.getState().openVisitor(nativity, sky);
+                    useSessionStore.getState().openVisitor(nativity, sky);
                     return;
                   } catch {
                     /* fall through to shelf */
                   }
                 }
-                useVault.getState().openShelf({
+                useSessionStore.getState().openShelf({
                   id: c.id,
                   label: c.label,
                   signId: c.signId,
-                  birthMonth: c.birthMonth,
-                  birthDay: c.birthDay,
-                  birthYear: c.birthYear,
-                  birthHour: c.birthHour,
-                  birthMinute: c.birthMinute,
-                  birthPlace: c.birthPlace,
-                  natal: c.natal,
+                  birth: {
+                    month: c.birthMonth,
+                    day: c.birthDay,
+                    year: c.birthYear,
+                    hour: c.birthHour,
+                    minute: c.birthMinute,
+                    place: c.birthPlace,
+                  },
+                  skyNatal: c.natal,
                   tone: c.tone,
                   relation: c.relation,
                   personName: c.personName,
-                  from: "library",
+                  origin: "library",
+                  fromSavedId: c.id,
                 });
               }}
               className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-bg-subtle"
