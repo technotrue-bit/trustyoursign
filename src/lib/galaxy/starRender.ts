@@ -1,4 +1,5 @@
 import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, ShaderMaterial, Vector3 } from "three";
+import type { MorphPair } from "./constellations";
 import type { VolumeStar } from "./signVolume";
 
 /**
@@ -16,8 +17,11 @@ uniform float uFade;
 uniform float uHover;
 uniform float uPxScale;
 uniform float uBaseSize;
+uniform float uMorph;
+uniform float uGlyphBiasX;
 uniform vec3 uTint;
 attribute vec3 signPos;
+attribute vec3 glyphPos;
 attribute vec3 scatterPos;
 attribute float aMag;
 attribute float aPhase;
@@ -29,14 +33,22 @@ void main() {
   float gath = clamp(uGather, 0.0, 1.0);
   float kind = aKind;
   if (kind > 1.5) gath = mix(0.2, 0.85, gath);
-  float chest = 1.0 - min(1.0, length(signPos.xy) * 1.55);
-  float spin = uSwirl * (kind > 0.5 && kind < 1.5 ? 0.2 + chest * 0.12 : chest * 0.055);
+  // Morph only body stars (kind 0) into the glyph; spiral/halo stay ambient.
+  float isBody = kind < 0.5 ? 1.0 : 0.0;
+  float morphAmt = clamp(uMorph, 0.0, 1.0) * isBody;
+  // Right-side bias applied only during morph and only to body stars,
+  // so spiral/halo particles don't slide into an artifact circle.
+  float bias = uGlyphBiasX * isBody;
+  vec3 biasedGlyph = vec3(glyphPos.x + bias, glyphPos.y, glyphPos.z);
+  vec3 fig = mix(signPos, biasedGlyph, morphAmt);
+  float chest = 1.0 - min(1.0, length(fig.xy) * 1.55);
+  float spin = uSwirl * (1.0 - morphAmt * 0.85) * (kind > 0.5 && kind < 1.5 ? 0.2 + chest * 0.12 : chest * 0.055);
   float phase = uTime * (0.35 + mod(aPhase, 5.0) * 0.02) + aPhase;
   if (kind > 0.5 && kind < 1.5) phase = uTime * (0.55 + mod(aPhase, 3.0) * 0.04) + aPhase;
   vec3 p;
-  p.x = signPos.x * uWide * gath + scatterPos.x * (1.0 - gath) + sin(phase) * spin * uWide;
-  p.y = signPos.y * uTall * gath + scatterPos.y * (1.0 - gath) + cos(phase * 0.8) * spin * uWide;
-  p.z = signPos.z * 1.8 * gath + scatterPos.z * (1.0 - gath) * 0.5;
+  p.x = fig.x * uWide * gath + scatterPos.x * (1.0 - gath) + sin(phase) * spin * uWide;
+  p.y = fig.y * uTall * gath + scatterPos.y * (1.0 - gath) + cos(phase * 0.8) * spin * uWide;
+  p.z = fig.z * 1.8 * gath + scatterPos.z * (1.0 - gath) * 0.5;
   if (kind > 0.5 && kind < 1.5) {
     float ang = uTime * 0.22 * uSwirl + aPhase;
     float cr = 0.35 + chest * 0.4;
@@ -54,7 +66,10 @@ void main() {
   if (kind > 0.5 && kind < 1.5) vColor = mix(gold, uTint, 0.28) * b * 1.15;
   else if (kind > 1.5) vColor = mix(uTint, violet, 0.35) * b * 0.7;
   else vColor = uTint * b;
-  vAlpha = uOpacity * (kind > 1.5 ? 0.55 : 1.0);
+  // Fade spiral (kind 1) and halo (kind 2) out while glyph is forming
+  // so only the clean body-star symbol is visible at full morph.
+  float ambientFade = kind < 0.5 ? 1.0 : max(0.0, 1.0 - uMorph * 1.4);
+  vAlpha = uOpacity * (kind > 1.5 ? 0.55 : 1.0) * ambientFade;
   vSpike = mag > 0.7 ? (mag - 0.7) * 2.2 : 0.0;
 
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
@@ -100,6 +115,8 @@ export function makeSparkMaterial() {
       uHover: { value: 1 },
       uPxScale: { value: 1 },
       uBaseSize: { value: 2.05 },
+      uMorph: { value: 0 },
+      uGlyphBiasX: { value: 0 },
       uTint: { value: new Color("#f0d4c6") },
     },
     vertexShader: STAR_VERT,
@@ -208,11 +225,48 @@ export function fillStationCloud(
   }
 
   geo.setAttribute("signPos", new BufferAttribute(sign, 3));
+  geo.setAttribute("glyphPos", new BufferAttribute(sign.slice(), 3));
   geo.setAttribute("scatterPos", new BufferAttribute(scat, 3));
   geo.setAttribute("aMag", new BufferAttribute(mag, 1));
   geo.setAttribute("aPhase", new BufferAttribute(phase, 1));
   geo.setAttribute("aKind", new BufferAttribute(kind, 1));
   geo.setAttribute("position", new BufferAttribute(sign.slice(), 3));
   geo.setDrawRange(0, n);
+  return geo;
+}
+
+/** Bakes glyph stroke targets for pick-triggered animal → symbol morph. */
+export function fillMorphCloud(
+  geo: BufferGeometry,
+  cloud: VolumeStar[],
+  scatter: Vector3[],
+  count: number,
+  pairs: MorphPair[],
+) {
+  fillStationCloud(geo, cloud, scatter, count);
+  const n = count;
+  const glyph = (geo.getAttribute("glyphPos") as BufferAttribute).array as Float32Array;
+  const kind = (geo.getAttribute("aKind") as BufferAttribute).array as Float32Array;
+  const bodyN = Math.max(1, n - Math.floor(n * 0.16) - Math.floor(n * 0.12));
+  const body = Math.min(cloud.length, bodyN);
+  const plen = Math.max(1, pairs.length);
+  for (let i = 0; i < body; i++) {
+    const pair = pairs[i % plen]!;
+    glyph[i * 3] = pair.gx;
+    glyph[i * 3 + 1] = pair.gy;
+    glyph[i * 3 + 2] = 0;
+  }
+  for (let i = body; i < n; i++) {
+    const w = i;
+    glyph[w * 3] = (geo.getAttribute("signPos") as BufferAttribute).array[w * 3]!;
+    glyph[w * 3 + 1] = (geo.getAttribute("signPos") as BufferAttribute).array[w * 3 + 1]!;
+    glyph[w * 3 + 2] = (geo.getAttribute("signPos") as BufferAttribute).array[w * 3 + 2]!;
+    if (kind[w]! > 0.5) {
+      const pair = pairs[i % plen]!;
+      glyph[w * 3] = pair.gx;
+      glyph[w * 3 + 1] = pair.gy;
+    }
+  }
+  geo.attributes.glyphPos!.needsUpdate = true;
   return geo;
 }

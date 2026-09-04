@@ -163,58 +163,141 @@ function blankCopy(): { headline: string; why: string; body: string[] } {
   return { headline: "", why: "", body: [] };
 }
 
-export function computeBigThree(date: Date, place: GeoPlace): Omit<SkyNatal, "tone" | "depth" | "when" | "writtenAt"> {
-  const sunL = eclipticLon(Body.Sun, date);
-  const moonL = eclipticLon(Body.Moon, date);
+/** Classical + outer planets we cast for visitor nativities. */
+export type CastPlanetId =
+  | "sun"
+  | "moon"
+  | "mercury"
+  | "venus"
+  | "mars"
+  | "jupiter"
+  | "saturn"
+  | "uranus"
+  | "neptune"
+  | "pluto"
+  | "asc"
+  | "mc";
+
+export type CastPoint = {
+  id: CastPlanetId;
+  name: string;
+  lon: number;
+  signId: SignId;
+  signName: string;
+  degInSign: number;
+  house: number;
+  retrograde: boolean;
+  note: string;
+};
+
+export type NatalCast = {
+  place: string;
+  lat: number;
+  lon: number;
+  timeZone: string;
+  utcIso: string;
+  angles: { asc: number; ic: number; dsc: number; mc: number };
+  points: CastPoint[];
+};
+
+const MOVING: { id: Exclude<CastPlanetId, "asc" | "mc">; body: Body; name: string }[] = [
+  { id: "sun", body: Body.Sun, name: "Sun" },
+  { id: "moon", body: Body.Moon, name: "Moon" },
+  { id: "mercury", body: Body.Mercury, name: "Mercury" },
+  { id: "venus", body: Body.Venus, name: "Venus" },
+  { id: "mars", body: Body.Mars, name: "Mars" },
+  { id: "jupiter", body: Body.Jupiter, name: "Jupiter" },
+  { id: "saturn", body: Body.Saturn, name: "Saturn" },
+  { id: "uranus", body: Body.Uranus, name: "Uranus" },
+  { id: "neptune", body: Body.Neptune, name: "Neptune" },
+  { id: "pluto", body: Body.Pluto, name: "Pluto" },
+];
+
+function isRetrograde(body: Body, date: Date, lonNow: number) {
+  if (body === Body.Sun || body === Body.Moon) return false;
+  const earlier = new Date(date.getTime() - 24 * 60 * 60 * 1000);
+  const lonThen = eclipticLon(body, earlier);
+  let delta = lonNow - lonThen;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return delta < 0;
+}
+
+function pointFromLon(id: CastPlanetId, name: string, lon: number, ascL: number, retrograde: boolean): CastPoint {
+  const s = signFromLon(lon);
+  const house = id === "asc" ? 1 : id === "mc" ? wholeSignHouse(lon, ascL) : wholeSignHouse(lon, ascL);
+  const note =
+    id === "asc"
+      ? `${formatLon(lon)} · first house`
+      : id === "mc"
+        ? `${formatLon(lon)} · tenth house`
+        : `${formatLon(lon)} · house ${house}${retrograde ? " · Rx" : ""}`;
+  return {
+    id,
+    name,
+    lon,
+    signId: s.id,
+    signName: s.name,
+    degInSign: s.deg + s.minute / 60,
+    house,
+    retrograde,
+    note,
+  };
+}
+
+/** Full tropical cast: classical planets, ASC/MC, whole-sign houses from the rising. */
+export function computeNatalCast(date: Date, place: GeoPlace): NatalCast {
   const ramc = ramcDeg(date, place.lon);
   const ascL = ascendant(ramc, place.lat, date);
   const mcL = midheaven(ramc, date);
-  void mcL;
-  const sun = signFromLon(sunL);
-  const moon = signFromLon(moonL);
-  const asc = signFromLon(ascL);
-  const bodies: SkyBody[] = [
-    {
-      id: "sun",
-      name: "Sun",
-      lon: sunL,
-      signId: sun.id,
-      signName: sun.name,
-      degInSign: sun.deg + sun.minute / 60,
-      house: wholeSignHouse(sunL, ascL),
-      note: `${formatLon(sunL)} · house ${wholeSignHouse(sunL, ascL)}`,
-      ...blankCopy(),
-    },
-    {
-      id: "moon",
-      name: "Moon",
-      lon: moonL,
-      signId: moon.id,
-      signName: moon.name,
-      degInSign: moon.deg + moon.minute / 60,
-      house: wholeSignHouse(moonL, ascL),
-      note: `${formatLon(moonL)} · house ${wholeSignHouse(moonL, ascL)}`,
-      ...blankCopy(),
-    },
-    {
-      id: "asc",
-      name: "Rising",
-      lon: ascL,
-      signId: asc.id,
-      signName: asc.name,
-      degInSign: asc.deg + asc.minute / 60,
-      house: 1,
-      note: `${formatLon(ascL)} · first house`,
-      ...blankCopy(),
-    },
-  ];
+  const points: CastPoint[] = MOVING.map(({ id, body, name }) => {
+    const lon = eclipticLon(body, date);
+    return pointFromLon(id, name, lon, ascL, isRetrograde(body, date, lon));
+  });
+  points.push(pointFromLon("asc", "Rising", ascL, ascL, false));
+  points.push(pointFromLon("mc", "Midheaven", mcL, ascL, false));
   return {
     place: place.name,
     lat: place.lat,
     lon: place.lon,
     timeZone: place.timeZone,
+    utcIso: date.toISOString(),
+    angles: {
+      asc: ascL,
+      mc: mcL,
+      dsc: wrap360(ascL + 180),
+      ic: wrap360(mcL + 180),
+    },
+    points,
+  };
+}
+
+export function bigThreeFromCast(cast: NatalCast): Omit<SkyNatal, "tone" | "depth" | "when" | "writtenAt"> {
+  const want = new Set(["sun", "moon", "asc"]);
+  const bodies: SkyBody[] = cast.points
+    .filter((p) => want.has(p.id))
+    .map((p) => ({
+      id: p.id as SkyBody["id"],
+      name: p.name,
+      lon: p.lon,
+      signId: p.signId,
+      signName: p.signName,
+      degInSign: p.degInSign,
+      house: p.house,
+      note: p.note,
+      ...blankCopy(),
+    }));
+  return {
+    place: cast.place,
+    lat: cast.lat,
+    lon: cast.lon,
+    timeZone: cast.timeZone,
     bodies,
   };
+}
+
+export function computeBigThree(date: Date, place: GeoPlace): Omit<SkyNatal, "tone" | "depth" | "when" | "writtenAt"> {
+  return bigThreeFromCast(computeNatalCast(date, place));
 }
 
 export async function geocodePlace(query: string): Promise<GeoPlace> {

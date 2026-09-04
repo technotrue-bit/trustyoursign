@@ -104,6 +104,15 @@ export function isMainModule(moduleUrl) {
   }
 }
 
+function resolveCommand(command) {
+  if (process.platform !== "win32") return command;
+  // npm bin shims are *.cmd on Windows; bare "vite" fails with spawn ENOENT.
+  if (!command.includes("/") && !command.includes("\\") && !command.endsWith(".cmd")) {
+    return `${command}.cmd`;
+  }
+  return command;
+}
+
 function main(argv) {
   const [command, ...args] = argv;
   if (!command) {
@@ -111,7 +120,7 @@ function main(argv) {
     process.exit(2);
   }
   const env = mergeAppEnv(readAppEnv(projectRoot()), process.env);
-  const child = spawn(command, args, { stdio: "inherit", env });
+  const child = spawn(resolveCommand(command), args, { stdio: "inherit", env, shell: process.platform === "win32" });
   // The dev server is long-running and is stopped by signalling this wrapper.
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.on(signal, () => child.kill(signal));

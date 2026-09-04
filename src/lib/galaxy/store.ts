@@ -14,7 +14,7 @@ type GalaxyState = {
   introVeil: number;
   introSkip: boolean;
   introDone: boolean;
-  setTravel: (t: number, moved?: boolean) => void;
+  setTravel: (t: number, moved?: boolean, signIndexOverride?: number) => void;
   markBorn: () => void;
   setChakraNote: (id: string | null) => void;
 };
@@ -31,8 +31,11 @@ export const useGalaxy = create<GalaxyState>((set, get) => ({
   introVeil: 0,
   introSkip: false,
   introDone: false,
-  setTravel: (t, moved) => {
-    const signIndex = stationFromT(t);
+  setTravel: (t, moved, signIndexOverride) => {
+    const signIndex =
+      signIndexOverride != null
+        ? ((Math.round(signIndexOverride) % 12) + 12) % 12
+        : stationFromT(t);
     const prev = get();
     if (prev.signIndex === signIndex && prev.moved === !!moved && Math.abs(prev.t - t) < 0.008) {
       return;

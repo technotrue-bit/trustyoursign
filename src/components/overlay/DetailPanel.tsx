@@ -367,6 +367,7 @@ function SkyIndex() {
   const nat = useNativity();
   if (!nat) return null;
   const select = useVault((s) => s.select);
+  const chartId = useVault((s) => s.chartId);
   const mains: PlanetId[] = [
     "sun",
     "moon",
@@ -381,6 +382,11 @@ function SkyIndex() {
   ];
   return (
     <ListPanel kicker="The sky" title={nat.meta.oneCut}>
+      {chartId === "visitor" ? (
+        <p className="mb-3 text-xs leading-relaxed text-fg-subtle">
+          {nat.meta.zodiac} · {nat.meta.houses} · {nat.meta.zone} · {nat.meta.engine}. Entertainment, not advice.
+        </p>
+      ) : null}
       <ul className="grid grid-cols-2 gap-1 md:grid-cols-1">
         {mains.map((id) => {
           const p = nat.planetById[id];
@@ -511,6 +517,7 @@ function ReadingsIndex() {
 function BonesPanel() {
   const nat = useNativity();
   if (!nat) return null;
+  const chartId = useVault((s) => s.chartId);
   return (
     <ChartSheet label="the bones" wide>
       <Kicker>The bones</Kicker>
@@ -522,6 +529,11 @@ function BonesPanel() {
           </Gloss>
         </GlossRoot>
       </p>
+      {chartId === "visitor" ? (
+        <p className="mt-2 max-w-2xl text-xs leading-relaxed text-fg-subtle">
+          {nat.meta.engine} · timezone from birth place · degrees before meaning. This is not medical or legal advice.
+        </p>
+      ) : null}
       <div className="mt-5 overflow-x-auto">
         <table className="w-full min-w-[40rem] text-left text-sm">
           <thead className="text-xs tracking-wide text-fg-subtle uppercase">
