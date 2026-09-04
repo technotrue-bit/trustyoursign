@@ -88,7 +88,7 @@ type CompatActions = Pick<
 const compatActions: CompatActions = {
   openChart: (id, research) => {
     const store = useSessionStore.getState();
-    if (id === "visitor") store.openVisitor(research, null);
+    if (id === "visitor") store.openLibraryVisitor(research);
     else store.openResearch(id, research);
   },
   openVisitor: (research, sky) => useSessionStore.getState().openVisitor(research, sky),
