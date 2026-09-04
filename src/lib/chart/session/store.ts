@@ -43,6 +43,7 @@ export type ShelfSessionInput = {
 
 export type SessionStore = VaultDomainState & {
   openVisitor: (nativity: Nativity, skyNatal: SkyNatal | null) => void;
+  openLibraryVisitor: (nativity: Nativity) => void;
   openResearch: (id: ResearchChartId, nativity: Nativity) => void;
   openShelf: (input: ShelfSessionInput) => void;
   setChart: (id: ChartId) => void;
@@ -150,6 +151,20 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       birth,
       signId,
       origin: "galaxy",
+    });
+    set((current) => openSessionState(current, session));
+  },
+
+  openLibraryVisitor: (nativity) => {
+    const state = get();
+    const birth = state.claim?.birth ?? visitorBirth(nativity);
+    const signId = state.claim?.signId ?? visitorSign(nativity, birth);
+    const session = fromVisitor({
+      nativity,
+      skyNatal: null,
+      birth,
+      signId,
+      origin: "library",
     });
     set((current) => openSessionState(current, session));
   },

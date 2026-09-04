@@ -109,6 +109,16 @@ describe("session store compatibility façade", () => {
     assert.equal(vault.birth?.day, 26);
   });
 
+  it("opens a visitor chart from the legacy library entry", () => {
+    const { store, compat } = modules();
+
+    compat.projectVaultState(store.getState()).openChart("visitor", nativity);
+
+    const vault = compat.projectVaultState(store.getState());
+    assert.equal(vault.gate, "library");
+    assert.equal(vault.chartId, "visitor");
+  });
+
   it("opens and projects a shelf without exposing its id as chartId", () => {
     const { store, compat } = modules();
     compat.projectVaultState(store.getState()).openShelf({
