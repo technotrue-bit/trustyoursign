@@ -1,10 +1,4 @@
-export type {
-  BirthFacts,
-  ClaimDraft,
-  ChartSession,
-  SessionKind,
-  Surface,
-} from "./types";
+export type { BirthFacts, ClaimDraft, ChartSession, SessionKind, Surface } from "./types";
 export {
   isEntered,
   nativityOf,
@@ -34,3 +28,5 @@ export {
   skipTourState,
 } from "./actions";
 export type { VaultDomainState } from "./actions";
+export { useSessionStore, seekSignFor, resetGalaxyTravel } from "./store";
+export type { SessionStore, ShelfSessionInput } from "./store";
