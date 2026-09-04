@@ -176,6 +176,7 @@ function Title({ children }: { children: ReactNode }) {
 
 function PlanetBody({ id }: { id: PlanetId }) {
   const nat = useNativity();
+  const select = useVault((s) => s.select);
   if (!nat) return null;
   const p = nat.planetById[id];
   if (!p) return null;
@@ -206,9 +207,18 @@ function PlanetBody({ id }: { id: PlanetId }) {
         <ul className="mt-5 space-y-2 border-t border-border pt-4">
           {wires.map((w) => {
             const other = w.a === id ? w.b : w.a;
+            const otherName = nat.planetById[other]?.name ?? other;
             return (
               <li key={w.id} className="text-xs leading-relaxed text-fg-muted">
-                <span className="text-fg">{nat.planetById[other]?.name}</span>
+                <Gloss>{otherName}</Gloss>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => select({ kind: "planet", id: other })}
+                  className="text-[0.65rem] tracking-[0.14em] text-fg-subtle uppercase underline decoration-fg-subtle/40 underline-offset-2 hover:text-fg"
+                >
+                  open
+                </button>
                 {" · "}
                 <Gloss>{`${w.type} ${w.orb.toFixed(2)}° — ${w.text}`}</Gloss>
               </li>

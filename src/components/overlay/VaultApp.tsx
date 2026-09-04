@@ -18,10 +18,12 @@ import { ensureAutoClock, ensureFlyInput, galaxyTravel, noteControl, noteSignCop
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
 import { useVault } from "@/lib/store";
+import { busyFromPhase } from "@/lib/vault-phase";
 import { cn } from "@/lib/utils";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { AskPanel } from "./AskPanel";
 import { BirthChat } from "./BirthChat";
+import { ChartForge, resumeForgeIfAny } from "./ChartForge";
 import { DetailPanel } from "./DetailPanel";
 import { FallbackSky } from "./FallbackSky";
 import { Gloss, GlossRoot, GlossStage } from "./Gloss";
@@ -60,6 +62,7 @@ export function VaultApp() {
   const [sceneFailed, setSceneFailed] = useState(false);
   const entered = useVault((s) => s.entered);
   const gate = useVault((s) => s.gate);
+  const phase = useVault((s) => s.phase);
   const chat = useVault((s) => s.chat);
   const shelf = useVault((s) => s.shelf);
 
@@ -132,8 +135,12 @@ export function VaultApp() {
   }, []);
 
   useEffect(() => {
-    galaxyTravel.busy = Boolean(chat || entered);
-  }, [chat, entered]);
+    void resumeForgeIfAny(useVault.getState().enterForge, useVault.getState().openVisitor);
+  }, []);
+
+  useEffect(() => {
+    galaxyTravel.busy = busyFromPhase(phase, entered);
+  }, [phase, entered]);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("desk");
@@ -164,6 +171,11 @@ export function VaultApp() {
     }
   }, []);
 
+  const onGalaxy = !entered && gate === "galaxy";
+  const showFly = onGalaxy && phase === "galaxy";
+  const showDock = onGalaxy && phase === "dock";
+  const showForge = onGalaxy && phase === "forge";
+
   return (
     <main
       className="vault-stage relative overflow-hidden bg-bg text-fg"
@@ -176,9 +188,10 @@ export function VaultApp() {
       ) : (
         <FallbackSky />
       )}
-      {entered && !shelf || chat || gate === "library" ? <StarBack /> : null}
-      {!entered && gate === "galaxy" && !chat ? <GalaxyCopy /> : null}
-      {!entered && gate === "galaxy" && chat ? <BirthChat /> : null}
+      {(entered && !shelf) || chat || showForge || gate === "library" ? <StarBack /> : null}
+      {showFly ? <GalaxyCopy /> : null}
+      {showDock ? <BirthChat /> : null}
+      {showForge ? <ChartForge /> : null}
       {!entered && gate === "library" ? <Intro /> : null}
       {entered ? <Chrome /> : null}
       {entered ? <TourGuide /> : null}

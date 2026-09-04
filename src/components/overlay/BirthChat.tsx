@@ -8,6 +8,8 @@ import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
 import { saveChart } from "@/lib/charts";
 import { computeVisitorNatal } from "@/lib/chart/sky";
+import { getForgeAnonKey } from "@/lib/chart/forge-anon";
+import { startOrResumeForge } from "@/lib/chart/forge.server";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { Nativity } from "@/lib/chart/schema";
 import { cn } from "@/lib/utils";
@@ -35,6 +37,7 @@ export function BirthChat() {
   const openLibrary = useVault((s) => s.openLibrary);
   const openShelf = useVault((s) => s.openShelf);
   const openVisitor = useVault((s) => s.openVisitor);
+  const enterForge = useVault((s) => s.enterForge);
   const closeBirthChat = useVault((s) => s.closeBirthChat);
   const sign = CONSTELLATIONS.find((c) => c.id === picked) ?? CONSTELLATIONS[0]!;
   const temple = TEMPLE_SIGNS.find((c) => c.id === sign.id) ?? TEMPLE_SIGNS[0]!;
@@ -156,11 +159,23 @@ export function BirthChat() {
       : null;
 
   return (
-    <div className="vault-overlay pointer-events-none absolute inset-0 z-30 flex items-end justify-start md:items-center">
-      <div className="absolute inset-0 bg-gradient-to-t from-bg from-25% via-bg/70 to-transparent md:bg-gradient-to-r md:from-bg md:from-20% md:via-bg/80 md:to-transparent" />
-      <div className="birth-chat pointer-events-auto relative w-full max-w-md px-5 pt-[var(--chrome-top)] pb-[var(--chrome-bottom)] md:px-12 md:pt-16">
-        <p className="text-xs tracking-[0.28em] text-fg-muted uppercase">{temple.month}</p>
-        <h2 className="mt-2 font-display text-[2.15rem] leading-[1.08] font-medium tracking-tight text-fg italic md:text-5xl">
+    <div className="vault-overlay pointer-events-none absolute inset-0 z-30 flex items-end justify-center md:items-stretch md:justify-end">
+      <div
+        className="absolute inset-0 bg-gradient-to-t from-bg/90 via-bg/40 to-transparent md:bg-gradient-to-l md:from-bg/85 md:via-bg/35 md:to-transparent"
+        aria-hidden
+      />
+      <div className="birth-chat pointer-events-auto relative max-h-[min(52dvh,28rem)] w-full overflow-y-auto px-5 pt-4 pb-[var(--chrome-bottom)] md:max-h-none md:w-[min(100%,24rem)] md:px-8 md:pt-[max(2.5rem,var(--chrome-top))] md:pb-10">
+        <div className="mb-3 flex items-center justify-between gap-3 md:mb-4">
+          <p className="text-xs tracking-[0.28em] text-fg-muted uppercase">{temple.month}</p>
+          <button
+            type="button"
+            onClick={closeBirthChat}
+            className="min-h-11 shrink-0 px-2 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+          >
+            Back to sky
+          </button>
+        </div>
+        <h2 className="font-display text-[2rem] leading-[1.08] font-medium tracking-tight text-fg italic md:text-4xl">
           {sign.name}.
         </h2>
         <p className="mt-2 text-[0.7rem] tracking-[0.2em] text-fg-subtle uppercase">
@@ -415,12 +430,37 @@ export function BirthChat() {
             <button
               type="button"
               onClick={() => {
-                if (visitorBook) {
-                  openVisitor(visitorBook, natal);
-                  return;
-                }
-                const s = sketch();
-                if (s) openShelf(s);
+                void (async () => {
+                  if (visitorBook && natal && birth) {
+                    try {
+                      const job = await startOrResumeForge({
+                        data: {
+                          anonKey: getForgeAnonKey(),
+                          birth: {
+                            signId: sign.id,
+                            year: birth.year,
+                            month: birth.month,
+                            day: birth.day,
+                            hour: birth.hour,
+                            minute: birth.minute,
+                            place: birth.place,
+                            label: "Your natal",
+                            tone: natal.tone ?? "vault",
+                          },
+                          sky: natal,
+                          nativity: visitorBook,
+                        },
+                      });
+                      enterForge(job.id);
+                      return;
+                    } catch {
+                      openVisitor(visitorBook, natal);
+                      return;
+                    }
+                  }
+                  const s = sketch();
+                  if (s) openShelf(s);
+                })();
               }}
               className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase hover:bg-fg md:min-h-11"
             >

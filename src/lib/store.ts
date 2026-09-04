@@ -7,6 +7,15 @@ import { OPEN_T, resetTravel, seekSign } from "@/lib/galaxy/travel";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { isDateInSign } from "@/lib/chart/sun";
 import { followingBeat, markBeatSeen, markTourDone, nextJoeyBeat } from "@/lib/chart/tour";
+import {
+  chatFromPhase,
+  phaseAfterCloseBirthChat,
+  phaseAfterOpenBirthChat,
+  phaseAfterOpenVisitor,
+  type VaultPhase,
+} from "@/lib/vault-phase";
+
+export type { VaultPhase };
 
 export type BirthDate = {
   year: number;
@@ -37,12 +46,16 @@ export type ShelfSketch = {
 type VaultState = {
   entered: boolean;
   gate: "galaxy" | "library";
+  /** Journey on `/`: fly → birth dock → forge → chart modes. */
+  phase: VaultPhase;
+  forgeJobId: string | null;
   chartId: ChartId | null;
   research: Nativity | null;
   shelf: ShelfSketch | null;
   mode: AppMode;
   selection: Selection;
   hovered: Selection;
+  /** Alias for `phase === "dock"` — kept for slide/busy callers. */
   chat: boolean;
   pickedSign: SignId | null;
   birth: BirthDate | null;
@@ -59,6 +72,8 @@ type VaultState = {
   library: () => void;
   openBirthChat: (sign: SignId) => void;
   closeBirthChat: () => void;
+  enterForge: (jobId: string) => void;
+  leaveForge: () => void;
   setBirth: (birth: BirthDate) => void;
   setShelfNatal: (natal: SkyNatal) => void;
   setShelfTone: (tone: "vault" | "warm") => void;
@@ -72,9 +87,15 @@ type VaultState = {
   foldSheet: (folded: boolean) => void;
 };
 
+function withPhase(phase: VaultPhase, extra: Partial<VaultState> = {}) {
+  return { phase, chat: chatFromPhase(phase), ...extra };
+}
+
 export const useVault = create<VaultState>((set, get) => ({
   entered: false,
   gate: "galaxy",
+  phase: "galaxy",
+  forgeJobId: null,
   chartId: null,
   research: null,
   shelf: null,
@@ -91,6 +112,7 @@ export const useVault = create<VaultState>((set, get) => ({
     const walk = id === "joey";
     const beat = walk ? nextJoeyBeat() : null;
     set({
+      ...withPhase(phaseAfterOpenVisitor()),
       chartId: id,
       research,
       shelf: null,
@@ -100,12 +122,13 @@ export const useVault = create<VaultState>((set, get) => ({
       mode: beat?.mode ?? "sky",
       selection: beat?.selection ?? null,
       hovered: null,
-      chat: false,
+      forgeJobId: null,
       tourBeat: beat?.id ?? null,
     });
   },
   openVisitor: (research, sky) => {
     set({
+      ...withPhase(phaseAfterOpenVisitor()),
       chartId: "visitor",
       research,
       shelf: null,
@@ -115,7 +138,7 @@ export const useVault = create<VaultState>((set, get) => ({
       mode: "sky",
       selection: null,
       hovered: null,
-      chat: false,
+      forgeJobId: null,
       tourBeat: null,
       sheetFolded: false,
     });
@@ -136,6 +159,7 @@ export const useVault = create<VaultState>((set, get) => ({
     if (i >= 0) seekSign(i);
     const id = sketch.id ?? (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `shelf-${Date.now()}`);
     set({
+      ...withPhase(phaseAfterOpenVisitor()),
       shelf: {
         ...sketch,
         id,
@@ -150,7 +174,7 @@ export const useVault = create<VaultState>((set, get) => ({
       mode: "ask",
       selection: null,
       hovered: null,
-      chat: false,
+      forgeJobId: null,
       pickedSign: sketch.signId,
       birth: {
         month: sketch.birthMonth,
@@ -165,6 +189,7 @@ export const useVault = create<VaultState>((set, get) => ({
   },
   openLibrary: () =>
     set({
+      ...withPhase("galaxy"),
       gate: "library",
       entered: false,
       chartId: null,
@@ -173,7 +198,7 @@ export const useVault = create<VaultState>((set, get) => ({
       skyNatal: null,
       selection: null,
       hovered: null,
-      chat: false,
+      forgeJobId: null,
       tourBeat: null,
       sheetFolded: false,
     }),
@@ -181,6 +206,7 @@ export const useVault = create<VaultState>((set, get) => ({
     resetTravel(false);
     useGalaxy.setState({ born: true, moved: false, t: OPEN_T, signIndex: 0 });
     set({
+      ...withPhase("galaxy"),
       gate: "galaxy",
       entered: false,
       chartId: null,
@@ -190,7 +216,7 @@ export const useVault = create<VaultState>((set, get) => ({
       selection: null,
       hovered: null,
       mode: "sky",
-      chat: false,
+      forgeJobId: null,
       pickedSign: null,
       birth: null,
       tourBeat: null,
@@ -199,6 +225,7 @@ export const useVault = create<VaultState>((set, get) => ({
   },
   library: () =>
     set({
+      ...withPhase("galaxy"),
       entered: false,
       chartId: null,
       research: null,
@@ -208,16 +235,39 @@ export const useVault = create<VaultState>((set, get) => ({
       hovered: null,
       mode: "sky",
       gate: "library",
-      chat: false,
+      forgeJobId: null,
       tourBeat: null,
       sheetFolded: false,
     }),
   openBirthChat: (sign) => {
     const i = CONSTELLATIONS.findIndex((c) => c.id === sign);
     if (i >= 0) seekSign(i);
-    set({ chat: true, pickedSign: sign, gate: "galaxy", birth: null });
+    set({
+      ...withPhase(phaseAfterOpenBirthChat()),
+      pickedSign: sign,
+      gate: "galaxy",
+      birth: null,
+      forgeJobId: null,
+    });
   },
-  closeBirthChat: () => set({ chat: false, birth: null }),
+  closeBirthChat: () =>
+    set({
+      ...withPhase(phaseAfterCloseBirthChat()),
+      birth: null,
+      forgeJobId: null,
+    }),
+  enterForge: (jobId) =>
+    set({
+      ...withPhase("forge"),
+      forgeJobId: jobId,
+      entered: false,
+      gate: "galaxy",
+    }),
+  leaveForge: () =>
+    set({
+      ...withPhase(phaseAfterOpenBirthChat()),
+      forgeJobId: null,
+    }),
   setBirth: (birth) => {
     const sign = get().pickedSign;
     if (sign && !isDateInSign(sign, birth.month, birth.day)) return;
@@ -256,7 +306,11 @@ export const useVault = create<VaultState>((set, get) => ({
       s.library();
       return;
     }
-    if (s.chat) {
+    if (s.phase === "forge") {
+      s.leaveForge();
+      return;
+    }
+    if (s.phase === "dock" || s.chat) {
       s.closeBirthChat();
       return;
     }
