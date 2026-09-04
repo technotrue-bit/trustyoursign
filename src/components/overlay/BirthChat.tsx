@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { daysForSign, formatBirth, formatClock, isDateInSign, monthsForSign, sunSignOn } from "@/lib/chart/sun";
+import { useClaim } from "@/lib/chart/session/hooks";
 import { useVault } from "@/lib/store";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
@@ -29,8 +30,9 @@ const MONTHS = [
 ];
 
 export function BirthChat() {
-  const picked = useVault((s) => s.pickedSign);
-  const birth = useVault((s) => s.birth);
+  const claim = useClaim();
+  const picked = claim?.signId;
+  const birth = claim?.birth ?? null;
   const setBirth = useVault((s) => s.setBirth);
   const openLibrary = useVault((s) => s.openLibrary);
   const openShelf = useVault((s) => s.openShelf);
