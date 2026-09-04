@@ -14,6 +14,10 @@ export function PreviewHostBridge() {
   const router = useRouter();
 
   useEffect(() => {
+    const embedded = typeof window !== "undefined" && window.parent !== window;
+    if (embedded) document.documentElement.dataset.previewHost = "1";
+    else delete document.documentElement.dataset.previewHost;
+
     return installPreviewHostBridge({
       navigate: (path) => {
         router.history.push(path);

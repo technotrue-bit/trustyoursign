@@ -13,7 +13,6 @@ import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
 import { beatById } from "@/lib/chart/tour";
 import type { AppMode, ChartId } from "@/lib/chart/types";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
-import { TEMPLE_CHAKRAS } from "@/lib/galaxy/temple";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
 import { ensureAutoClock, ensureFlyInput, galaxyTravel, noteControl, skipBirth } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
@@ -33,12 +32,14 @@ import { LegalFooter } from "./LegalFooter";
 import { TourGuide } from "./TourGuide";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { listCharts, type SavedChart } from "@/lib/charts";
+import { computeVisitorNatal } from "@/lib/chart/sky";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { Link } from "@tanstack/react-router";
 
 function chartRole(id: ChartId | null, date?: string) {
   if (id === "saige") return date ? `Premium house · ${date}` : "Premium house";
   if (id === "joey") return date ? `Walkthrough · ${date}` : "Walkthrough";
+  if (id === "visitor") return date ? `Your natal · ${date}` : "Your natal";
   return date ?? "The Vault";
 }
 
@@ -51,6 +52,8 @@ const MODES: { id: AppMode; label: string; icon: typeof Compass }[] = [
   { id: "bones", label: "Bones", icon: Table2 },
   { id: "ask", label: "Ask", icon: MessageCircle },
 ];
+
+const VISITOR_ROOMS = new Set<AppMode>(["sky", "body", "bones", "ask"]);
 
 export function VaultApp() {
   const [Scene, setScene] = useState<ComponentType | null>(null);
@@ -175,32 +178,11 @@ export function VaultApp() {
       )}
       {entered && !shelf || chat || gate === "library" ? <StarBack /> : null}
       {!entered && gate === "galaxy" && !chat ? <GalaxyCopy /> : null}
-      {!entered && gate === "galaxy" && chat ? <ChakraNote /> : null}
       {!entered && gate === "galaxy" && chat ? <BirthChat /> : null}
       {!entered && gate === "library" ? <Intro /> : null}
       {entered ? <Chrome /> : null}
       {entered ? <TourGuide /> : null}
     </main>
-  );
-}
-
-function ChakraNote() {
-  const id = useGalaxy((s) => s.chakraNote);
-  if (!id) return null;
-  const c = TEMPLE_CHAKRAS.find((n) => n.id === id);
-  if (!c) return null;
-  return (
-    <div className="vault-overlay pointer-events-none absolute inset-x-0 top-[38%] z-40 flex justify-center px-6">
-      <button
-        type="button"
-        className="pointer-events-auto min-h-12 max-w-sm rounded-md border border-border bg-bg/80 px-4 py-3 text-left"
-        onClick={() => useGalaxy.getState().setChakraNote(null)}
-      >
-        <p className="text-[0.7rem] tracking-[0.2em] text-fg-subtle uppercase">{c.sanskrit}</p>
-        <p className="mt-1 font-display text-xl tracking-tight text-fg italic">{c.name}</p>
-        <p className="mt-2 text-sm leading-relaxed text-fg-muted">A well in the body. The sign holds the rest.</p>
-      </button>
-    </div>
   );
 }
 
@@ -215,13 +197,14 @@ function GalaxyCopy() {
   const introSkip = useGalaxy((s) => s.introSkip);
   const introDone = useGalaxy((s) => s.introDone);
   const asking = introVeil > 0.04;
+  const titleAnimating = !introDone && introTitle > 0.08;
   const openBirthChat = useVault((s) => s.openBirthChat);
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
 
   if (!born) {
     return (
       <div className="vault-overlay pointer-events-none absolute inset-0 z-30">
-        <h1 className="sr-only">what&rsquo;s your sign</h1>
+        <h1 className="sr-only">what&rsquo;s your sign?</h1>
       </div>
     );
   }
@@ -273,7 +256,8 @@ function GalaxyCopy() {
           <div className="relative mx-auto grid min-h-14 place-items-center md:min-h-44">
             <h1
               className={cn(
-                "galaxy-title col-start-1 row-start-1 font-display leading-[1.08] font-medium tracking-tight text-fg italic intro-hold",
+                "galaxy-title col-start-1 row-start-1 font-display leading-[1.08] font-medium tracking-tight text-fg italic",
+                titleAnimating ? "sign-soft" : "intro-hold",
                 "transition-[opacity,filter] duration-500 ease-out",
                 moved ? "pointer-events-none opacity-0 blur-sm" : "opacity-100",
               )}
@@ -284,6 +268,7 @@ function GalaxyCopy() {
               <span className="word pointer-events-auto">
                 <Gloss card={false}>sign</Gloss>
               </span>
+              <span className="word">?</span>
             </h1>
             {moved && sign ? (
               <div key={sign.id} className="sign-swap pointer-events-auto col-start-1 row-start-1">
@@ -307,6 +292,7 @@ function GalaxyCopy() {
         className="galaxy-chrome pointer-events-none absolute inset-x-0 bottom-[var(--chrome-bottom)] flex flex-col items-center gap-2 md:bottom-8 md:gap-3"
         style={{ opacity: asking ? 0 : introChrome, animation: "none" }}
       >
+        <LegalFooter />
         <SignStrip />
         <p className="px-4 text-center text-[0.7rem] tracking-wide text-fg-subtle md:text-xs">
           <span className="md:hidden">Slide to fly. Pinch to zoom the sign. Swipe the names to jump.</span>
@@ -317,13 +303,14 @@ function GalaxyCopy() {
           disabled={!moved}
           onClick={() => sign && openBirthChat(sign.id)}
           className={cn(
-            "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase transition-colors duration-150 md:min-h-11 md:w-auto",
-            moved ? "text-fg hover:text-accent active:text-accent" : "text-fg-subtle/50",
+            "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase md:min-h-11 md:w-auto",
+            moved
+              ? "sign-claim text-fg hover:text-accent active:text-accent"
+              : "text-fg-subtle/50 transition-colors duration-150",
           )}
         >
           This is my sign
         </button>
-        <LegalFooter />
       </div>
     </div>
   );
@@ -448,7 +435,32 @@ function SavedShelf() {
           <li key={c.id}>
             <button
               type="button"
-              onClick={() =>
+              onClick={async () => {
+                if (
+                  c.natal &&
+                  c.birthHour != null &&
+                  c.birthMinute != null &&
+                  c.birthPlace
+                ) {
+                  try {
+                    const { sky, nativity } = await computeVisitorNatal({
+                      data: {
+                        year: c.birthYear,
+                        month: c.birthMonth,
+                        day: c.birthDay,
+                        hour: c.birthHour,
+                        minute: c.birthMinute,
+                        place: c.birthPlace,
+                        tone: c.tone,
+                        label: c.label,
+                      },
+                    });
+                    useVault.getState().openVisitor(nativity, sky);
+                    return;
+                  } catch {
+                    /* fall through to shelf */
+                  }
+                }
                 useVault.getState().openShelf({
                   id: c.id,
                   label: c.label,
@@ -464,15 +476,15 @@ function SavedShelf() {
                   relation: c.relation,
                   personName: c.personName,
                   from: "library",
-                })
-              }
+                });
+              }}
               className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-bg-subtle"
             >
               <p className="font-display text-lg text-fg italic">{c.label}</p>
               <p className="text-xs tracking-wide text-fg-subtle uppercase">
                 {c.signId} · {c.birthMonth}/{c.birthDay}/{c.birthYear}
                 {c.birthPlace ? ` · ${c.birthPlace}` : ""}
-                {c.natal ? " · Big Three" : " · sun-sign shelf"}
+                {c.natal ? " · natal" : " · sun-sign shelf"}
               </p>
             </button>
           </li>
@@ -492,7 +504,11 @@ function Chrome() {
   const shelf = useVault((s) => s.shelf);
   const chartId = useVault((s) => s.chartId);
   const nat = useNativity();
-  const rooms = shelf ? MODES.filter((m) => m.id === "sky" || m.id === "ask") : MODES;
+  const rooms = shelf
+    ? MODES.filter((m) => m.id === "sky" || m.id === "ask")
+    : chartId === "visitor"
+      ? MODES.filter((m) => VISITOR_ROOMS.has(m.id))
+      : MODES;
   const title = shelf ? shelf.label : nat?.meta.name ?? "The Vault";
   const who = shelf
     ? `${shelf.signId} · ${shelf.birthMonth}/${shelf.birthDay}/${shelf.birthYear}`
@@ -510,6 +526,14 @@ function Chrome() {
           <p className="hidden max-w-56 text-right text-xs leading-relaxed text-fg-subtle md:block">
             {shelf ? (
               "Sun-sign shelf. Not a natal."
+            ) : chartId === "visitor" && nat ? (
+              <>
+                {nat.meta.zodiac} · {nat.meta.houses}
+                <br />
+                {nat.meta.engine}
+                <br />
+                {nat.meta.zone}
+              </>
             ) : (
               <>
                 {nat?.meta.date}

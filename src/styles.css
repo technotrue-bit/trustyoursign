@@ -111,10 +111,14 @@
   color: #efe8dc;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   :root {
-    --overlay-hit: 4.35rem;
+    --overlay-hit: 2.75rem;
     --dock-h: 4.5rem;
+  }
+
+  :root[data-preview-host="1"] {
+    --overlay-hit: 4.35rem;
   }
 }
 
@@ -125,6 +129,13 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .sign-soft .word {
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
   }
 }
 
@@ -233,6 +244,9 @@
 .sign-soft .word:nth-child(3) {
   animation-delay: 1.02s;
 }
+.sign-soft .word:nth-child(4) {
+  animation-delay: 1.38s;
+}
 
 .intro-hold .word {
   animation: none;
@@ -257,21 +271,168 @@
   animation: none;
 }
 
+.sign-claim {
+  position: relative;
+  isolation: isolate;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-fg) 14%, transparent);
+  background: color-mix(in oklab, var(--color-bg) 62%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-accent) 8%, transparent),
+    0 0 14px 2px color-mix(in oklab, #c9a15b 18%, transparent),
+    0 0 30px 7px color-mix(in oklab, #c9a15b 7%, transparent),
+    inset 0 0 14px color-mix(in oklab, var(--color-fg) 4%, transparent);
+  transition:
+    color 0.15s ease-out,
+    border-color 0.2s ease-out,
+    box-shadow 0.2s ease-out;
+}
+
+.sign-claim::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: -0.65rem;
+  z-index: -1;
+  border-radius: 999px;
+  background: radial-gradient(
+    ellipse 128% 112% at 50% 46%,
+    color-mix(in oklab, var(--color-fg) 30%, transparent) 0%,
+    color-mix(in oklab, #c9a15b 12%, transparent) 38%,
+    transparent 66%
+  );
+  animation: sign-claim-halo 4.2s ease-in-out infinite;
+}
+
+.sign-claim::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  box-shadow: inset 0 0 10px color-mix(in oklab, var(--color-fg) 8%, transparent);
+  opacity: 0.55;
+}
+
+.sign-claim:hover,
+.sign-claim:focus-visible {
+  border-color: color-mix(in oklab, var(--color-accent) 28%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-accent) 18%, transparent),
+    0 0 18px 4px color-mix(in oklab, #c9a15b 26%, transparent),
+    0 0 40px 10px color-mix(in oklab, #c9a15b 11%, transparent),
+    inset 0 0 18px color-mix(in oklab, var(--color-fg) 7%, transparent);
+}
+
+.sign-claim:focus-visible {
+  outline: 1px solid color-mix(in oklab, var(--color-fg) 30%, transparent);
+  outline-offset: 3px;
+}
+
+@keyframes sign-claim-halo {
+  0%,
+  to {
+    opacity: 0.48;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.sign-strip-belt {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  max-width: 100%;
+  min-height: 4.75rem;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 2.75rem calc(100% - 2.75rem), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 2.75rem calc(100% - 2.75rem), transparent);
+}
+
+.sign-strip-belt::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: transparent;
+  background-image:
+    radial-gradient(ellipse 92% 58% at 50% -8%, color-mix(in oklab, #c9a15b 14%, transparent), transparent 68%),
+    radial-gradient(ellipse 48% 38% at 12% 6%, color-mix(in oklab, #d8cfc0 10%, transparent), transparent 72%),
+    radial-gradient(ellipse 42% 34% at 88% 10%, color-mix(in oklab, #c9a15b 12%, transparent), transparent 70%),
+    linear-gradient(180deg, color-mix(in oklab, #0c0b0a 12%, transparent) 0%, transparent 42%, transparent 100%);
+}
+
+.sign-strip-belt::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.58;
+  background-image:
+    radial-gradient(1px 1px at 6% 28%, rgba(255, 248, 235, 0.95), transparent),
+    radial-gradient(1px 1px at 11% 62%, rgba(201, 161, 91, 0.72), transparent),
+    radial-gradient(1px 1px at 17% 44%, rgba(255, 248, 235, 0.55), transparent),
+    radial-gradient(1px 1px at 23% 18%, rgba(201, 161, 91, 0.48), transparent),
+    radial-gradient(1px 1px at 29% 74%, rgba(255, 248, 235, 0.62), transparent),
+    radial-gradient(1px 1px at 34% 36%, rgba(201, 161, 91, 0.58), transparent),
+    radial-gradient(1px 1px at 41% 58%, rgba(255, 248, 235, 0.78), transparent),
+    radial-gradient(1px 1px at 47% 22%, rgba(201, 161, 91, 0.42), transparent),
+    radial-gradient(1px 1px at 53% 68%, rgba(255, 248, 235, 0.66), transparent),
+    radial-gradient(1px 1px at 59% 40%, rgba(201, 161, 91, 0.52), transparent),
+    radial-gradient(1px 1px at 64% 82%, rgba(255, 248, 235, 0.48), transparent),
+    radial-gradient(1px 1px at 71% 30%, rgba(201, 161, 91, 0.64), transparent),
+    radial-gradient(1px 1px at 76% 54%, rgba(255, 248, 235, 0.82), transparent),
+    radial-gradient(1px 1px at 82% 16%, rgba(201, 161, 91, 0.46), transparent),
+    radial-gradient(1px 1px at 88% 72%, rgba(255, 248, 235, 0.58), transparent),
+    radial-gradient(1px 1px at 94% 46%, rgba(201, 161, 91, 0.68), transparent),
+    radial-gradient(ellipse 2.5px 0.75px at 22% 38%, rgba(255, 248, 235, 0.88), transparent),
+    radial-gradient(ellipse 0.75px 2.5px at 22% 38%, rgba(255, 248, 235, 0.88), transparent),
+    radial-gradient(ellipse 3px 0.85px at 58% 52%, rgba(255, 248, 235, 0.92), transparent),
+    radial-gradient(ellipse 0.85px 3px at 58% 52%, rgba(255, 248, 235, 0.92), transparent),
+    radial-gradient(ellipse 2px 0.65px at 79% 24%, rgba(201, 161, 91, 0.82), transparent),
+    radial-gradient(ellipse 0.65px 2px at 79% 24%, rgba(201, 161, 91, 0.82), transparent);
+  background-size: 100% 100%;
+  animation: sign-belt-drift 160s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sign-strip-belt::after {
+    animation: none;
+  }
+}
+
+@keyframes sign-belt-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-1.5%, 0, 0);
+  }
+}
+
 .sign-strip {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: stretch;
-  gap: 0.125rem;
+  gap: 0;
   width: 100%;
+  min-height: inherit;
+  background: transparent;
   overflow: auto hidden;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
   touch-action: pan-x;
   scrollbar-width: none;
-  padding-inline: max(calc(50% - 4.25rem), env(safe-area-inset-left));
+  padding-block: 0.55rem 0.65rem;
+  padding-inline: max(calc(50% - 4.75rem), env(safe-area-inset-left));
   scroll-padding-inline: 50%;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 2.5rem calc(100% - 2.5rem), transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 2.5rem calc(100% - 2.5rem), transparent);
 }
 
 .sign-strip::-webkit-scrollbar {
@@ -280,8 +441,120 @@
 
 .sign-strip-item {
   flex: none;
-  min-width: 8.5rem;
+  min-width: 8.75rem;
   scroll-snap-align: center;
+}
+
+.sign-strip-btn {
+  display: flex;
+  width: 100%;
+  min-height: 3rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.85rem 0.45rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 0.22s ease-out,
+    opacity 0.22s ease-out,
+    transform 0.22s ease-out;
+}
+
+.sign-strip-name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-style: italic;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: color-mix(in oklab, var(--color-fg-muted) 72%, #8a7a62);
+  opacity: 0.4;
+  text-shadow:
+    0 0 10px rgba(12, 11, 10, 0.82),
+    0 1px 4px rgba(12, 11, 10, 0.72),
+    0 0 18px rgba(12, 11, 10, 0.45);
+  transition:
+    color 0.22s ease-out,
+    opacity 0.22s ease-out,
+    text-shadow 0.22s ease-out,
+    transform 0.22s ease-out;
+}
+
+.sign-strip-span {
+  margin-top: 0.2rem;
+  font-family: var(--font-sans);
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-fg-subtle) 80%, #8a7a62);
+  opacity: 0.34;
+  transition:
+    color 0.22s ease-out,
+    opacity 0.22s ease-out;
+}
+
+.sign-strip-btn[aria-current="true"] .sign-strip-name {
+  color: #f5efe3;
+  opacity: 1;
+  font-size: 1.2rem;
+  text-shadow:
+    0 0 12px rgba(12, 11, 10, 0.88),
+    0 1px 5px rgba(12, 11, 10, 0.78),
+    0 0 18px color-mix(in oklab, #f5efe3 28%, transparent),
+    0 0 36px color-mix(in oklab, #c9a15b 16%, transparent);
+  transform: scale(1.02);
+}
+
+.sign-strip-btn[aria-current="true"] .sign-strip-span {
+  color: #efe8dc;
+  opacity: 0.9;
+}
+
+.sign-strip-btn:not([aria-current="true"]):hover .sign-strip-name,
+.sign-strip-btn:not([aria-current="true"]):focus-visible .sign-strip-name {
+  color: #9a9186;
+  opacity: 0.62;
+}
+
+.sign-strip-btn:not([aria-current="true"]):hover .sign-strip-span,
+.sign-strip-btn:not([aria-current="true"]):focus-visible .sign-strip-span {
+  opacity: 0.52;
+}
+
+.sign-strip-btn:focus-visible {
+  outline: 1px solid color-mix(in oklab, var(--color-fg) 28%, transparent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+@media (min-width: 768px) {
+  .sign-strip-belt {
+    min-height: 5.25rem;
+  }
+
+  .sign-strip {
+    padding-block: 0.65rem 0.75rem;
+  }
+
+  .sign-strip-item {
+    min-width: 9.25rem;
+  }
+
+  .sign-strip-name {
+    font-size: 1.05rem;
+  }
+
+  .sign-strip-btn[aria-current="true"] .sign-strip-name {
+    font-size: 1.35rem;
+  }
+
+  .sign-strip-span {
+    font-size: 0.68rem;
+    letter-spacing: 0.22em;
+  }
 }
 
 .birth-chat {
@@ -294,15 +567,16 @@
 }
 
 .birth-chat select,
-.birth-chat input {
+.birth-chat input,
+.path-field {
   color-scheme: dark;
-  font-size: 16px;
-  min-height: 44px;
+  font-size: 16px !important;
+  min-height: 48px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .sign-strip-item {
-    min-width: 7.4rem;
+    min-width: 7.75rem;
   }
 
   .galaxy-title {
@@ -318,10 +592,15 @@
 
   .galaxy-chrome {
     padding-bottom: 0.15rem;
+    gap: 0.35rem;
+  }
+
+  .birth-chat-lines-extra {
+    display: none;
   }
 }
 
-@media (min-width: 721px) {
+@media (min-width: 768px) {
   .galaxy-title {
     font-size: 3.75rem;
   }
@@ -479,6 +758,16 @@
     0 0 0 1px color-mix(in oklab, var(--color-fg) 42%, transparent),
     0 0 10px 3px color-mix(in oklab, var(--color-fg) 32%, transparent),
     0 0 26px 8px color-mix(in oklab, var(--color-fg) 16%, transparent);
+}
+
+/* Title “sign” stays clean; glossary underline reads wrong in the hero line. */
+.galaxy-title .gloss-word {
+  background: none;
+}
+
+.galaxy-title .gloss-word:hover,
+.galaxy-title .gloss-word:focus-visible {
+  background-color: color-mix(in oklab, var(--color-fg) 8%, transparent);
 }
 
 .gloss-card {
