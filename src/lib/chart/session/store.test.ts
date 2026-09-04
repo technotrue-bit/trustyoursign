@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { Nativity } from "@/lib/chart/schema";
+import { useGalaxy } from "@/lib/galaxy/store";
+import { OPEN_T } from "@/lib/galaxy/travel";
 import { useSessionStore } from "./store.ts";
 
 const nativity = {
@@ -30,6 +32,7 @@ describe("session store", () => {
       claim: null,
       surface: "galaxy",
     });
+    useGalaxy.setState({ born: false, moved: false, t: OPEN_T, signIndex: 0 });
   });
 
   it("starts with domain state only", () => {
@@ -75,12 +78,33 @@ describe("session store", () => {
     assert.equal(state.session?.birth.day, 26);
   });
 
-  it("opens a visitor from the library", () => {
-    useSessionStore.getState().openLibraryVisitor(nativity);
+  it("restores open-galaxy travel when closing a galaxy visitor", () => {
+    useGalaxy.setState({ born: false, moved: true, t: 0.72, signIndex: 8 });
+    useSessionStore.getState().openVisitor(nativity, sky);
+    useSessionStore.getState().close();
 
-    const state = useSessionStore.getState();
-    assert.equal(state.session?.origin, "library");
-    assert.equal(state.session?.kind, "visitor");
+    const galaxy = useGalaxy.getState();
+    assert.deepEqual(
+      {
+        born: galaxy.born,
+        moved: galaxy.moved,
+        t: galaxy.t,
+        signIndex: galaxy.signIndex,
+      },
+      { born: true, moved: false, t: OPEN_T, signIndex: 0 },
+    );
+  });
+
+  it("leaves galaxy travel untouched when closing research", () => {
+    useGalaxy.setState({ born: true, moved: true, t: 0.43, signIndex: 5 });
+    const before = useGalaxy.getState();
+    useSessionStore.getState().openResearch("saige", {
+      ...nativity,
+      id: "saige",
+    } as Nativity);
+    useSessionStore.getState().close();
+
+    assert.equal(useGalaxy.getState(), before);
   });
 
   it("opens and patches a shelf session", () => {

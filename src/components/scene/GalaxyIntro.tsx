@@ -49,9 +49,22 @@ import {
 } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { fillMorphCloud, makeSparkMaterial } from "@/lib/galaxy/starRender";
-import { computeBirthChatSlide, lerpToward, computePlateOpacity } from "@/lib/galaxy/birthchat-slide";
+import {
+  computeBirthChatSlide,
+  lerpToward,
+  computePlateOpacity,
+} from "@/lib/galaxy/birthchat-slide";
 import { createDiskSim, disposeDisk, stepDisk } from "@/lib/galaxy/disk";
-import { loadSignArt, preloadSignArt, preloadSignArtRest, hydrateSignArt, artReady, artAspect, primeSignArt, plateReady } from "@/lib/galaxy/signArt";
+import {
+  loadSignArt,
+  preloadSignArt,
+  preloadSignArtRest,
+  hydrateSignArt,
+  artReady,
+  artAspect,
+  primeSignArt,
+  plateReady,
+} from "@/lib/galaxy/signArt";
 import { denseCloud, getSignVolume, primeSignVolumes, volumeChest } from "@/lib/galaxy/signVolume";
 import { buildBirthNebula, makeNebulaMaterial } from "@/lib/galaxy/nebula";
 import { makeStarSprite } from "@/lib/galaxy/celestial";
@@ -70,7 +83,7 @@ import {
   stationT,
   type TempleSign,
 } from "@/lib/galaxy/temple";
-import { useIsEntered, useSession } from "@/lib/chart/session/hooks";
+import { useShelfSession } from "@/lib/chart/session/hooks";
 import { useSessionStore } from "@/lib/chart/session/store";
 import { CelestialSky } from "./CelestialSky";
 import { CornerGalaxies } from "./CornerGalaxies";
@@ -149,12 +162,15 @@ export function GalaxyIntro() {
     primeSignArt("aries");
     primeSignArt("taurus");
     const skyT = window.setTimeout(() => setSky(true), 80);
-    const restT = window.setTimeout(() => {
-      setRest(true);
-      preloadSignArtRest();
-      primeSignVolumes();
-      for (const c of CONSTELLATIONS) primeSignArt(c.id);
-    }, SMALL ? 700 : 480);
+    const restT = window.setTimeout(
+      () => {
+        setRest(true);
+        preloadSignArtRest();
+        primeSignVolumes();
+        for (const c of CONSTELLATIONS) primeSignArt(c.id);
+      },
+      SMALL ? 700 : 480,
+    );
     return () => {
       window.clearTimeout(skyT);
       window.clearTimeout(restT);
@@ -254,8 +270,17 @@ function SignDisk() {
     });
     slideX.current = lerpToward({ current: slideX.current, target: slide.offsetX, dt, rate: 2.2 });
     slideY.current = lerpToward({ current: slideY.current, target: slide.offsetY, dt, rate: 2.2 });
-    scaleBoost.current = lerpToward({ current: scaleBoost.current, target: slide.targetScale, dt, rate: 2.2 });
-    g.position.set(sit.x + chest.x * PLATE_WIDE * 0.55, sit.y + chest.y * (PLATE_WIDE / aspect) * 0.45, sit.z + 0.22);
+    scaleBoost.current = lerpToward({
+      current: scaleBoost.current,
+      target: slide.targetScale,
+      dt,
+      rate: 2.2,
+    });
+    g.position.set(
+      sit.x + chest.x * PLATE_WIDE * 0.55,
+      sit.y + chest.y * (PLATE_WIDE / aspect) * 0.45,
+      sit.z + 0.22,
+    );
     _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
     _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
     g.position.addScaledVector(_camRight, slideX.current);
@@ -278,7 +303,13 @@ function SignDisk() {
   });
   return (
     <group ref={group} visible={false} frustumCulled={false}>
-      <points geometry={sim.geo} material={sim.mat} frustumCulled={false} renderOrder={16} raycast={noopRaycast} />
+      <points
+        geometry={sim.geo}
+        material={sim.mat}
+        frustumCulled={false}
+        renderOrder={16}
+        raycast={noopRaycast}
+      />
     </group>
   );
 }
@@ -300,10 +331,13 @@ function Dust() {
     geometry.setAttribute("aSeed", new BufferAttribute(seed, 1));
     return geometry;
   }, []);
-  useEffect(() => () => {
-    tex.dispose();
-    geo.dispose();
-  }, [tex, geo]);
+  useEffect(
+    () => () => {
+      tex.dispose();
+      geo.dispose();
+    },
+    [tex, geo],
+  );
   useFrame(({ clock }) => {
     const mesh = points.current;
     if (!mesh) return;
@@ -359,7 +393,14 @@ function BirthNebula() {
     mat.uniforms.uOpacity.value = fade;
   });
   return (
-    <points ref={points} geometry={geo} material={mat} frustumCulled={false} renderOrder={12} raycast={noopRaycast} />
+    <points
+      ref={points}
+      geometry={geo}
+      material={mat}
+      frustumCulled={false}
+      renderOrder={12}
+      raycast={noopRaycast}
+    />
   );
 }
 
@@ -384,7 +425,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const slideX = useRef(0);
   const slideY = useRef(0);
   const scaleBoost = useRef(1);
-  const [artTex, setArtTex] = useState<CanvasTexture | null>(() => (eager ? loadSignArt(sign.id) : null));
+  const [artTex, setArtTex] = useState<CanvasTexture | null>(() =>
+    eager ? loadSignArt(sign.id) : null,
+  );
   const n = CLOUD_N;
   const scatter = useRef<Vector3[] | null>(null);
   const starGeo = useMemo(() => {
@@ -472,7 +515,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     });
     slideX.current = lerpToward({ current: slideX.current, target: slide.offsetX, dt, rate: 2.2 });
     slideY.current = lerpToward({ current: slideY.current, target: slide.offsetY, dt, rate: 2.2 });
-    scaleBoost.current = lerpToward({ current: scaleBoost.current, target: slide.targetScale, dt, rate: 2.2 });
+    scaleBoost.current = lerpToward({
+      current: scaleBoost.current,
+      target: slide.targetScale,
+      dt,
+      rate: 2.2,
+    });
 
     g.position.copy(sit);
     g.quaternion.copy(camera.quaternion);
@@ -495,11 +543,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const wide = PLATE_WIDE;
     const arrive = index === 0 ? introAries() : 1;
     const along = smooth(1 - Math.min(1, dist / 0.072));
-    const gather = held
-      ? 1
-      : introPlaying() && index === 0
-        ? Math.max(0.02, arrive)
-        : along;
+    const gather = held ? 1 : introPlaying() && index === 0 ? Math.max(0.02, arrive) : along;
     const plateReveal = held
       ? 1
       : introPlaying() && index === 0
@@ -511,7 +555,14 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       const plateOn = Boolean(artTex && (artReady(artTex) || ready));
       const bornIn = plateReveal;
       // Plate opacity via tested helper — fully opaque during BirthChat, no plateMorphFade.
-      const plateOp = computePlateOpacity({ plateOn, held, focused, fade, bornIn, morphLevel: morphLevel.current });
+      const plateOp = computePlateOpacity({
+        plateOn,
+        held,
+        focused,
+        fade,
+        bornIn,
+        morphLevel: morphLevel.current,
+      });
       art.current.visible = plateOp > 0.04;
       art.current.scale.set(wide, wide / aspect, 1);
       mat.opacity = plateOp;
@@ -536,7 +587,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     mesh.visible = true;
     const morphTarget = picked ? 1 : 0;
     // Faster in (star formation feels snappy), slower out (dissolve back gracefully)
-    const morphRate = prefersReducedMotion() ? 20 : (picked ? 1.8 : 1.2);
+    const morphRate = prefersReducedMotion() ? 20 : picked ? 1.8 : 1.2;
     morphLevel.current += (morphTarget - morphLevel.current) * Math.min(1, dt * morphRate);
     const ml = morphLevel.current;
     const u = coreMat.uniforms;
@@ -591,20 +642,29 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           side={DoubleSide}
         />
       </mesh>
-      <points ref={cores} geometry={starGeo} material={coreMat} frustumCulled={false} raycast={noopRaycast} />
+      <points
+        ref={cores}
+        geometry={starGeo}
+        material={coreMat}
+        frustumCulled={false}
+        raycast={noopRaycast}
+      />
       <BigThreeLights signId={sign.id} />
     </group>
   );
 }
 
 function BigThreeLights({ signId }: { signId: string }) {
-  const session = useSession();
-  const entered = useIsEntered();
-  const shelf = session?.kind === "shelf" ? session : null;
+  const shelf = useShelfSession();
   const natal = shelf?.skyNatal;
-  const held = entered && shelf?.signId === signId;
+  const held = shelf?.signId === signId;
   if (!natal || !held) return null;
-  const spots: { id: "sun" | "moon" | "asc"; p: [number, number, number]; color: string; s: number }[] = [
+  const spots: {
+    id: "sun" | "moon" | "asc";
+    p: [number, number, number];
+    color: string;
+    s: number;
+  }[] = [
     { id: "sun", p: [0, 0.22, 0.55], color: "#e6c98a", s: 0.17 },
     { id: "moon", p: [-1.32, 0.06, 0.28], color: "#d7c4c8", s: 0.14 },
     { id: "asc", p: [1.4, 0.42, 0.22], color: "#c5d0e8", s: 0.13 },
@@ -637,10 +697,8 @@ function BigThreeLights({ signId }: { signId: string }) {
 
 function ChartRing() {
   const group = useRef<Group>(null);
-  const session = useSession();
-  const entered = useIsEntered();
-  const shelf = session?.kind === "shelf" ? session : null;
-  const show = entered && Boolean(shelf?.skyNatal);
+  const shelf = useShelfSession();
+  const show = Boolean(shelf?.skyNatal);
   const signId = shelf?.signId;
   const sprites = useMemo(() => makeCircleTexture(), []);
   useEffect(() => () => sprites.dispose(), [sprites]);
@@ -649,7 +707,10 @@ function ChartRing() {
     if (!g) return;
     g.visible = show;
     if (!show || !signId) return;
-    const i = Math.max(0, TEMPLE_SIGNS.findIndex((s) => s.id === signId));
+    const i = Math.max(
+      0,
+      TEMPLE_SIGNS.findIndex((s) => s.id === signId),
+    );
     const sit = TEMPLE_STATIONS[i] ?? TEMPLE_STATIONS[0]!;
     g.position.set(sit.x, sit.y - 1.1, sit.z);
   });
@@ -755,7 +816,9 @@ function TempleRig() {
       const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
       galaxyTravel.handsOn = hands;
       if (hands && galaxyTravel.hold !== 0) {
-        galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + galaxyTravel.hold * HOLD_FLY * d * 0.22);
+        galaxyTravel.tTarget = clamp01(
+          galaxyTravel.tTarget + galaxyTravel.hold * HOLD_FLY * d * 0.22,
+        );
       }
       galaxyTravel.steer = 0;
     }
@@ -772,10 +835,7 @@ function TempleRig() {
     const vol = getSignVolume(TEMPLE_SIGNS[idx]!.id);
     const plateA = vol?.aspect ?? 16 / 9;
     const shelfOn = state.session?.kind === "shelf";
-    const well =
-      chatting || shelfOn
-        ? { top: 0.12, bottom: 0.48 }
-        : { top: 0.15, bottom: 0.24 };
+    const well = chatting || shelfOn ? { top: 0.12, bottom: 0.48 } : { top: 0.15, bottom: 0.24 };
     const frame = heroFrame(aspect, arriving ? introCam() : 1, plateA, PLATE_WIDE, well);
     const zoom = arriving ? 1 : Math.max(1, galaxyTravel.zoom);
     const pull = 1 - introCam();
@@ -820,7 +880,10 @@ function TempleRig() {
     }
     galaxyTravel.t = t;
     if (galaxyTravel.moved) galaxyTravel.awaken = 1;
-    if (Math.abs(t - lastPub.current) > 0.004 || galaxyTravel.moved !== useGalaxy.getState().moved) {
+    if (
+      Math.abs(t - lastPub.current) > 0.004 ||
+      galaxyTravel.moved !== useGalaxy.getState().moved
+    ) {
       lastPub.current = t;
       publishTravel(t, galaxyTravel.moved);
     }
