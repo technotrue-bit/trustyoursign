@@ -1,12 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import {
   applyProseToNativity,
   birthFingerprint,
   forgeIsReady,
   mergeProseChunks,
   missingProseKeys,
-} from "./forge";
-import type { Nativity } from "./schema";
+} from "./forge.ts";
+import type { Nativity } from "./schema.ts";
 
 describe("birthFingerprint", () => {
   it("is stable for the same birth", () => {
@@ -19,8 +20,8 @@ describe("birthFingerprint", () => {
       minute: 30,
       place: "Austin TX",
     };
-    expect(birthFingerprint(b)).toBe(birthFingerprint({ ...b }));
-    expect(birthFingerprint(b)).toBe("aries|1990-4-1|14:30|austin tx");
+    assert.equal(birthFingerprint(b), birthFingerprint({ ...b }));
+    assert.equal(birthFingerprint(b), "aries|1990-4-1|14:30|austin tx");
   });
 
   it("changes when place or time changes", () => {
@@ -33,16 +34,16 @@ describe("birthFingerprint", () => {
       minute: null,
       place: null,
     };
-    expect(birthFingerprint(base)).not.toBe(birthFingerprint({ ...base, place: "Paris" }));
-    expect(birthFingerprint(base)).not.toBe(birthFingerprint({ ...base, hour: 9, minute: 0 }));
+    assert.notEqual(birthFingerprint(base), birthFingerprint({ ...base, place: "Paris" }));
+    assert.notEqual(birthFingerprint(base), birthFingerprint({ ...base, hour: 9, minute: 0 }));
   });
 });
 
 describe("mergeProseChunks", () => {
   it("never overwrites completed keys", () => {
     const merged = mergeProseChunks({ sky: "old" }, { sky: "new", body: "body" });
-    expect(merged.sky).toBe("old");
-    expect(merged.body).toBe("body");
+    assert.equal(merged.sky, "old");
+    assert.equal(merged.body, "body");
   });
 });
 
@@ -56,14 +57,14 @@ describe("forgeIsReady", () => {
       readings: "e",
       bones: "f",
     };
-    expect(forgeIsReady("{}", "{}", chunks)).toBe(true);
-    expect(forgeIsReady("{}", "{}", { sky: "a" })).toBe(false);
-    expect(forgeIsReady(null, null, chunks)).toBe(false);
-    expect(forgeIsReady("{}", "{}", { sky: "a" }, true)).toBe(true);
+    assert.equal(forgeIsReady("{}", "{}", chunks), true);
+    assert.equal(forgeIsReady("{}", "{}", { sky: "a" }), false);
+    assert.equal(forgeIsReady(null, null, chunks), false);
+    assert.equal(forgeIsReady("{}", "{}", { sky: "a" }, true), true);
   });
 
   it("lists missing keys", () => {
-    expect(missingProseKeys({ sky: "x" })).toEqual(["body", "gates", "machine", "readings", "bones"]);
+    assert.deepEqual(missingProseKeys({ sky: "x" }), ["body", "gates", "machine", "readings", "bones"]);
   });
 });
 
@@ -78,6 +79,6 @@ describe("applyProseToNativity", () => {
       decisionClose: "",
     } as unknown as Nativity;
     const out = applyProseToNativity(nat, { sky: "Forged thesis about the day." });
-    expect(out.meta.thesis).toContain("Forged thesis");
+    assert.match(out.meta.thesis, /Forged thesis/);
   });
 });

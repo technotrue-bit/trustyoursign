@@ -1,30 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import {
   busyFromPhase,
   chatFromPhase,
   phaseAfterCloseBirthChat,
   phaseAfterOpenBirthChat,
   phaseAfterOpenVisitor,
-} from "./vault-phase";
+} from "./vault-phase.ts";
 
 describe("vault-phase", () => {
   it("maps dock to chat alias", () => {
-    expect(chatFromPhase("dock")).toBe(true);
-    expect(chatFromPhase("galaxy")).toBe(false);
-    expect(chatFromPhase("forge")).toBe(false);
-    expect(chatFromPhase("entered")).toBe(false);
+    assert.equal(chatFromPhase("dock"), true);
+    assert.equal(chatFromPhase("galaxy"), false);
+    assert.equal(chatFromPhase("forge"), false);
+    assert.equal(chatFromPhase("entered"), false);
   });
 
   it("busy in dock, forge, or entered", () => {
-    expect(busyFromPhase("galaxy", false)).toBe(false);
-    expect(busyFromPhase("dock", false)).toBe(true);
-    expect(busyFromPhase("forge", false)).toBe(true);
-    expect(busyFromPhase("galaxy", true)).toBe(true);
+    assert.equal(busyFromPhase("galaxy", false), false);
+    assert.equal(busyFromPhase("dock", false), true);
+    assert.equal(busyFromPhase("forge", false), true);
+    assert.equal(busyFromPhase("galaxy", true), true);
   });
 
   it("transition helpers", () => {
-    expect(phaseAfterOpenBirthChat()).toBe("dock");
-    expect(phaseAfterCloseBirthChat()).toBe("galaxy");
-    expect(phaseAfterOpenVisitor()).toBe("entered");
+    assert.equal(phaseAfterOpenBirthChat(), "dock");
+    assert.equal(phaseAfterCloseBirthChat(), "galaxy");
+    assert.equal(phaseAfterOpenVisitor(), "entered");
   });
 });
