@@ -166,6 +166,7 @@ async function persistChart(
   data: NormalizedChartWrite & { id?: string },
 ): Promise<SavedChart> {
   if (data.id) {
+    // full-row replace; callers must send complete fields
     const updated = await sql<ChartRow>`
       update charts set
         label = ${data.label},
