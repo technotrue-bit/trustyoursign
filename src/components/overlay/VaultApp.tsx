@@ -3,7 +3,6 @@ import { getResearchChart } from "@/lib/chart/research";
 import {
   useClaim,
   useSessionKind,
-  useSessionOrigin,
   useSessionStore,
   useSurface,
   useIsEntered,
@@ -26,6 +25,7 @@ import { ClaimShell } from "./ClaimShell";
 import { LibraryShell } from "./LibraryShell";
 import { StarBack } from "./StarBack";
 import { NatalShell } from "./NatalShell";
+import { resolveGate } from "./resolveGate";
 
 export function VaultApp() {
   const [Scene, setScene] = useState<ComponentType | null>(null);
@@ -34,10 +34,9 @@ export function VaultApp() {
   const surface = useSurface();
   const entered = useIsEntered();
   const sessionKind = useSessionKind();
-  const sessionOrigin = useSessionOrigin();
-  const chat = claim !== null && !entered;
-  const gate = sessionOrigin ?? surface;
+  const claiming = claim !== null && !entered;
   const shelf = sessionKind === "shelf";
+  const gate = resolveGate({ entered, claiming, surface });
 
   useEffect(() => {
     if (!shouldUse3D()) {
@@ -109,8 +108,8 @@ export function VaultApp() {
   }, []);
 
   useEffect(() => {
-    galaxyTravel.busy = Boolean(chat || entered);
-  }, [chat, entered]);
+    galaxyTravel.busy = Boolean(claiming || entered);
+  }, [claiming, entered]);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("desk");
@@ -153,11 +152,13 @@ export function VaultApp() {
       ) : (
         <FallbackSky />
       )}
-      {(entered && !shelf) || chat || gate === "library" ? <StarBack /> : null}
-      {!entered && gate === "galaxy" && !chat ? <GalaxyShell /> : null}
-      {!entered && gate === "galaxy" && chat ? <ClaimShell /> : null}
-      {!entered && gate === "library" ? <LibraryShell /> : null}
-      {entered ? <NatalShell /> : null}
+      {(gate === "natal" && !shelf) || gate === "claim" || gate === "library" ? (
+        <StarBack />
+      ) : null}
+      {gate === "galaxy" ? <GalaxyShell /> : null}
+      {gate === "claim" ? <ClaimShell /> : null}
+      {gate === "library" ? <LibraryShell /> : null}
+      {gate === "natal" ? <NatalShell /> : null}
     </main>
   );
 }
