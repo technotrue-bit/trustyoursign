@@ -50,9 +50,14 @@ STOP WHEN: bars met on hot path · or same gap 3 rounds · or you stop the run
 | 1 | build | PENDING critic | Tier A A1–A7 landed; birthchat-slide 19/19, vault-phase 3/3, forge 8/8, tsc clean. BAR(1) Chrome Performance not captured this wave. | Critic must measure mid-session frame time on fly + gather + BirthChat slide against ≤16.7ms / no >50ms long tasks |
 | 2 | build | PASS (builder) BAR(2) | Import graph: `store.ts` + `VaultApp.tsx` static walk → 0 value imports of `three`/`@react-three` (`scripts/check-bar2-import-graph.mjs`). ChartCanvas remains `import()`. birthchat-slide 19/19, vault-phase 3/3, forge+geocode tests green, `tsc` clean. | Blind critic should re-run import graph; overlay thrash not measured in Chrome |
 | 3 | build | PASS (builder) | C1–C5 in `bdd8a10`; forge advance batches keys; lean poll path | Live XAI wall-clock not measured |
+| 4 | integrate | PASS (builder) | Integration: A4 phase mutex intact with B2 lazy overlays (mutex in `GalaxyIntro` SignDisk/BirthNebula/Station; overlays gated by phase only). Reduced-motion: `bootIntro` skip + `prefersReducedMotion` disk freeze + CSS `@media` still present. Forge resume: VaultApp mount still `import("./ChartForge").then(resumeForgeIfAny)`. birthchat-slide math untouched (19/19). Full verify: `npm test` 81 pass / 0 fail; `typecheck` clean; `build` clean. BAR(2) re-run: `threeValueImports: 0`, `threeDynamicOnly: 0`, 54 modules. BAR(1) not measured (no Chrome Performance mid-phone profile this wave — critic-pending). No integration bugs found; no code fixes. | **BAR(1)** Chrome Performance mid-session ≤16.7ms / no >50ms long tasks on mid-phone profile — still critic-pending |
 
 ## Remaining gaps
 
-- **BAR(1)** — needs blind critic Chrome Performance on `/` fly + plate gather + BirthChat slide.
-- Wave 4 integration smooth + reduced-motion sanity after B/C (not run this wave).
-- Wave 2 critic: confirm no overlay thrash from remaining discrete intro flags / hover store.
+- **BAR(1)** — critic-pending: needs blind Chrome Performance on `/` fly + plate gather + BirthChat slide. No FPS/frame-time numbers invented this wave.
+- Overlay thrash (Wave 2 residual) — not measured in Chrome; secondary to BAR(1).
+- Live XAI forge wall-clock (Wave 3 residual) — batching landed; end-to-end timing not measured.
+
+## Close-out
+
+Remediation waves 1–4 are complete (Tier A/B/C + integration). **BAR(2)** and **BAR(3)** are met by builder evidence. Gauntlet is **not fully closed** against the stated STOP WHEN until a blind critic lands **BAR(1)** (or the same gap fails 3 critic rounds / run is stopped).
