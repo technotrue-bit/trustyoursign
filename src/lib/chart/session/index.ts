@@ -43,6 +43,8 @@ export {
 export type { VaultDomainState } from "./actions";
 export { useSessionStore, seekSignFor, resetGalaxyTravel } from "./store";
 export type { SessionStore, ShelfSessionInput } from "./store";
+export { ROOM_CATALOG, roomsFor, canEnter } from "./rooms";
+export type { RoomDef } from "./rooms";
 export {
   useSession,
   useNativity,
