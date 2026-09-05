@@ -24,11 +24,13 @@ import { FallbackSky } from "./FallbackSky";
 import { GalaxyShell } from "./GalaxyShell";
 import { ClaimShell } from "./ClaimShell";
 import { LibraryShell } from "./LibraryShell";
+import { MeshReviewShell, wantsMeshReview } from "./MeshReviewShell";
 import { StarBack } from "./StarBack";
 import { NatalShell } from "./NatalShell";
 import { resolveGate } from "./resolveGate";
 
 export function VaultApp() {
+  const [meshReview] = useState(() => wantsMeshReview());
   const [Scene, setScene] = useState<ComponentType | null>(null);
   const [sceneFailed, setSceneFailed] = useState(false);
   const claim = useClaim();
@@ -144,6 +146,9 @@ export function VaultApp() {
         .catch(() => clean());
     }
   }, []);
+
+  // Isolated mesh-review stage — keeps GalaxyIntro / plate hydrate path untouched.
+  if (meshReview) return <MeshReviewShell />;
 
   return (
     <main
