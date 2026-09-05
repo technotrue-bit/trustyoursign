@@ -10,6 +10,7 @@ import {
   visitorBirth,
   visitorSign,
 } from "./factories.ts";
+import { canEnter } from "./rooms.ts";
 
 const birth = {
   year: 2004,
@@ -88,6 +89,43 @@ describe("session factories", () => {
     assert.equal(s.birth.month, 9);
     assert.equal(s.birth.day, 2);
     assert.equal(s.signId, "virgo");
+  });
+
+  it("fromVisitor coerces illegal mode to sky", () => {
+    const s = fromVisitor({
+      nativity: nat,
+      skyNatal: sky,
+      birth,
+      signId: "leo",
+      origin: "galaxy",
+      mode: "gates",
+    });
+    assert.equal(s.mode, "sky");
+    assert.equal(canEnter(s.kind, s.mode), true);
+  });
+
+  it("fromResearch preserves legal mode", () => {
+    const book = { id: "joey", meta: { name: "Joey" } } as Nativity;
+    const s = fromResearch({
+      chartKey: "joey",
+      nativity: book,
+      mode: "gates",
+    });
+    assert.equal(s.mode, "gates");
+    assert.equal(canEnter(s.kind, s.mode), true);
+  });
+
+  it("fromShelf coerces illegal mode to ask", () => {
+    const s = fromShelf({
+      signId: "virgo",
+      birth,
+      skyNatal: sky,
+      label: "Sam",
+      origin: "library",
+      mode: "body",
+    });
+    assert.equal(s.mode, "ask");
+    assert.equal(canEnter(s.kind, s.mode), true);
   });
 
   it("fromShelf allows null nativity and defaults mode ask", () => {
