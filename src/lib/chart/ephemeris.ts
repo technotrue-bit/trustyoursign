@@ -300,9 +300,25 @@ export function computeBigThree(date: Date, place: GeoPlace): Omit<SkyNatal, "to
   return bigThreeFromCast(computeNatalCast(date, place));
 }
 
+/** Process-local geocode cache keyed by normalized place string. */
+const geocodeCache = new Map<string, GeoPlace>();
+
+export function normalizeGeocodeQuery(query: string): string {
+  return query.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 120);
+}
+
+/** Test / process reset — clears the in-memory geocode cache. */
+export function clearGeocodeCache(): void {
+  geocodeCache.clear();
+}
+
 export async function geocodePlace(query: string): Promise<GeoPlace> {
   const q = query.trim().slice(0, 120);
   if (q.length < 2) throw new Error("Name the place.");
+  const cacheKey = normalizeGeocodeQuery(q);
+  const cached = geocodeCache.get(cacheKey);
+  if (cached) return cached;
+
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`;
   const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
   if (!res.ok) throw new Error("The place could not be found.");
@@ -312,10 +328,12 @@ export async function geocodePlace(query: string): Promise<GeoPlace> {
   const hit = body.results?.[0];
   if (!hit) throw new Error("The place could not be found.");
   const bits = [hit.name, hit.admin1, hit.country].filter(Boolean);
-  return {
+  const place: GeoPlace = {
     name: bits.join(", "),
     lat: hit.latitude,
     lon: hit.longitude,
     timeZone: hit.timezone || "UTC",
   };
+  geocodeCache.set(cacheKey, place);
+  return place;
 }

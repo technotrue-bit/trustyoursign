@@ -48,6 +48,8 @@ const globalRef = globalThis as typeof globalThis & {
   __pgSqlPromise__?: Promise<Sql>;
   __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
   __pgliteMigrateChain__?: Promise<void>;
+  /** One Neon Pool per process — shared by app SQL and Better Auth. */
+  __neonPool__?: import("pg").Pool;
 };
 
 /**
@@ -85,6 +87,25 @@ function toSql(run: Run): Sql {
   return sql;
 }
 
+/**
+ * Shared Neon `Pool` for app SQL and Better Auth. One pool per process.
+ * Pass the `pg.Pool` constructor when calling from a module that already
+ * statically imports `pg` (auth server); otherwise this loads `pg` once.
+ */
+export function getNeonPool(PoolCtor?: typeof import("pg").Pool): import("pg").Pool {
+  if (!databaseUrl) {
+    throw new Error("getNeonPool() requires DATABASE_URL");
+  }
+  if (globalRef.__neonPool__) return globalRef.__neonPool__;
+  if (!PoolCtor) {
+    throw new Error(
+      "Neon pool not initialized — call getNeonPool(Pool) from auth or await getSql() first",
+    );
+  }
+  globalRef.__neonPool__ = new PoolCtor({ connectionString: databaseUrl });
+  return globalRef.__neonPool__;
+}
+
 function createNeonSql(): Promise<Sql> {
   globalRef.__pgSqlPromise__ ??= (async () => {
     // Regular Postgres driver: node-postgres (`pg`) — works directly with Neon's
@@ -93,7 +114,7 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_INT8, Number);
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
-    const pool = new Pool({ connectionString: databaseUrl });
+    const pool = getNeonPool(Pool);
     return toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];

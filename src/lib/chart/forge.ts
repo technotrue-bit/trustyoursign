@@ -5,6 +5,15 @@ import type { SignId } from "./types";
 export const FORGE_PROSE_KEYS = ["sky", "body", "gates", "machine", "readings", "bones"] as const;
 export type ForgeProseKey = (typeof FORGE_PROSE_KEYS)[number];
 
+/** Max prose keys one `advanceForge` call generates in parallel (bounded batch). */
+export const FORGE_PROSE_BATCH = 3;
+
+/** Next keys to forge in one advance — never more than `FORGE_PROSE_BATCH`. */
+export function proseAdvanceBatch(missing: ForgeProseKey[], limit = FORGE_PROSE_BATCH): ForgeProseKey[] {
+  const n = Math.max(0, Math.min(limit, FORGE_PROSE_BATCH, missing.length));
+  return missing.slice(0, n);
+}
+
 export type ForgeStatus = "pending" | "running" | "partial" | "ready" | "abandoned" | "failed";
 
 export type ForgeBirth = {

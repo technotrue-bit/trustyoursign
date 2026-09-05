@@ -14,9 +14,11 @@ import {
   mergeProseChunks,
   missingProseKeys,
   parseChunks,
+  proseAdvanceBatch,
   type ForgeBirth,
   type ForgeJobView,
   type ForgeProseChunks,
+  type ForgeProseKey,
   type ForgeStatus,
 } from "./forge";
 
@@ -33,6 +35,25 @@ type ForgeRow = {
   prose_chunks: string;
   error: string | null;
 };
+
+/** Lean poll row — no cast/nativity blobs; has_cast is a boolean flag from SQL. */
+type ForgeLeanRow = {
+  id: string;
+  user_id: string | null;
+  anon_key: string;
+  fingerprint: string;
+  status: string;
+  sign_id: string;
+  birth_json: string;
+  prose_chunks: string;
+  error: string | null;
+  has_cast: boolean;
+};
+
+const FORGE_LEAN_COLS = `id, user_id, anon_key, fingerprint, status, sign_id, birth_json, prose_chunks, error,
+  (cast_json is not null and nativity_json is not null) as has_cast`;
+
+const FORGE_FULL_COLS = `id, user_id, anon_key, fingerprint, status, sign_id, birth_json, cast_json, nativity_json, prose_chunks, error`;
 
 function newId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -102,11 +123,51 @@ function viewFromRow(row: ForgeRow, proseError?: string | null): ForgeJobView {
   };
 }
 
+/** Lean client view for poll / in-progress — omits sky/nativity blobs. */
+function viewFromLean(row: ForgeLeanRow, proseError?: string | null): ForgeJobView {
+  const birth = parseBirth(row.birth_json, row.sign_id as SignId);
+  const chunks = parseChunks(row.prose_chunks);
+  return {
+    id: row.id,
+    status: asStatus(row.status),
+    fingerprint: row.fingerprint,
+    signId: row.sign_id as SignId,
+    birth,
+    hasCast: Boolean(row.has_cast),
+    chunks,
+    missing: missingProseKeys(chunks),
+    error: row.error,
+    sky: null,
+    nativity: null,
+    proseError: proseError ?? null,
+  };
+}
+
+/** Prefer full blobs only when ready; otherwise omit sky/nativity from the response. */
+function viewForClient(row: ForgeRow, proseError?: string | null): ForgeJobView {
+  if (asStatus(row.status) === "ready") return viewFromRow(row, proseError);
+  const chunks = parseChunks(row.prose_chunks);
+  return {
+    id: row.id,
+    status: asStatus(row.status),
+    fingerprint: row.fingerprint,
+    signId: row.sign_id as SignId,
+    birth: parseBirth(row.birth_json, row.sign_id as SignId),
+    hasCast: castReady(row.cast_json, row.nativity_json),
+    chunks,
+    missing: missingProseKeys(chunks),
+    error: row.error,
+    sky: null,
+    nativity: null,
+    proseError: proseError ?? null,
+  };
+}
+
 async function loadActiveJob(anonKey: string, fingerprint: string, userId: string | null) {
   const sql = await getSql();
   if (userId) {
     const rows = await sql.query<ForgeRow>(
-      `select * from chart_forge
+      `select ${FORGE_FULL_COLS} from chart_forge
        where fingerprint = $1 and status <> 'abandoned'
          and (user_id = $2 or anon_key = $3)
        order by updated_at desc limit 1`,
@@ -115,7 +176,7 @@ async function loadActiveJob(anonKey: string, fingerprint: string, userId: strin
     return rows[0] ?? null;
   }
   const rows = await sql.query<ForgeRow>(
-    `select * from chart_forge
+    `select ${FORGE_FULL_COLS} from chart_forge
      where fingerprint = $1 and anon_key = $2 and status <> 'abandoned'
      order by updated_at desc limit 1`,
     [fingerprint, anonKey],
@@ -126,7 +187,16 @@ async function loadActiveJob(anonKey: string, fingerprint: string, userId: strin
 async function loadById(id: string, anonKey: string) {
   const sql = await getSql();
   const rows = await sql.query<ForgeRow>(
-    `select * from chart_forge where id = $1 and (anon_key = $2 or anon_key = $2) limit 1`,
+    `select ${FORGE_FULL_COLS} from chart_forge where id = $1 and anon_key = $2 limit 1`,
+    [id, anonKey],
+  );
+  return rows[0] ?? null;
+}
+
+async function loadLeanById(id: string, anonKey: string) {
+  const sql = await getSql();
+  const rows = await sql.query<ForgeLeanRow>(
+    `select ${FORGE_LEAN_COLS} from chart_forge where id = $1 and anon_key = $2 limit 1`,
     [id, anonKey],
   );
   return rows[0] ?? null;
@@ -176,7 +246,7 @@ export const startOrResumeForge = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<ForgeJobView> => {
     const fingerprint = birthFingerprint(data.birth);
     const existing = await loadActiveJob(data.anonKey, fingerprint, data.userId);
-    if (existing) return viewFromRow(existing);
+    if (existing) return viewForClient(existing);
 
     const id = newId();
     const sql = await getSql();
@@ -198,7 +268,7 @@ export const startOrResumeForge = createServerFn({ method: "POST" })
     );
     const row = await loadById(id, data.anonKey);
     if (!row) throw new Error("Forge job could not be created.");
-    return viewFromRow(row);
+    return viewForClient(row);
   });
 
 export const getForgeStatus = createServerFn({ method: "POST" })
@@ -208,9 +278,15 @@ export const getForgeStatus = createServerFn({ method: "POST" })
   }))
   .handler(async ({ data }): Promise<ForgeJobView> => {
     if (data.anonKey.length < 8 || !data.jobId) throw new Error("Missing forge session.");
-    const row = await loadById(data.jobId, data.anonKey);
-    if (!row) throw new Error("Forge job not found.");
-    return viewFromRow(row);
+    // Lean poll: never select cast_json / nativity_json unless ready.
+    const lean = await loadLeanById(data.jobId, data.anonKey);
+    if (!lean) throw new Error("Forge job not found.");
+    if (asStatus(lean.status) === "ready") {
+      const full = await loadById(data.jobId, data.anonKey);
+      if (!full) throw new Error("Forge job not found.");
+      return viewFromRow(full);
+    }
+    return viewFromLean(lean);
   });
 
 export const findActiveForge = createServerFn({ method: "POST" })
@@ -221,22 +297,28 @@ export const findActiveForge = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<ForgeJobView | null> => {
     if (data.anonKey.length < 8) return null;
     const sql = await getSql();
-    const rows = data.userId
-      ? await sql.query<ForgeRow>(
-          `select * from chart_forge
+    // Lean first — only pull blobs when the active job is ready (resume into chart).
+    const leanRows = data.userId
+      ? await sql.query<ForgeLeanRow>(
+          `select ${FORGE_LEAN_COLS} from chart_forge
            where status in ('pending','running','partial','ready')
              and (user_id = $1 or anon_key = $2)
            order by updated_at desc limit 1`,
           [data.userId, data.anonKey],
         )
-      : await sql.query<ForgeRow>(
-          `select * from chart_forge
+      : await sql.query<ForgeLeanRow>(
+          `select ${FORGE_LEAN_COLS} from chart_forge
            where status in ('pending','running','partial','ready') and anon_key = $1
            order by updated_at desc limit 1`,
           [data.anonKey],
         );
-    const row = rows[0];
-    return row ? viewFromRow(row) : null;
+    const lean = leanRows[0];
+    if (!lean) return null;
+    if (asStatus(lean.status) === "ready") {
+      const full = await loadById(lean.id, data.anonKey);
+      return full ? viewFromRow(full) : null;
+    }
+    return viewFromLean(lean);
   });
 
 export const abandonForge = createServerFn({ method: "POST" })
@@ -309,7 +391,7 @@ export const advanceForge = createServerFn({ method: "POST" })
         );
       }
       const next = await loadById(data.jobId, data.anonKey);
-      return viewFromRow(next!);
+      return viewForClient(next!);
     }
 
     const chunks = parseChunks(row.prose_chunks);
@@ -329,22 +411,47 @@ export const advanceForge = createServerFn({ method: "POST" })
       return viewFromRow(next!);
     }
 
-    const key = missing[0]!;
+    const batch = proseAdvanceBatch(missing);
     let nativity = JSON.parse(row.nativity_json!) as Nativity;
     const sky = JSON.parse(row.cast_json!) as SkyNatal;
     try {
       const { generateForgeProseChunk } = await import("./forge-prose.server");
-      const text = await generateForgeProseChunk(key, nativity, sky, birth);
-      if (!text) {
-        proseError = "Prose could not be written for this room.";
+      const settled = await Promise.allSettled(
+        batch.map(async (key) => {
+          const text = await generateForgeProseChunk(key, nativity, sky, birth);
+          return { key, text } as { key: ForgeProseKey; text: string | null };
+        }),
+      );
+
+      const incoming: ForgeProseChunks = {};
+      let anyOk = false;
+      let hardFail: string | null = null;
+      for (const result of settled) {
+        if (result.status === "fulfilled") {
+          const { key, text } = result.value;
+          if (text) {
+            incoming[key] = text;
+            anyOk = true;
+          } else if (!proseError) {
+            proseError = "Prose could not be written for this room.";
+          }
+        } else {
+          hardFail = result.reason instanceof Error ? result.reason.message : "Prose failed.";
+        }
+      }
+
+      if (!anyOk) {
+        proseError = proseError ?? hardFail ?? "Prose could not be written for this room.";
         await sql.query(
           `update chart_forge set status = 'partial', error = $1, updated_at = now() where id = $2`,
           [proseError, row.id],
         );
       } else {
-        const merged: ForgeProseChunks = mergeProseChunks(chunks, { [key]: text });
+        const merged: ForgeProseChunks = mergeProseChunks(chunks, incoming);
         nativity = applyProseToNativity(nativity, merged);
         const ready = forgeIsReady(row.cast_json, JSON.stringify(nativity), merged);
+        // Some keys in the batch may have failed — keep running; surface soft error to client.
+        if (hardFail && !ready) proseError = hardFail;
         await sql.query(
           `update chart_forge
            set prose_chunks = $1, nativity_json = $2, status = $3, error = null, updated_at = now()
@@ -361,5 +468,5 @@ export const advanceForge = createServerFn({ method: "POST" })
     }
 
     const next = await loadById(data.jobId, data.anonKey);
-    return viewFromRow(next!, proseError);
+    return viewForClient(next!, proseError);
   });

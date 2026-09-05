@@ -3,11 +3,14 @@ import assert from "node:assert/strict";
 import {
   applyProseToNativity,
   birthFingerprint,
+  FORGE_PROSE_BATCH,
   forgeIsReady,
   mergeProseChunks,
   missingProseKeys,
+  proseAdvanceBatch,
 } from "./forge.ts";
 import type { Nativity } from "./schema.ts";
+import type { ForgeProseKey } from "./forge.ts";
 
 describe("birthFingerprint", () => {
   it("is stable for the same birth", () => {
@@ -80,5 +83,19 @@ describe("applyProseToNativity", () => {
     } as unknown as Nativity;
     const out = applyProseToNativity(nat, { sky: "Forged thesis about the day." });
     assert.match(out.meta.thesis, /Forged thesis/);
+  });
+});
+
+describe("proseAdvanceBatch", () => {
+  it("bounds parallel keys to FORGE_PROSE_BATCH", () => {
+    const missing: ForgeProseKey[] = ["sky", "body", "gates", "machine", "readings", "bones"];
+    const batch = proseAdvanceBatch(missing);
+    assert.equal(batch.length, FORGE_PROSE_BATCH);
+    assert.deepEqual(batch, ["sky", "body", "gates"]);
+  });
+
+  it("returns fewer when missing is short", () => {
+    assert.deepEqual(proseAdvanceBatch(["bones"]), ["bones"]);
+    assert.deepEqual(proseAdvanceBatch([]), []);
   });
 });

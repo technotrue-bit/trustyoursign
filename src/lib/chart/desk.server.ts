@@ -50,10 +50,27 @@ export function parseDesk(raw: unknown): AiDesk {
   };
 }
 
+/** Process memo — avoids a DB round-trip on every AI call until save invalidates. */
+const deskMemoRef = globalThis as typeof globalThis & {
+  __vaultDeskMemo__?: AiDesk | null;
+  __vaultDeskMemoPromise__?: Promise<AiDesk> | null;
+};
+
 export async function loadDesk(): Promise<AiDesk> {
-  const sql = await getSql();
-  const rows = await sql<{ ai_json: unknown }>`select ai_json from site_state where id = 'vault'`;
-  return parseDesk(rows[0]?.ai_json);
+  if (deskMemoRef.__vaultDeskMemo__) return deskMemoRef.__vaultDeskMemo__;
+  if (deskMemoRef.__vaultDeskMemoPromise__) return deskMemoRef.__vaultDeskMemoPromise__;
+
+  deskMemoRef.__vaultDeskMemoPromise__ = (async () => {
+    const sql = await getSql();
+    const rows = await sql<{ ai_json: unknown }>`select ai_json from site_state where id = 'vault'`;
+    const desk = parseDesk(rows[0]?.ai_json);
+    deskMemoRef.__vaultDeskMemo__ = desk;
+    return desk;
+  })().finally(() => {
+    deskMemoRef.__vaultDeskMemoPromise__ = null;
+  });
+
+  return deskMemoRef.__vaultDeskMemoPromise__;
 }
 
 export async function saveDesk(desk: AiDesk) {
@@ -61,6 +78,15 @@ export async function saveDesk(desk: AiDesk) {
   await sql`
     update site_state set ai_json = ${JSON.stringify(desk)}::jsonb where id = 'vault'
   `;
+  // Invalidate so the next loadDesk re-reads (or sees a concurrent write).
+  deskMemoRef.__vaultDeskMemo__ = null;
+  deskMemoRef.__vaultDeskMemoPromise__ = null;
+}
+
+/** Test helper — clear process desk memo. */
+export function clearDeskMemo(): void {
+  deskMemoRef.__vaultDeskMemo__ = null;
+  deskMemoRef.__vaultDeskMemoPromise__ = null;
 }
 
 export async function assertOwner(userId: string) {

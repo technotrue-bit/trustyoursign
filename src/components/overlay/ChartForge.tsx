@@ -104,7 +104,13 @@ export function ChartForge() {
         </h2>
         <p className="mt-6 min-h-[3.5rem] text-sm leading-relaxed text-fg-muted md:text-base">{wit}</p>
         <p className="mt-4 text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
-          {job?.hasCast ? (job.missing.length ? `Prose · ${job.missing[0]}` : "Ready") : "Casting the table"}
+          {job?.hasCast
+            ? job.missing.length
+              ? job.missing.length === 1
+                ? `Prose · ${job.missing[0]}`
+                : `Prose · ${job.missing.length} rooms`
+              : "Ready"
+            : "Casting the table"}
         </p>
         {err ? <p className="mt-3 text-sm text-wine">{err}</p> : null}
         <div className="mt-10 flex flex-col items-center gap-3">
