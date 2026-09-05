@@ -240,15 +240,6 @@ export const upsertChart = createServerFn({ method: "POST" })
     return persistChart(sql, context.userId, data);
   });
 
-export const saveChart = createServerFn({ method: "POST" })
-  .validator((input: ChartWriteInput) => normalizeChartWrite(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    const row = await persistChart(sql, context.userId, data);
-    return { id: row.id };
-  });
-
 export const deleteChart = createServerFn({ method: "POST" })
   .validator((id: string) => {
     const v = id.trim();

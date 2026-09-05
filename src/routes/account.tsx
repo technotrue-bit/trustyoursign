@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { acceptLegal, deleteAllMyData, deleteChart, listCharts, saveChart, type SavedChart } from "@/lib/charts";
+import { acceptLegal, deleteAllMyData, deleteChart, listCharts, upsertChart, type SavedChart } from "@/lib/charts";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { daysForSign, monthsForSign } from "@/lib/chart/sun";
 import type { SignId } from "@/lib/chart/types";
@@ -249,7 +249,7 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
         e.preventDefault();
         setBusy(true);
         try {
-          await saveChart({
+          await upsertChart({
             data: {
               label: relation === "self" ? "My chart" : personName.trim(),
               relation,
