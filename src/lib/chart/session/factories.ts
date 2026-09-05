@@ -3,7 +3,15 @@ import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { AppMode, ResearchChartId, Selection, SignId } from "@/lib/chart/types";
 import { isDateInSign } from "@/lib/chart/sun";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
-import type { BirthFacts, ChartSession, Surface } from "./types";
+import type { BirthFacts, ChartSession, SessionKind, Surface } from "./types";
+import { canEnter, roomsFor } from "./rooms";
+
+function safeMode(kind: SessionKind, mode: AppMode | undefined, fallback: AppMode): AppMode {
+  const candidate = mode ?? fallback;
+  if (canEnter(kind, candidate)) return candidate;
+  if (canEnter(kind, fallback)) return fallback;
+  return roomsFor(kind)[0]?.id ?? fallback;
+}
 
 const MONTHS = [
   "january",
@@ -72,6 +80,7 @@ export function fromVisitor(input: {
   tone?: "vault" | "warm";
   savedId?: string;
   id?: string;
+  mode?: AppMode;
 }): ChartSession {
   return {
     id: input.id ?? newSessionId(),
@@ -87,7 +96,7 @@ export function fromVisitor(input: {
     nativity: input.nativity,
     skyNatal: input.skyNatal,
     origin: input.origin,
-    mode: "sky",
+    mode: safeMode("visitor", input.mode, "sky"),
     selection: null,
     hovered: null,
     tourBeat: null,
@@ -121,7 +130,7 @@ export function fromResearch(input: {
     nativity: input.nativity,
     skyNatal: null,
     origin: input.origin ?? "library",
-    mode: input.mode ?? "sky",
+    mode: safeMode("research", input.mode, "sky"),
     selection: input.selection ?? null,
     hovered: null,
     tourBeat: input.tourBeat ?? null,
@@ -158,7 +167,7 @@ export function fromShelf(input: {
     nativity: input.nativity ?? null,
     skyNatal: input.skyNatal,
     origin: input.origin,
-    mode: input.mode ?? "ask",
+    mode: safeMode("shelf", input.mode, "ask"),
     selection: null,
     hovered: null,
     tourBeat: null,
