@@ -10,7 +10,10 @@ import { isSmallGpu } from "@/lib/gpu";
 import { sampleVolumeAlpha, volumeChest } from "./signVolume";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
-export const DISK_N = SMALL ? 2200 : 4800;
+/** Cap desktop N — full 4800 × 8 wells was a frame killer (A1). */
+export const DISK_N = SMALL ? 1600 : 2800;
+/** Birth-phase budget so nebula + disk + station never all run full-count (A4). */
+export const DISK_N_BIRTH = SMALL ? 700 : 1100;
 
 const G = 0.55;
 const EPS2 = 0.045;
@@ -75,10 +78,11 @@ export type DiskSim = {
   from: SignId;
   to: SignId;
   mix: number;
+  /** Last paint mix — skip color upload when settled and frozen. */
+  paintedMix: number;
 };
 
-export function createDiskSim(): DiskSim {
-  const n = DISK_N;
+export function createDiskSim(n = DISK_N): DiskSim {
   const pos = new Float32Array(n * 3);
   const vel = new Float32Array(n * 3);
   const col = new Float32Array(n * 3);
@@ -89,6 +93,7 @@ export function createDiskSim(): DiskSim {
   geo.setAttribute("position", new BufferAttribute(pos, 3));
   geo.setAttribute("aColor", new BufferAttribute(col, 3));
   geo.setAttribute("aSize", new BufferAttribute(size, 1));
+  geo.setDrawRange(0, n);
   const mat = new ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -131,7 +136,7 @@ export function createDiskSim(): DiskSim {
       }
     `,
   });
-  return { n, pos, vel, col, geo, mat, from: "aries", to: "aries", mix: 1 };
+  return { n, pos, vel, col, geo, mat, from: "aries", to: "aries", mix: 1, paintedMix: 1 };
 }
 
 function seedDisk(pos: Float32Array, vel: Float32Array, size: Float32Array, n: number, p: Preset) {
@@ -168,6 +173,10 @@ function paintDisk(col: Float32Array, pos: Float32Array, n: number, a: Preset, b
   }
 }
 
+/**
+ * Step disk gravity. Returns whether GPU attrs need upload (A1 dirty flag).
+ * When `mix` is near 0/1, skips chakra wells + volume sampling (settled path).
+ */
 export function stepDisk(
   sim: DiskSim,
   dt: number,
@@ -177,24 +186,30 @@ export function stepDisk(
   ptrY: number,
   ptrOn: boolean,
   freeze: boolean,
-) {
+  activeCount = sim.n,
+): boolean {
   const pTo = PRESET[sign] ?? PRESET.aries;
   if (sim.to !== sign) {
     sim.from = sim.to;
     sim.to = sign;
     sim.mix = 0;
   }
+  const prevMix = sim.mix;
   sim.mix = Math.min(1, sim.mix + dt / 1.2);
   const pFrom = PRESET[sim.from] ?? pTo;
   const core = pFrom.core + (pTo.core - pFrom.core) * sim.mix;
   const spin = pFrom.spin + (pTo.spin - pFrom.spin) * sim.mix;
   const tight = pFrom.tight + (pTo.tight - pFrom.tight) * sim.mix;
-  const { n, pos, vel, col } = sim;
+  const { pos, vel, col } = sim;
+  const n = Math.max(1, Math.min(sim.n, Math.floor(activeCount)));
   const step = Math.min(0.033, Math.max(0.001, dt));
   const stir = ptrOn ? 1 : 0;
-  const chest = volumeChest(sign);
+  const settled = sim.mix < 0.04 || sim.mix > 0.96;
+  const chest = settled ? null : volumeChest(sign);
+  let moved = false;
 
   if (!freeze) {
+    moved = true;
     for (let i = 0; i < n; i++) {
       const o = i * 3;
       let x = pos[o]!;
@@ -208,18 +223,28 @@ export function stepDisk(
       ax += -G * core * x * inv;
       ay += -G * core * y * inv;
       az += -G * core * z * inv;
-      for (let k = 0; k < 7; k++) {
-        const well = DISK_CHAKRAS[k]!;
-        const w0 = pFrom.w[k]! + (pTo.w[k]! - pFrom.w[k]!) * sim.mix;
-        const w = w0 * (focus === well.id ? 2.6 : 1);
-        const dx = x - 0;
-        const dy = y - well.y * 0.72;
-        const dz = z - 0;
-        const d2 = dx * dx + dy * dy + dz * dz + EPS2;
-        const f = (-G * well.mass * w) / Math.pow(d2, 1.5);
-        ax += dx * f;
-        ay += dy * f;
-        az += dz * f;
+      if (!settled) {
+        for (let k = 0; k < 7; k++) {
+          const well = DISK_CHAKRAS[k]!;
+          const w0 = pFrom.w[k]! + (pTo.w[k]! - pFrom.w[k]!) * sim.mix;
+          const w = w0 * (focus === well.id ? 2.6 : 1);
+          const dx = x - 0;
+          const dy = y - well.y * 0.72;
+          const dz = z - 0;
+          const d2 = dx * dx + dy * dy + dz * dz + EPS2;
+          const f = (-G * well.mass * w) / Math.pow(d2, 1.5);
+          ax += dx * f;
+          ay += dy * f;
+          az += dz * f;
+        }
+        const u = x / (pTo.r * 1.35) * 0.5 + 0.5 + chest!.x;
+        const v = y / (pTo.r * 1.15) * 0.5 + 0.5 + chest!.y * 0.2;
+        const alpha = sampleVolumeAlpha(sign, u, v);
+        if (alpha < 0.08) {
+          ax += -x * 2.4 * tight;
+          ay += (chest!.y * 0.4 - y) * 2.1;
+          az += -z * 2.4 * tight;
+        }
       }
       ax += -z * spin * 0.15;
       az += x * spin * 0.15;
@@ -228,14 +253,6 @@ export function stepDisk(
         ay += -ptrY * 0.4;
         ax += -z * 0.22 * stir;
         az += x * 0.22 * stir;
-      }
-      const u = x / (pTo.r * 1.35) * 0.5 + 0.5 + chest.x;
-      const v = y / (pTo.r * 1.15) * 0.5 + 0.5 + chest.y * 0.2;
-      const alpha = sampleVolumeAlpha(sign, u, v);
-      if (alpha < 0.08) {
-        ax += -x * 2.4 * tight;
-        ay += (chest.y * 0.4 - y) * 2.1;
-        az += -z * 2.4 * tight;
       }
       const rx = pTo.r * 1.15;
       const ry = pTo.r * 0.55;
@@ -256,9 +273,17 @@ export function stepDisk(
       pos[o + 2] = z + vel[o + 2]! * step;
     }
   }
-  paintDisk(col, pos, n, pFrom, pTo, sim.mix);
-  sim.geo.attributes.position!.needsUpdate = true;
-  sim.geo.attributes.aColor!.needsUpdate = true;
+
+  const mixDirty = Math.abs(sim.mix - prevMix) > 0.0005 || Math.abs(sim.mix - sim.paintedMix) > 0.002;
+  const dirty = moved || mixDirty;
+  if (dirty) {
+    paintDisk(col, pos, n, pFrom, pTo, sim.mix);
+    sim.paintedMix = sim.mix;
+    sim.geo.attributes.position!.needsUpdate = true;
+    sim.geo.attributes.aColor!.needsUpdate = true;
+  }
+  sim.geo.setDrawRange(0, n);
+  return dirty;
 }
 
 export function disposeDisk(sim: DiskSim) {

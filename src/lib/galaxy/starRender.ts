@@ -82,6 +82,7 @@ void main() {
 `;
 
 export const STAR_FRAG = /* glsl */ `
+uniform float uCheap;
 varying vec3 vColor;
 varying float vAlpha;
 varying float vSpike;
@@ -89,6 +90,13 @@ void main() {
   vec2 d = gl_PointCoord - vec2(0.5);
   float r2 = dot(d, d);
   if (r2 > 0.25) discard;
+  // Cheap path when morph idle (A2) — soft disc, no spikes.
+  if (uCheap > 0.5) {
+    float s = exp(-r2 * 56.0) * vAlpha;
+    if (s < 0.02) discard;
+    gl_FragColor = vec4(vColor * s, s);
+    return;
+  }
   float core = exp(-r2 * 92.0);
   float glow = exp(-r2 * 12.0) * 0.18;
   float ax = abs(d.x);
@@ -117,6 +125,7 @@ export function makeSparkMaterial() {
       uBaseSize: { value: 2.05 },
       uMorph: { value: 0 },
       uGlyphBiasX: { value: 0 },
+      uCheap: { value: 1 },
       uTint: { value: new Color("#f0d4c6") },
     },
     vertexShader: STAR_VERT,

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { AdditiveBlending, DoubleSide, PerspectiveCamera, type ShaderMaterial } from "three";
 import {
+  ARM_N_FULL,
+  ARM_N_LOD,
   GALAXY_ORIGIN,
   GALAXY_TILT,
   buildGalaxy,
@@ -9,7 +11,7 @@ import {
   makeHazeSprite,
   makeStarSprite,
 } from "@/lib/galaxy/celestial";
-import { introArms, introBulge, introField, introHaze } from "@/lib/galaxy/intro";
+import { introArms, introBulge, introField, introHaze, introPlaying } from "@/lib/galaxy/intro";
 import { buildNearSky, makeNearSkyMaterial } from "@/lib/galaxy/nearSky";
 import { TEMPLE_STATIONS, stationFromT } from "@/lib/galaxy/temple";
 import { galaxyTravel } from "@/lib/galaxy/travel";
@@ -71,15 +73,22 @@ export function CelestialSky() {
     const haze = introHaze();
     const bulge = introBulge();
     const arms = introArms();
+    const birth = introPlaying();
     matField.uniforms.uOpacity.value = 0.7 * field;
     matNear.uniforms.uOpacity.value = 0.5 * field;
     matBulge.uniforms.uOpacity.value = 0.95 * bulge;
     matArms.uniforms.uOpacity.value = 0.78 * arms;
+    // LOD after intro: thinner arms; merge near into field budget by hiding near (A3).
+    const armDraw = birth ? ARM_N_FULL : ARM_N_LOD;
+    layers.arms.setDrawRange(0, armDraw);
     if (fieldPts.current) fieldPts.current.visible = field > 0.02;
     if (nearPts.current) {
-      nearPts.current.visible = field > 0.02;
-      const sit = TEMPLE_STATIONS[stationFromT(galaxyTravel.t)] ?? TEMPLE_STATIONS[0]!;
-      nearPts.current.position.lerp(sit, 0.07);
+      // During birth keep near accents; post-intro field covers the role (merged budget).
+      nearPts.current.visible = birth && field > 0.02;
+      if (nearPts.current.visible) {
+        const sit = TEMPLE_STATIONS[stationFromT(galaxyTravel.t)] ?? TEMPLE_STATIONS[0]!;
+        nearPts.current.position.lerp(sit, 0.07);
+      }
     }
     if (bulgePts.current) {
       bulgePts.current.visible = bulge > 0.02;

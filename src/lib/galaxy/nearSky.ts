@@ -6,9 +6,10 @@ import {
   ShaderMaterial,
 } from "three";
 
-const FIELD_N = 2100;
-const ANCHOR_N = 70;
-const WISP_N = 220;
+/** Cut vs prior 2100+ — merged budget with celestial field (A3). */
+const FIELD_N = 900;
+const ANCHOR_N = 48;
+const WISP_N = 90;
 
 function hash(i: number, salt: number) {
   const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;

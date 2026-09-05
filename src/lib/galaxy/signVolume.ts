@@ -186,6 +186,22 @@ export function denseCloud(id: SignId, count: number): VolumeStar[] {
   return out;
 }
 
+/** Pooled morph clouds — avoids mid-flight `denseCloud` hitch (A7). */
+const cloudPool = new Map<string, VolumeStar[]>();
+
+export function denseCloudPooled(id: SignId, count: number): VolumeStar[] {
+  const key = `${id}:${Math.floor(count)}`;
+  const hit = cloudPool.get(key);
+  if (hit) return hit;
+  const cloud = denseCloud(id, count);
+  if (cloud.length) cloudPool.set(key, cloud);
+  return cloud;
+}
+
+export function prebakeSignClouds(ids: SignId[], count: number) {
+  for (const id of ids) denseCloudPooled(id, count);
+}
+
 /** Push a unit plane into the sign's body so it reads as sculpture, not a card. */
 export function sculptRelief(geo: BufferGeometry, vol: SignVolume) {
   const pos = geo.getAttribute("position") as BufferAttribute;

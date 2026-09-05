@@ -9,9 +9,12 @@ import { denseCloud } from "./signVolume";
 import { isSmallGpu } from "@/lib/gpu";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
-const GAS_N = SMALL ? 900 : 1400;
-const SIGN_N = SMALL ? 1400 : 2200;
-const EMBER_N = 48;
+/** Birth-only dense; fly phase draws a thin remnant then hides (A4). */
+const GAS_N = SMALL ? 700 : 1000;
+const SIGN_N = SMALL ? 900 : 1400;
+const EMBER_N = 36;
+export const NEBULA_N_FULL = GAS_N + SIGN_N + EMBER_N;
+export const NEBULA_N_IDLE = SMALL ? 120 : 200;
 export const NEBULA_WIDE = 16.5;
 export const NEBULA_ASPECT = 16 / 9;
 

@@ -13,8 +13,12 @@ import { isSmallGpu } from "@/lib/gpu";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const BULGE_N = SMALL ? 900 : 1600;
-const ARM_N = SMALL ? 4200 : 8000;
-const FIELD_N = SMALL ? 1400 : 2400;
+/** Halved vs prior 8k/4.2k baseline (A3). */
+const ARM_N = SMALL ? 2100 : 4000;
+const FIELD_N = SMALL ? 1200 : 1800;
+/** Full arm count at build; post-intro LOD draws this many (A3). */
+export const ARM_N_FULL = ARM_N;
+export const ARM_N_LOD = Math.floor(ARM_N * 0.55);
 const CLEAR = 50;
 const CLEAR2 = CLEAR * CLEAR;
 
