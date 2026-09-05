@@ -148,6 +148,12 @@ describe("session store", () => {
     assert.equal(session?.skyNatal?.tone, "warm");
   });
 
+  it("attachSavedId sets savedId on the open session", () => {
+    useSessionStore.getState().openVisitor(nativity, sky);
+    useSessionStore.getState().attachSavedId("33333333-3333-3333-3333-333333333333");
+    assert.equal(useSessionStore.getState().session?.savedId, "33333333-3333-3333-3333-333333333333");
+  });
+
   it("preserves research tour, interaction, and close behavior", () => {
     const research = {
       ...nativity,
