@@ -1,5 +1,7 @@
 import type { Nativity } from "@/lib/chart/schema";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
+import type { SavedChart } from "@/lib/charts";
+import { hasTimedNatal } from "@/lib/charts-saved";
 import type { AppMode, ResearchChartId, Selection, SignId } from "@/lib/chart/types";
 import { isDateInSign } from "@/lib/chart/sun";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
@@ -173,4 +175,54 @@ export function fromShelf(input: {
     tourBeat: null,
     sheetFolded: false,
   };
+}
+
+export function fromSavedChart(input: {
+  chart: SavedChart;
+  origin: Surface;
+  nativity?: Nativity | null;
+  skyNatal?: SkyNatal | null;
+  mode?: AppMode;
+}): ChartSession {
+  const chart = input.chart;
+  const birth = {
+    year: chart.birthYear,
+    month: chart.birthMonth,
+    day: chart.birthDay,
+    hour: chart.birthHour,
+    minute: chart.birthMinute,
+    place: chart.birthPlace,
+  };
+  const relation = chart.relation === "other" ? "other" : "self";
+  const personName = chart.personName;
+
+  if (hasTimedNatal(chart) && input.nativity) {
+    return fromVisitor({
+      nativity: input.nativity,
+      skyNatal: input.skyNatal ?? (chart.natal as SkyNatal | null),
+      birth,
+      signId: chart.signId,
+      origin: input.origin,
+      label: chart.label,
+      relation,
+      personName,
+      tone: chart.tone,
+      savedId: chart.id,
+      mode: input.mode,
+    });
+  }
+
+  return fromShelf({
+    signId: chart.signId,
+    birth,
+    skyNatal: (chart.natal as SkyNatal | null) ?? null,
+    nativity: input.nativity ?? null,
+    tone: chart.tone,
+    relation,
+    personName,
+    label: chart.label,
+    origin: input.origin,
+    fromSavedId: chart.id,
+    mode: input.mode,
+  });
 }

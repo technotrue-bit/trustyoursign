@@ -6,7 +6,7 @@ import { daysForSign, formatBirth, formatClock, isDateInSign, monthsForSign, sun
 import { useClaim, useSessionStore } from "@/lib/chart/session";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
-import { saveChart } from "@/lib/charts";
+import { upsertChart } from "@/lib/charts";
 import { computeVisitorNatal } from "@/lib/chart/sky";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { Nativity } from "@/lib/chart/schema";
@@ -448,7 +448,7 @@ export function BirthChat() {
                     setSaving(true);
                     setSaveErr(null);
                     try {
-                      await saveChart({
+                      const row = await upsertChart({
                         data: {
                           label: "My chart",
                           relation: "self",
@@ -464,6 +464,9 @@ export function BirthChat() {
                           consent: true,
                         },
                       });
+                      if (useSessionStore.getState().session) {
+                        useSessionStore.getState().attachSavedId(row.id);
+                      }
                       setSaved(true);
                     } catch (e) {
                       setSaveErr(e instanceof Error ? e.message : "Could not save");

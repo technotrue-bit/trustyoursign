@@ -20,6 +20,7 @@ export {
   fromVisitor,
   fromResearch,
   fromShelf,
+  fromSavedChart,
   newSessionId,
   visitorBirth,
   visitorSign,
@@ -42,6 +43,7 @@ export {
 } from "./actions";
 export type { VaultDomainState } from "./actions";
 export { useSessionStore, seekSignFor, resetGalaxyTravel } from "./store";
+export { openSavedChart } from "./open-saved";
 export type { SessionStore, ShelfSessionInput } from "./store";
 export { ROOM_CATALOG, roomsFor, canEnter } from "./rooms";
 export type { RoomDef } from "./rooms";

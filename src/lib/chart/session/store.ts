@@ -45,6 +45,7 @@ export type SessionStore = VaultDomainState & {
   openResearch: (id: ResearchChartId, nativity: Nativity) => void;
   openShelf: (input: ShelfSessionInput) => void;
   openLibrary: () => void;
+  attachSavedId: (savedId: string) => void;
   openClaim: (signId: SignId) => void;
   closeClaim: () => void;
   setClaimBirth: (birth: BirthFacts) => void;
@@ -111,6 +112,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   openLibrary: () => set((state) => setSurfaceState(state, "library")),
+
+  attachSavedId: (savedId) =>
+    set((state) => {
+      if (!state.session) return state;
+      if (state.session.kind === "research") return state;
+      const patch =
+        state.session.kind === "shelf"
+          ? { savedId, chartKey: savedId }
+          : { savedId };
+      return patchSessionState(state, patch);
+    }),
 
   openClaim: (signId) => {
     seekSignFor(signId);
