@@ -22,7 +22,7 @@ type Props = {
 };
 
 export function SignStarVolume({ signId, count, plateWide }: Props) {
-  const groupRef = useRef<Group>(null);
+  const centerRef = useRef<Group>(null);
   const small = isSmallGpu();
   const n = count ?? (small ? 1200 : 2800);
   const pts = useMemo(() => interiorCloud(signId, n), [signId, n]);
@@ -67,13 +67,13 @@ export function SignStarVolume({ signId, count, plateWide }: Props) {
     : [1, 1, 1];
 
   useLayoutEffect(() => {
-    if (!groupRef.current || !geo || !pts.length) return;
+    if (!centerRef.current || !geo || !pts.length) return;
     const box = new Box3().setFromBufferAttribute(
       geo.getAttribute("position") as BufferAttribute,
     );
     const center = new Vector3();
     box.getCenter(center);
-    groupRef.current.position.set(-center.x, -center.y, -center.z);
+    centerRef.current.position.set(-center.x, -center.y, -center.z);
   }, [geo, pts.length, signId]);
 
   useEffect(() => {
@@ -92,8 +92,10 @@ export function SignStarVolume({ signId, count, plateWide }: Props) {
   if (!pts.length) return null;
 
   return (
-    <group ref={groupRef} scale={scale}>
-      <points geometry={geo} material={material} frustumCulled={false} />
+    <group scale={scale}>
+      <group ref={centerRef}>
+        <points geometry={geo} material={material} frustumCulled={false} />
+      </group>
     </group>
   );
 }
