@@ -19,6 +19,8 @@ const FIELD_N = SMALL ? 1200 : 1800;
 /** Full arm count at build; post-intro LOD draws this many (A3). */
 export const ARM_N_FULL = ARM_N;
 export const ARM_N_LOD = Math.floor(ARM_N * 0.55);
+/** Mid-flight LOD — arms off while seek/travel is active. */
+export const ARM_N_FLY = 0;
 const CLEAR = 50;
 const CLEAR2 = CLEAR * CLEAR;
 

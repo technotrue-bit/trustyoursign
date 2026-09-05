@@ -50,10 +50,11 @@ import {
   uBirth,
 } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
-import { fillMorphCloud, makeSparkMaterial } from "@/lib/galaxy/starRender";
+import { fillMorphCloud, applyBakedMorph, makeSparkMaterial, prebakeStationMorphs } from "@/lib/galaxy/starRender";
 import { computeBirthChatSlide, lerpToward, computePlateOpacity } from "@/lib/galaxy/birthchat-slide";
 import { createDiskSim, disposeDisk, stepDisk, DISK_N, DISK_N_BIRTH } from "@/lib/galaxy/disk";
 import { loadSignArt, preloadSignArt, preloadSignArtRest, hydrateSignArt, artReady, artAspect, primeSignArt, plateReady } from "@/lib/galaxy/signArt";
+import { onSignImageReady } from "@/lib/galaxy/signArtMedia";
 import { denseCloudPooled, getSignVolume, prebakeSignClouds, primeSignVolumes, volumeChest } from "@/lib/galaxy/signVolume";
 import { buildBirthNebula, makeNebulaMaterial, NEBULA_N_FULL, NEBULA_N_IDLE } from "@/lib/galaxy/nebula";
 import { makeStarSprite } from "@/lib/galaxy/celestial";
@@ -79,8 +80,10 @@ import { CornerGalaxies } from "./CornerGalaxies";
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const DUST_N = SMALL ? 180 : 320;
 /** Full cloud only for aimed ±1 (A2); neighbors stay thin. */
-const CLOUD_N = SMALL ? 1400 : 2200;
-const CLOUD_N_FAR = SMALL ? 420 : 640;
+const CLOUD_N = SMALL ? 1100 : 1800;
+const CLOUD_N_FAR = SMALL ? 360 : 520;
+/** Mid-flight: keep destination plate visible but thin until near arrival. */
+const CLOUD_APPROACH_DIST = 0.1;
 
 const _cam = new Vector3();
 const _look = new Vector3();
@@ -157,21 +160,34 @@ export function GalaxyIntro() {
     preloadSignArt();
     primeSignArt("aries");
     primeSignArt("taurus");
-    const skyT = window.setTimeout(() => setSky(true), 80);
-    const restT = window.setTimeout(() => {
-      setRest(true);
-      preloadSignArtRest();
+    const bakeStationBuffers = () => {
       primeSignVolumes();
-      for (const c of CONSTELLATIONS) primeSignArt(c.id);
-      // Prebake morph buffers so mid-flight denseCloud does not hitch (A7).
       prebakeSignClouds(
         CONSTELLATIONS.map((c) => c.id),
         CLOUD_N,
       );
+      prebakeStationMorphs(
+        CONSTELLATIONS.map((c, i) => ({
+          id: c.id,
+          pairs: pairFigures(c.animal, c.glyph),
+          scatter: makeScatter(i, CLOUD_N),
+        })),
+        CLOUD_N,
+      );
+    };
+    const skyT = window.setTimeout(() => setSky(true), 80);
+    const restT = window.setTimeout(() => {
+      setRest(true);
+      preloadSignArtRest();
+      for (const c of CONSTELLATIONS) primeSignArt(c.id);
+      // Prebake when images exist; onSignImageReady fills the rest (A7).
+      bakeStationBuffers();
     }, SMALL ? 700 : 480);
+    const unsubReady = onSignImageReady(() => bakeStationBuffers());
     return () => {
       window.clearTimeout(skyT);
       window.clearTimeout(restT);
+      unsubReady();
     };
   }, []);
   useEffect(() => {
@@ -236,8 +252,6 @@ function SignDisk() {
       return;
     }
     const sit = TEMPLE_STATIONS[idx]!;
-    const chest = volumeChest(sign.id);
-    const aspect = getSignVolume(sign.id)?.aspect ?? 16 / 9;
     const dist = Math.abs(galaxyTravel.t - stationT(idx));
     const gather = 1 - Math.min(1, dist / 0.07);
     const intro = introPlaying() ? introAries() : 1;
@@ -246,13 +260,24 @@ function SignDisk() {
     const picked =
       chatting &&
       (useVault.getState().pickedSign === sign.id || galaxyTravel.dockSign === sign.id);
-    const show = gather > 0.32 && intro > 0.4 && veil < 0.45;
+    // Hide disk for most of a seek — stepDisk + unsettled mix is the fly hitch (A1 leftover).
+    const flying = galaxyTravel.seek != null || galaxyTravel.traveling;
+    const show = gather > (flying ? 0.72 : 0.32) && intro > 0.4 && veil < 0.45;
     g.visible = show;
     if (!show) {
       // Freeze + no GPU upload when off-screen (A1).
       sim.mat.uniforms.uFade.value = 0;
+      // Snap target while hidden so the next reveal is settled (no chakra hitch).
+      if (sim.to !== sign.id) {
+        sim.from = sign.id;
+        sim.to = sign.id;
+        sim.mix = 1;
+        sim.paintedMix = -1;
+      }
       return;
     }
+    const chest = volumeChest(sign.id);
+    const aspect = getSignVolume(sign.id)?.aspect ?? 16 / 9;
     const cam = camera as PerspectiveCamera;
     _sitCam.copy(sit);
     cam.worldToLocal(_sitCam);
@@ -277,9 +302,9 @@ function SignDisk() {
     g.position.addScaledVector(_camRight, slideX.current);
     g.position.addScaledVector(_camUp, slideY.current);
     g.scale.setScalar(3.2);
-    // Phase mutex: thin disk while birth nebula is dense (A4).
+    // Phase mutex: thin disk while birth nebula is dense (A4); keep thin while mix unsettles after a seek.
     const birthHot = introPlaying() && uAssemble() < 0.85;
-    const activeN = birthHot ? DISK_N_BIRTH : DISK_N;
+    const activeN = birthHot || sim.mix < 0.96 ? DISK_N_BIRTH : DISK_N;
     stepDisk(
       sim,
       dt,
@@ -288,12 +313,13 @@ function SignDisk() {
       galaxyTravel.ptrX,
       galaxyTravel.ptrY,
       galaxyTravel.ptrOn && !galaxyTravel.dragging,
-      prefersReducedMotion(),
+      prefersReducedMotion() || flying,
       activeN,
     );
     sim.mat.uniforms.uTime.value = clock.elapsedTime;
+    const fadeFloor = flying ? 0.72 : 0.32;
     sim.mat.uniforms.uFade.value =
-      Math.min(1, (gather - 0.32) / 0.4) * Math.min(1, (intro - 0.38) / 0.4) * (1 - veil);
+      Math.min(1, (gather - fadeFloor) / 0.4) * Math.min(1, (intro - 0.38) / 0.4) * (1 - veil);
     sim.mat.uniforms.uPixelRatio.value = Math.min(2, gl.getPixelRatio());
   });
   return (
@@ -327,6 +353,10 @@ function Dust() {
   useFrame(({ clock }) => {
     const mesh = points.current;
     if (!mesh) return;
+    if (galaxyTravel.seek != null || galaxyTravel.traveling) {
+      mesh.visible = false;
+      return;
+    }
     const vis = introField();
     mesh.visible = vis > 0.02;
     const mat = mesh.material;
@@ -446,17 +476,26 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const g = group.current;
     const mesh = cores.current;
     if (!g || !mesh) return;
+    const t = galaxyTravel.t;
+    const direct = galaxyTravel.seekDirect && galaxyTravel.seek != null;
+    const aimed = aimedIndex();
     const chatting = useVault.getState().chat || galaxyTravel.dockSlide;
     const shelf = useVault.getState().shelf;
     const picked =
       chatting &&
       (useVault.getState().pickedSign === sign.id || galaxyTravel.dockSign === sign.id);
     const held = picked || (Boolean(shelf) && shelf?.signId === sign.id);
-    const t = galaxyTravel.t;
-    const direct = galaxyTravel.seekDirect && galaxyTravel.seek != null;
+    // Bail non-destination stations early during direct seek (12× useFrame).
+    if (direct && !held && index !== aimed) {
+      g.visible = false;
+      return;
+    }
+    if (introPlaying() && index !== 0 && !held) {
+      g.visible = false;
+      return;
+    }
     const dest = stationT(index);
     const dist = Math.abs(t - dest);
-    const aimed = aimedIndex();
     const nearAim = wrapStationDelta(index, aimed) <= 1;
     const incoming = index === Math.min(11, stationFromT(t) + 1);
     const focused = held || index === aimed || index === stationFromT(t);
@@ -466,14 +505,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     if (!artTex && (focused || incoming || ready) && !wantArt.current) {
       wantArt.current = true;
       queueMicrotask(() => setArtTex(loadSignArt(sign.id)));
-    }
-    if (introPlaying() && index !== 0 && !held) {
-      g.visible = false;
-      return;
-    }
-    if (direct && !held && index !== aimed) {
-      g.visible = false;
-      return;
     }
     const fade = held
       ? 1
@@ -485,6 +516,33 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     if (!show) return;
 
     const sit = TEMPLE_STATIONS[index]!;
+    const flying = galaxyTravel.seek != null || galaxyTravel.traveling;
+    const midFly = flying && !held && dist >= CLOUD_APPROACH_DIST;
+    // Mid-flight: billboard + plate only — skip slide math / cores / morph (fly budget).
+    if (midFly) {
+      g.position.copy(sit);
+      g.quaternion.copy(camera.quaternion);
+      if (artTex && !artHydrated.current) {
+        if (hydrateSignArt(sign.id, artTex)) artHydrated.current = true;
+      }
+      if (!hydrated.current) {
+        if (applyBakedMorph(starGeo, sign.id, n)) hydrated.current = true;
+      }
+      if (art.current && artTex) {
+        const mat = art.current.material as MeshBasicMaterial;
+        const plateOn = Boolean(artTex && (artReady(artTex) || ready));
+        const plateOp = Math.max(0.08, fade * 0.45);
+        art.current.visible = plateOn && plateOp > 0.04;
+        const aspect = (artTex ? artAspect(artTex) : 16 / 9) || 16 / 9;
+        art.current.scale.set(PLATE_WIDE, PLATE_WIDE / aspect, 1);
+        mat.opacity = plateOp;
+        mat.map = artTex;
+      }
+      mesh.visible = false;
+      starGeo.setDrawRange(0, 0);
+      return;
+    }
+
     const cam = camera as PerspectiveCamera;
     _sitCam.copy(sit);
     cam.worldToLocal(_sitCam);
@@ -518,11 +576,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     }
     const vol = volEarly;
     if (!hydrated.current && (focused || incoming || held || eager || ready)) {
-      if (!scatter.current) scatter.current = makeScatter(index, n);
-      const cloud = denseCloudPooled(sign.id, n);
-      if (cloud.length > n * 0.4) {
-        fillMorphCloud(starGeo, cloud, scatter.current, n, morphPairs);
+      // Prefer prebaked attrs — fillMorphCloud mid-seek was the ~50ms fly hitch.
+      if (applyBakedMorph(starGeo, sign.id, n)) {
         hydrated.current = true;
+      } else {
+        if (!scatter.current) scatter.current = makeScatter(index, n);
+        const cloud = denseCloudPooled(sign.id, n);
+        if (cloud.length > n * 0.4) {
+          fillMorphCloud(starGeo, cloud, scatter.current, n, morphPairs);
+          hydrated.current = true;
+        }
       }
     }
 
@@ -572,14 +635,20 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     }
     mesh.visible = true;
     // Phase mutex + overdraw: thin station cloud while birth nebula is hot (A4);
-    // full count only for aimed±1 (A2).
+    // full count only for aimed±1 near arrival — mid-flight stays FAR (fly budget).
     const birthHot = introPlaying() && uAssemble() < 0.85;
-    const drawN = fullCloud
+    // Full cloud only after seek lands — approach ramp was a fly-phase hitch.
+    const approachCloud = !flying || held;
+    const drawN = fullCloud && approachCloud
       ? birthHot
         ? Math.floor(CLOUD_N * 0.45)
         : CLOUD_N
       : CLOUD_N_FAR;
     starGeo.setDrawRange(0, hydrated.current ? drawN : 0);
+    if (!approachCloud) {
+      mesh.visible = false;
+      return;
+    }
 
     const morphTarget = picked ? 1 : 0;
     const morphRate = prefersReducedMotion() ? 20 : picked ? 1.8 : 1.2;
@@ -598,8 +667,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     u.uPxScale.value = SMALL ? 0.9 : 1;
     u.uBaseSize.value = SMALL ? 2.6 : 2.05;
     u.uOpacity.value = (0.62 + fade * 0.32) * (1 + ml * 0.55);
-    // Cheap fragment when morph idle (A2).
-    u.uCheap.value = ml < 0.04 && morphTarget < 0.5 ? 1 : 0;
+    // Cheap fragment when morph idle or mid-flight thin cloud (A2).
+    u.uCheap.value = !approachCloud || (ml < 0.04 && morphTarget < 0.5) ? 1 : 0;
     (u.uTint.value as Color).copy(tint);
   });
 
@@ -809,9 +878,11 @@ function TempleRig() {
     TEMPLE_CURVE.getPointAt(t, _chest);
     const aspect = viewAspect(size);
     const idx = stationFromT(t);
+    const aim = aimedIndex();
     stepZoom(d, idx !== lastStation.current);
     lastStation.current = idx;
-    const vol = getSignVolume(TEMPLE_SIGNS[idx]!.id);
+    // Aimed volume only — never build intermediate station volumes mid-seek (fly hitch).
+    const vol = getSignVolume(TEMPLE_SIGNS[aim]!.id);
     const plateA = vol?.aspect ?? 16 / 9;
     const shelfOn = Boolean(useVault.getState().entered && useVault.getState().shelf);
     const well =
@@ -867,11 +938,14 @@ function TempleRig() {
       }
     }
     if (scene.fog instanceof FogExp2) {
-      lerpFog(t, _fog);
-      scene.fog.color.copy(_fog);
-      // Reuse _bg Color — no per-frame clone (A6).
-      _bg.copy(_fog).multiplyScalar(0.35);
-      scene.background = _bg;
+      // Skip fog/background writes mid-seek — saves Color work on the fly hot path.
+      if (!(galaxyTravel.seek != null || galaxyTravel.traveling)) {
+        lerpFog(t, _fog);
+        scene.fog.color.copy(_fog);
+        // Reuse _bg Color — no per-frame clone (A6).
+        _bg.copy(_fog).multiplyScalar(0.35);
+        scene.background = _bg;
+      }
     }
     galaxyTravel.t = t;
     if (galaxyTravel.moved) galaxyTravel.awaken = 1;

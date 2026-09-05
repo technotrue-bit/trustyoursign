@@ -285,6 +285,12 @@ export function seekSign(index: number, opts?: SeekOptions) {
 export function publishTravel(t: number, moved?: boolean) {
   const override =
     galaxyTravel.seekDirect && galaxyTravel.seek != null ? galaxyTravel.seekTargetIndex : undefined;
+  // Direct seek: signIndex is fixed — skip per-frame `t` churn (nothing UI-selects t).
+  if (override != null) {
+    const prev = useGalaxy.getState();
+    const signIndex = ((Math.round(override) % 12) + 12) % 12;
+    if (prev.signIndex === signIndex && prev.moved === !!moved) return;
+  }
   useGalaxy.getState().setTravel(t, moved, override ?? undefined);
 }
 

@@ -3,6 +3,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { AdditiveBlending, DoubleSide, PerspectiveCamera, type ShaderMaterial } from "three";
 import {
   ARM_N_FULL,
+  ARM_N_FLY,
   ARM_N_LOD,
   GALAXY_ORIGIN,
   GALAXY_TILT,
@@ -78,10 +79,11 @@ export function CelestialSky() {
     matNear.uniforms.uOpacity.value = 0.5 * field;
     matBulge.uniforms.uOpacity.value = 0.95 * bulge;
     matArms.uniforms.uOpacity.value = 0.78 * arms;
-    // LOD after intro: thinner arms; merge near into field budget by hiding near (A3).
-    const armDraw = birth ? ARM_N_FULL : ARM_N_LOD;
+    // LOD after intro; thin/hide sky extras while seek/travel (fly-sign-travel budget).
+    const flying = galaxyTravel.seek != null || galaxyTravel.traveling;
+    const armDraw = birth ? ARM_N_FULL : flying ? ARM_N_FLY : ARM_N_LOD;
     layers.arms.setDrawRange(0, armDraw);
-    if (fieldPts.current) fieldPts.current.visible = field > 0.02;
+    if (fieldPts.current) fieldPts.current.visible = field > 0.02 && !flying;
     if (nearPts.current) {
       // During birth keep near accents; post-intro field covers the role (merged budget).
       nearPts.current.visible = birth && field > 0.02;
@@ -91,7 +93,7 @@ export function CelestialSky() {
       }
     }
     if (bulgePts.current) {
-      bulgePts.current.visible = bulge > 0.02;
+      bulgePts.current.visible = bulge > 0.02 && !flying;
       const s = 0.72 + bulge * 0.28;
       bulgePts.current.scale.setScalar(s);
     }
@@ -102,8 +104,8 @@ export function CelestialSky() {
     }
     if (hazeMesh.current) {
       const mat = hazeMesh.current.material as import("three").MeshBasicMaterial;
-      mat.opacity = 0.1 * haze;
-      hazeMesh.current.visible = haze > 0.02;
+      mat.opacity = flying ? 0 : 0.1 * haze;
+      hazeMesh.current.visible = !flying && haze > 0.02;
       const hs = 180 + haze * 40;
       hazeMesh.current.scale.set(hs, hs, 1);
     }

@@ -1,5 +1,7 @@
 import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, ShaderMaterial, Vector3 } from "three";
 import type { MorphPair } from "./constellations";
+import type { SignId } from "@/lib/chart/types";
+import { denseCloudPooled } from "./signVolume";
 import type { VolumeStar } from "./signVolume";
 
 /**
@@ -278,4 +280,70 @@ export function fillMorphCloud(
   }
   geo.attributes.glyphPos!.needsUpdate = true;
   return geo;
+}
+
+/** Prebaked station morph attrs — apply is O(attrs), not O(N) CPU (A7 leftover). */
+type MorphBake = {
+  signPos: Float32Array;
+  glyphPos: Float32Array;
+  scatterPos: Float32Array;
+  mag: Float32Array;
+  phase: Float32Array;
+  kind: Float32Array;
+  position: Float32Array;
+};
+
+const morphBake = new Map<string, MorphBake>();
+
+function morphKey(id: SignId, count: number) {
+  return `${id}:${Math.floor(count)}`;
+}
+
+export function prebakeStationMorphs(
+  items: { id: SignId; pairs: MorphPair[]; scatter: Vector3[] }[],
+  count: number,
+) {
+  for (const item of items) {
+    const key = morphKey(item.id, count);
+    if (morphBake.has(key)) continue;
+    const cloud = denseCloudPooled(item.id, count);
+    if (cloud.length <= count * 0.4) continue;
+    const geo = new BufferGeometry();
+    fillMorphCloud(geo, cloud, item.scatter, count, item.pairs);
+    const grab = (name: string) =>
+      (geo.getAttribute(name) as BufferAttribute).array as Float32Array;
+    morphBake.set(key, {
+      signPos: grab("signPos"),
+      glyphPos: grab("glyphPos"),
+      scatterPos: grab("scatterPos"),
+      mag: grab("aMag"),
+      phase: grab("aPhase"),
+      kind: grab("aKind"),
+      position: grab("position"),
+    });
+    // Detach so dispose does not free the pooled typed arrays.
+    geo.deleteAttribute("signPos");
+    geo.deleteAttribute("glyphPos");
+    geo.deleteAttribute("scatterPos");
+    geo.deleteAttribute("aMag");
+    geo.deleteAttribute("aPhase");
+    geo.deleteAttribute("aKind");
+    geo.deleteAttribute("position");
+    geo.dispose();
+  }
+}
+
+/** Apply pooled morph attrs. Returns false if not baked yet. */
+export function applyBakedMorph(geo: BufferGeometry, id: SignId, count: number): boolean {
+  const bake = morphBake.get(morphKey(id, count));
+  if (!bake) return false;
+  geo.setAttribute("signPos", new BufferAttribute(bake.signPos, 3));
+  geo.setAttribute("glyphPos", new BufferAttribute(bake.glyphPos, 3));
+  geo.setAttribute("scatterPos", new BufferAttribute(bake.scatterPos, 3));
+  geo.setAttribute("aMag", new BufferAttribute(bake.mag, 1));
+  geo.setAttribute("aPhase", new BufferAttribute(bake.phase, 1));
+  geo.setAttribute("aKind", new BufferAttribute(bake.kind, 1));
+  geo.setAttribute("position", new BufferAttribute(bake.position, 3));
+  geo.setDrawRange(0, count);
+  return true;
 }

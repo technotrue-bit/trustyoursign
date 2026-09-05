@@ -40,6 +40,11 @@ export function CornerGalaxies() {
   useFrame(({ clock }) => {
     const mesh = ref.current;
     if (!mesh) return;
+    const flying = galaxyTravel.seek != null || galaxyTravel.traveling;
+    if (flying) {
+      mesh.visible = false;
+      return;
+    }
     mesh.position.copy(camera.position);
     mesh.quaternion.copy(camera.quaternion);
     if (camera instanceof PerspectiveCamera) {
@@ -49,7 +54,10 @@ export function CornerGalaxies() {
       mesh.scale.set(Math.max(0.22, (halfW * 0.84) / 11.6), Math.max(0.22, (halfH * 0.84) / 6.35), 1);
     }
 
-    const i = stationFromT(galaxyTravel.t);
+    const i =
+      galaxyTravel.seekDirect && galaxyTravel.seekTargetIndex != null
+        ? galaxyTravel.seekTargetIndex
+        : stationFromT(galaxyTravel.t);
     if (i !== sign.current) {
       copyPal(mat.uniforms.uColorA.value, fromA);
       copyPal(mat.uniforms.uColorB.value, fromB);
@@ -75,6 +83,7 @@ export function CornerGalaxies() {
     fade[2] = vis;
     fade[3] = vis;
     mat.uniforms.uMaxSize.value = 9;
+    mesh.visible = vis > 0.02;
   });
 
   return (
