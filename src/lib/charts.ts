@@ -84,6 +84,135 @@ function mapRow(row: ChartRow): SavedChart {
   };
 }
 
+type ChartWriteInput = {
+  label: string;
+  relation: "self" | "other";
+  personName?: string;
+  signId: SignId;
+  birthMonth: number;
+  birthDay: number;
+  birthYear: number;
+  consent: boolean;
+  otherPermission?: boolean;
+  birthHour?: number | null;
+  birthMinute?: number | null;
+  birthPlace?: string | null;
+  natal?: SkyNatal | null;
+  tone?: "vault" | "warm";
+};
+
+type NormalizedChartWrite = {
+  label: string;
+  relation: "self" | "other";
+  personName: string | null;
+  signId: SignId;
+  birthMonth: number;
+  birthDay: number;
+  birthYear: number;
+  birthHour: number | null;
+  birthMinute: number | null;
+  birthPlace: string | null;
+  natal: SkyNatal | null;
+  tone: "vault" | "warm";
+};
+
+function normalizeChartWrite(input: ChartWriteInput): NormalizedChartWrite {
+  const label = input.label.trim().slice(0, 80);
+  if (!label) throw new Error("Give this chart a name.");
+  if (!input.consent) throw new Error("Consent is required to save a birth date.");
+  if (input.relation === "other" && !input.otherPermission) {
+    throw new Error("You need permission to store someone else’s birth date.");
+  }
+  const personName = input.relation === "other" ? (input.personName ?? "").trim().slice(0, 80) : null;
+  if (input.relation === "other" && !personName) throw new Error("Name the person whose chart this is.");
+  const month = Math.floor(Number(input.birthMonth));
+  const day = Math.floor(Number(input.birthDay));
+  const year = Math.floor(Number(input.birthYear));
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1926 || year > new Date().getFullYear()) {
+    throw new Error("That date cannot be stored.");
+  }
+  let birthHour: number | null = null;
+  let birthMinute: number | null = null;
+  if (input.birthHour != null && input.birthMinute != null) {
+    const h = Math.floor(Number(input.birthHour));
+    const m = Math.floor(Number(input.birthMinute));
+    if (h < 0 || h > 23 || m < 0 || m > 59) throw new Error("That time cannot be stored.");
+    birthHour = h;
+    birthMinute = m;
+  }
+  const birthPlace = input.birthPlace ? input.birthPlace.trim().slice(0, 120) : null;
+  const natal = input.natal && typeof input.natal === "object" ? input.natal : null;
+  const tone = input.tone === "warm" ? "warm" : "vault";
+  return {
+    label,
+    relation: asRelation(input.relation),
+    personName,
+    signId: asSign(input.signId),
+    birthMonth: month,
+    birthDay: day,
+    birthYear: year,
+    birthHour,
+    birthMinute,
+    birthPlace,
+    natal,
+    tone,
+  };
+}
+
+async function persistChart(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  userId: string,
+  data: NormalizedChartWrite & { id?: string },
+): Promise<SavedChart> {
+  if (data.id) {
+    const updated = await sql<ChartRow>`
+      update charts set
+        label = ${data.label},
+        relation = ${data.relation},
+        person_name = ${data.personName},
+        sign_id = ${data.signId},
+        birth_month = ${data.birthMonth},
+        birth_day = ${data.birthDay},
+        birth_year = ${data.birthYear},
+        birth_hour = ${data.birthHour},
+        birth_minute = ${data.birthMinute},
+        birth_place = ${data.birthPlace},
+        natal_json = ${data.natal ? JSON.stringify(data.natal) : null}::jsonb,
+        tone = ${data.tone}
+      where id = ${data.id} and user_id = ${userId}
+      returning id, label, relation, person_name, sign_id, birth_month, birth_day, birth_year,
+                birth_hour, birth_minute, birth_place, natal_json, tone, created_at
+    `;
+    const row = updated[0];
+    if (!row) throw new Error("Chart not found");
+    return mapRow(row);
+  }
+  const id = crypto.randomUUID();
+  const inserted = await sql<ChartRow>`
+    insert into charts (id, user_id, label, relation, person_name, sign_id, birth_month, birth_day, birth_year, birth_hour, birth_minute, birth_place, natal_json, tone, consent_at)
+    values (
+      ${id},
+      ${userId},
+      ${data.label},
+      ${data.relation},
+      ${data.personName},
+      ${data.signId},
+      ${data.birthMonth},
+      ${data.birthDay},
+      ${data.birthYear},
+      ${data.birthHour},
+      ${data.birthMinute},
+      ${data.birthPlace},
+      ${data.natal ? JSON.stringify(data.natal) : null}::jsonb,
+      ${data.tone},
+      now()
+    )
+    returning id, label, relation, person_name, sign_id, birth_month, birth_day, birth_year,
+              birth_hour, birth_minute, birth_place, natal_json, tone, created_at
+  `;
+  return mapRow(inserted[0]!);
+}
+
 export const listCharts = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
@@ -98,89 +227,25 @@ export const listCharts = createServerFn({ method: "GET" })
     return rows.map(mapRow);
   });
 
-export const saveChart = createServerFn({ method: "POST" })
-  .validator((input: {
-    label: string;
-    relation: "self" | "other";
-    personName?: string;
-    signId: SignId;
-    birthMonth: number;
-    birthDay: number;
-    birthYear: number;
-    consent: boolean;
-    otherPermission?: boolean;
-    birthHour?: number | null;
-    birthMinute?: number | null;
-    birthPlace?: string | null;
-    natal?: SkyNatal | null;
-    tone?: "vault" | "warm";
-  }) => {
-    const label = input.label.trim().slice(0, 80);
-    if (!label) throw new Error("Give this chart a name.");
-    if (!input.consent) throw new Error("Consent is required to save a birth date.");
-    if (input.relation === "other" && !input.otherPermission) {
-      throw new Error("You need permission to store someone else’s birth date.");
-    }
-    const personName = input.relation === "other" ? (input.personName ?? "").trim().slice(0, 80) : null;
-    if (input.relation === "other" && !personName) throw new Error("Name the person whose chart this is.");
-    const month = Math.floor(Number(input.birthMonth));
-    const day = Math.floor(Number(input.birthDay));
-    const year = Math.floor(Number(input.birthYear));
-    if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1926 || year > new Date().getFullYear()) {
-      throw new Error("That date cannot be stored.");
-    }
-    let birthHour: number | null = null;
-    let birthMinute: number | null = null;
-    if (input.birthHour != null && input.birthMinute != null) {
-      const h = Math.floor(Number(input.birthHour));
-      const m = Math.floor(Number(input.birthMinute));
-      if (h < 0 || h > 23 || m < 0 || m > 59) throw new Error("That time cannot be stored.");
-      birthHour = h;
-      birthMinute = m;
-    }
-    const birthPlace = input.birthPlace ? input.birthPlace.trim().slice(0, 120) : null;
-    const natal = input.natal && typeof input.natal === "object" ? input.natal : null;
-    const tone = input.tone === "warm" ? "warm" : "vault";
-    return {
-      label,
-      relation: asRelation(input.relation),
-      personName,
-      signId: asSign(input.signId),
-      birthMonth: month,
-      birthDay: day,
-      birthYear: year,
-      birthHour,
-      birthMinute,
-      birthPlace,
-      natal,
-      tone,
-    };
+export const upsertChart = createServerFn({ method: "POST" })
+  .validator((input: ChartWriteInput & { id?: string }) => {
+    const id = input.id?.trim() || undefined;
+    if (id && !/^[0-9a-f-]{8,64}$/i.test(id)) throw new Error("Unknown chart");
+    return { id, ...normalizeChartWrite(input) };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const id = crypto.randomUUID();
-    await sql`
-      insert into charts (id, user_id, label, relation, person_name, sign_id, birth_month, birth_day, birth_year, birth_hour, birth_minute, birth_place, natal_json, tone, consent_at)
-      values (
-        ${id},
-        ${context.userId},
-        ${data.label},
-        ${data.relation},
-        ${data.personName},
-        ${data.signId},
-        ${data.birthMonth},
-        ${data.birthDay},
-        ${data.birthYear},
-        ${data.birthHour},
-        ${data.birthMinute},
-        ${data.birthPlace},
-        ${data.natal ? JSON.stringify(data.natal) : null}::jsonb,
-        ${data.tone},
-        now()
-      )
-    `;
-    return { id };
+    return persistChart(sql, context.userId, data);
+  });
+
+export const saveChart = createServerFn({ method: "POST" })
+  .validator((input: ChartWriteInput) => normalizeChartWrite(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const row = await persistChart(sql, context.userId, data);
+    return { id: row.id };
   });
 
 export const deleteChart = createServerFn({ method: "POST" })
