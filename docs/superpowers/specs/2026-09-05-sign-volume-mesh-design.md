@@ -86,3 +86,8 @@ Sign PNG ──► SignVolume (alpha + depth)
 - Authored sculpt meshes swapped into the shell slot
 - Full free-fly Vault camera rewrite
 - SDF / raymarched soft volumes
+
+## Enablement
+
+Add a `SignId` to `VOLUME_SIGN_IDS` in `src/lib/galaxy/signVolume.ts` after art QA.
+No per-sign geometry files required.
