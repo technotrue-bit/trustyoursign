@@ -3,7 +3,7 @@ import type { SavedChart } from "@/lib/charts";
 import { hasTimedNatal } from "@/lib/charts-saved";
 import type { Surface } from "./types";
 import { fromSavedChart } from "./factories";
-import { useSessionStore } from "./store";
+import { seekSignFor, useSessionStore } from "./store";
 import { openSessionState } from "./actions";
 
 export async function openSavedChart(
@@ -40,5 +40,8 @@ export async function openSavedChart(
     nativity,
     skyNatal: sky,
   });
+  if (session.kind === "shelf") {
+    seekSignFor(session.signId);
+  }
   useSessionStore.setState((state) => openSessionState(state, session));
 }
