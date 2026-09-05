@@ -22,6 +22,7 @@ import {
   useSurface,
   useTourBeat,
   useIsEntered,
+  roomsFor,
 } from "@/lib/chart/session";
 import { beatById } from "@/lib/chart/tour";
 import { isResearchChartId, type AppMode, type ChartId } from "@/lib/chart/types";
@@ -70,8 +71,6 @@ const MODES: { id: AppMode; label: string; icon: typeof Compass }[] = [
   { id: "bones", label: "Bones", icon: Table2 },
   { id: "ask", label: "Ask", icon: MessageCircle },
 ];
-
-const VISITOR_ROOMS = new Set<AppMode>(["sky", "body", "bones", "ask"]);
 
 export function VaultApp() {
   const [Scene, setScene] = useState<ComponentType | null>(null);
@@ -137,8 +136,10 @@ export function VaultApp() {
       }
       const n = Number(e.key);
       if (n >= 1 && n <= 7) {
-        const mode = MODES[n - 1];
-        if (mode && st.session) st.setMode(mode.id);
+        const kind = st.session?.kind;
+        if (!kind) return;
+        const mode = roomsFor(kind)[n - 1];
+        if (mode) st.setMode(mode.id);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -551,11 +552,8 @@ function Chrome() {
         ? (sessionChartKey as ChartId)
         : null;
   const nat = useNativity();
-  const rooms = shelf
-    ? MODES.filter((m) => m.id === "sky" || m.id === "ask")
-    : chartKey === "visitor"
-      ? MODES.filter((m) => VISITOR_ROOMS.has(m.id))
-      : MODES;
+  const roomDefs = sessionKind ? roomsFor(sessionKind) : [];
+  const rooms = roomDefs.map((room) => MODES.find((mode) => mode.id === room.id)!);
   const title = shelf ? shelf.label : (nat?.meta.name ?? "The Vault");
   const who = shelf
     ? `${shelf.signId} · ${shelf.birth.month}/${shelf.birth.day}/${shelf.birth.year}`
