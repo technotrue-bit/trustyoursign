@@ -1,6 +1,6 @@
 import { Suspense, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { ContactShadows, Environment, OrbitControls, Stars } from "@react-three/drei";
+import { ContactShadows, OrbitControls, Stars } from "@react-three/drei";
 import { Color } from "three";
 import { canvasDpr, glContextAttrs, isSmallGpu } from "@/lib/gpu";
 import { SagittariusMesh } from "./SagittariusMesh";
@@ -49,7 +49,6 @@ export function MeshReviewCanvas() {
         />
         <Suspense fallback={null}>
           <SagittariusMesh fitHeight={3.55} />
-          <Environment preset="night" environmentIntensity={0.55} />
         </Suspense>
         <ContactShadows
           position={[0, -1.85, 0]}
