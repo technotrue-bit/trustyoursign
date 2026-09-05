@@ -8,7 +8,7 @@ import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthB
 import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
-import { useVault } from "@/lib/store";
+import { useSessionStore } from "@/lib/chart/session/store";
 
 type Star = {
   x: number;
@@ -176,7 +176,7 @@ export function FallbackSky() {
     };
 
     const drawWheel = () => {
-      const nat = useVault.getState().research;
+      const nat = useSessionStore.getState().session?.nativity;
       if (!nat) return;
       const scale = Math.min(w, h) * 0.055;
       const inner = 4.15 * scale;
@@ -523,8 +523,9 @@ export function FallbackSky() {
     const tickSky = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
-      const chatting = useVault.getState().chat;
-      const entered = useVault.getState().entered;
+      const state = useSessionStore.getState();
+      const entered = state.session !== null;
+      const chatting = state.claim !== null && !entered;
       if (stepBirth(dt)) finishBirth();
       else if (galaxyTravel.birth >= 1) finishBirth();
       stepIntro(dt);
@@ -648,7 +649,7 @@ export function FallbackSky() {
       } else if (!birthing) {
         const t = galaxyTravel.t;
         const awaken = galaxyTravel.awaken;
-        const picked = useVault.getState().pickedSign;
+        const picked = state.claim?.signId ?? state.session?.signId ?? null;
         const skyTime = now / 1000;
         if (chatting && picked) {
           const holdIdx = CONSTELLATIONS.findIndex((c) => c.id === picked);
@@ -691,7 +692,8 @@ export function FallbackSky() {
       const dx = e.clientX - downX;
       const dy = e.clientY - downY;
       downX = 0;
-      if (useVault.getState().entered || useVault.getState().chat) return;
+      const state = useSessionStore.getState();
+      if (state.session || state.claim) return;
       if (galaxyTravel.birth < 1) return;
       if (Math.hypot(dx, dy) > 10 || galaxyTravel.hold !== 0 || pinchQuiet()) return;
       const r = canvas.getBoundingClientRect();
@@ -701,7 +703,7 @@ export function FallbackSky() {
       if (Math.hypot(nx, ny * 1.15) < 0.3) {
         const idx = nearestSign(galaxyTravel.t);
         const sign = CONSTELLATIONS[idx];
-        if (sign) useVault.getState().openBirthChat(sign.id);
+        if (sign) useSessionStore.getState().openClaim(sign.id);
       }
     };
     const onDownTap = (e: PointerEvent) => {

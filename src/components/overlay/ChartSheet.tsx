@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import { useVault } from "@/lib/store";
+import { useSheetFolded } from "@/lib/chart/session/hooks";
+import { useSessionStore } from "@/lib/chart/session/store";
 import { cn } from "@/lib/utils";
 
 export function ChartSheet({
@@ -14,8 +15,8 @@ export function ChartSheet({
   wide?: boolean;
   fill?: boolean;
 }) {
-  const folded = useVault((s) => s.sheetFolded);
-  const foldSheet = useVault((s) => s.foldSheet);
+  const folded = useSheetFolded();
+  const foldSheet = useSessionStore((s) => s.foldSheet);
   return (
     <aside
       className={cn(
