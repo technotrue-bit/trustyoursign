@@ -3,8 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { listCharts, type SavedChart } from "@/lib/charts";
 import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
-import { computeVisitorNatal } from "@/lib/chart/sky";
-import { useSessionStore } from "@/lib/chart/session";
+import { openSavedChart, useSessionStore } from "@/lib/chart/session";
 import { isResearchChartId, type ChartId } from "@/lib/chart/types";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { Gloss, GlossRoot } from "./Gloss";
@@ -141,45 +140,7 @@ function SavedShelf() {
             <button
               type="button"
               onClick={async () => {
-                if (c.natal && c.birthHour != null && c.birthMinute != null && c.birthPlace) {
-                  try {
-                    const { sky, nativity } = await computeVisitorNatal({
-                      data: {
-                        year: c.birthYear,
-                        month: c.birthMonth,
-                        day: c.birthDay,
-                        hour: c.birthHour,
-                        minute: c.birthMinute,
-                        place: c.birthPlace,
-                        tone: c.tone,
-                        label: c.label,
-                      },
-                    });
-                    useSessionStore.getState().openVisitor(nativity, sky);
-                    return;
-                  } catch {
-                    /* fall through to shelf */
-                  }
-                }
-                useSessionStore.getState().openShelf({
-                  id: c.id,
-                  label: c.label,
-                  signId: c.signId,
-                  birth: {
-                    month: c.birthMonth,
-                    day: c.birthDay,
-                    year: c.birthYear,
-                    hour: c.birthHour,
-                    minute: c.birthMinute,
-                    place: c.birthPlace,
-                  },
-                  skyNatal: c.natal,
-                  tone: c.tone,
-                  relation: c.relation,
-                  personName: c.personName,
-                  origin: "library",
-                  fromSavedId: c.id,
-                });
+                await openSavedChart(c, "library");
               }}
               className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-bg-subtle"
             >

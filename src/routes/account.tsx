@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { acceptLegal, deleteAllMyData, deleteChart, listCharts, saveChart, type SavedChart } from "@/lib/charts";
+import { acceptLegal, deleteAllMyData, deleteChart, listCharts, upsertChart, type SavedChart } from "@/lib/charts";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { daysForSign, monthsForSign } from "@/lib/chart/sun";
 import type { SignId } from "@/lib/chart/types";
+import { openSavedChart } from "@/lib/chart/session";
 import { MIN_AGE } from "@/lib/legal";
 import { claimSite } from "@/lib/site";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
@@ -184,6 +185,7 @@ function Account() {
 }
 
 function ChartRow({ chart, onGone }: { chart: SavedChart; onGone: () => void }) {
+  const navigate = useNavigate();
   const sign = CONSTELLATIONS.find((s) => s.id === chart.signId);
   return (
     <li className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated/70 px-4 py-3">
@@ -194,16 +196,28 @@ function ChartRow({ chart, onGone }: { chart: SavedChart; onGone: () => void }) 
           {chart.birthPlace ? ` · ${chart.birthPlace}` : ""}
         </p>
       </div>
-      <button
-        type="button"
-        className="min-h-11 text-xs tracking-[0.16em] text-fg-subtle uppercase hover:text-wine"
-        onClick={async () => {
-          await deleteChart({ data: chart.id });
-          onGone();
-        }}
-      >
-        Remove
-      </button>
+      <div className="flex shrink-0 items-center gap-3">
+        <button
+          type="button"
+          className="min-h-11 text-xs tracking-[0.16em] text-fg uppercase hover:text-accent"
+          onClick={async () => {
+            await openSavedChart(chart, "library");
+            void navigate({ to: "/" });
+          }}
+        >
+          Open
+        </button>
+        <button
+          type="button"
+          className="min-h-11 text-xs tracking-[0.16em] text-fg-subtle uppercase hover:text-wine"
+          onClick={async () => {
+            await deleteChart({ data: chart.id });
+            onGone();
+          }}
+        >
+          Remove
+        </button>
+      </div>
     </li>
   );
 }
@@ -235,7 +249,7 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
         e.preventDefault();
         setBusy(true);
         try {
-          await saveChart({
+          await upsertChart({
             data: {
               label: relation === "self" ? "My chart" : personName.trim(),
               relation,

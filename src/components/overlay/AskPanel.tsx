@@ -11,11 +11,13 @@ import { isResearchChartId } from "@/lib/chart/types";
 import {
   loadNotes,
   loadThread,
+  migrateLocalAsk,
   saveNotes,
   saveThread,
   type FieldNote,
   type ThreadTurn,
 } from "@/lib/field-notes";
+import { GUEST_ASK_KEY } from "@/lib/charts-saved";
 import { loadAsk, saveAsk } from "@/lib/charts";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import {
@@ -36,11 +38,15 @@ export function AskPanel() {
   const visitor = session?.kind === "visitor" ? session : null;
   const research = session?.kind === "research" ? session : null;
   const chartKey = visitor?.chartKey ?? research?.chartKey ?? null;
-  const chartId = shelf?.id ?? chartKey ?? "";
   const skyNatal = useSkyNatal();
   const selection = useSessionSelection();
   const { user, isPending } = useCurrentUserState();
   const signedIn = Boolean(user);
+  const savedId = session?.savedId ?? null;
+  const researchKey = research?.chartKey ?? null;
+  const chartId =
+    savedId ?? (signedIn ? "" : (shelf?.id ?? chartKey ?? GUEST_ASK_KEY)) ?? "";
+  const askId = researchKey ?? chartId;
   const [tab, setTab] = useState<Tab>("ask");
   const [notes, setNotes] = useState<FieldNote[]>([]);
   const [thread, setThread] = useState<ThreadTurn[]>([]);
@@ -85,45 +91,51 @@ export function AskPanel() {
   notesRef.current = notes;
 
   const persist = (nextThread: ThreadTurn[], nextNotes: FieldNote[]) => {
-    saveThread(chartId, nextThread);
-    saveNotes(chartId, nextNotes);
-    if (signedIn && chartId) {
-      void saveAsk({ data: { chartKey: chartId, thread: nextThread, notes: nextNotes } }).catch(() => {
+    saveThread(askId, nextThread);
+    saveNotes(askId, nextNotes);
+    if (signedIn && askId) {
+      void saveAsk({ data: { chartKey: askId, thread: nextThread, notes: nextNotes } }).catch(() => {
         /* keep the local copy if the account write fails */
       });
     }
   };
 
   useEffect(() => {
+    if (!savedId) return;
+    migrateLocalAsk(GUEST_ASK_KEY, savedId);
+  }, [savedId]);
+
+  useEffect(() => {
     if (isPending) return;
     let cancelled = false;
-    const localT = loadThread(chartId);
-    const localN = loadNotes(chartId);
+    const localT = loadThread(askId);
+    const localN = loadNotes(askId);
     setThread(localT);
     setNotes(localN);
     setError(null);
     setDraft("");
     if (!user) return;
-    void loadAsk({ data: chartId })
+    if (!askId) return;
+    void loadAsk({ data: askId })
       .then((remote) => {
         if (cancelled) return;
         const empty = remote.thread.length === 0 && remote.notes.length === 0;
         if (empty) {
           if (localT.length || localN.length) {
-            void saveAsk({ data: { chartKey: chartId, thread: localT, notes: localN } }).catch(() => {});
+            void saveAsk({ data: { chartKey: askId, thread: localT, notes: localN } }).catch(() => {});
           }
           return;
         }
         setThread(remote.thread);
         setNotes(remote.notes);
-        saveThread(chartId, remote.thread);
-        saveNotes(chartId, remote.notes);
+        saveThread(askId, remote.thread);
+        saveNotes(askId, remote.notes);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [chartId, user?.id, isPending]);
+  }, [askId, user?.id, isPending]);
 
   useEffect(() => {
     if (!about) return;

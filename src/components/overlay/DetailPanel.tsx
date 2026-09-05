@@ -119,7 +119,7 @@ function ShelfPanel() {
             className={cn("min-h-11", shelf.tone === "vault" ? "text-fg" : "text-fg-subtle")}
             onClick={() => {
               setTone("vault");
-              if (user && shelf.id) void saveChartTone({ data: { chartId: shelf.id, tone: "vault" } }).catch(() => {});
+              if (user && shelf.id) void saveChartTone({ data: { chartId: shelf.savedId ?? shelf.id, tone: "vault" } }).catch(() => {});
             }}
           >
             Vault
@@ -129,7 +129,7 @@ function ShelfPanel() {
             className={cn("min-h-11", shelf.tone === "warm" ? "text-fg" : "text-fg-subtle")}
             onClick={() => {
               setTone("warm");
-              if (user && shelf.id) void saveChartTone({ data: { chartId: shelf.id, tone: "warm" } }).catch(() => {});
+              if (user && shelf.id) void saveChartTone({ data: { chartId: shelf.savedId ?? shelf.id, tone: "warm" } }).catch(() => {});
             }}
           >
             Warm
@@ -148,7 +148,7 @@ function ShelfPanel() {
                 const r = await sitWithTheSky({ data: { natal } });
                 setNatal(r.natal);
                 setDeepLeft(0);
-                if (shelf.id) void persistNatal({ data: { chartId: shelf.id, natal: r.natal } }).catch(() => {});
+                if (shelf.id) void persistNatal({ data: { chartId: shelf.savedId ?? shelf.id, natal: r.natal } }).catch(() => {});
               } catch (e) {
                 setErr(e instanceof Error ? e.message : "The deep cut is resting.");
               } finally {

@@ -148,6 +148,55 @@ describe("session store", () => {
     assert.equal(session?.skyNatal?.tone, "warm");
   });
 
+  it("attachSavedId sets savedId on the open session", () => {
+    useSessionStore.getState().openVisitor(nativity, sky);
+    useSessionStore.getState().attachSavedId("33333333-3333-3333-3333-333333333333");
+    assert.equal(useSessionStore.getState().session?.savedId, "33333333-3333-3333-3333-333333333333");
+  });
+
+  it("attachSavedId is a no-op for research sessions", () => {
+    useSessionStore.getState().openResearch("saige", {
+      ...nativity,
+      id: "saige",
+    } as Nativity);
+    const before = useSessionStore.getState().session;
+    assert.equal(before?.kind, "research");
+    assert.equal(before?.savedId, undefined);
+
+    useSessionStore.getState().attachSavedId("44444444-4444-4444-4444-444444444444");
+
+    const after = useSessionStore.getState().session;
+    assert.equal(after, before);
+    assert.equal(after?.savedId, undefined);
+    assert.equal(after?.chartKey, "saige");
+    assert.equal(after?.id, before?.id);
+  });
+
+  it("attachSavedId sets savedId and chartKey on shelf sessions", () => {
+    useSessionStore.getState().openShelf({
+      label: "Sam",
+      signId: "virgo",
+      birth: {
+        month: 9,
+        day: 2,
+        year: 1990,
+        hour: null,
+        minute: null,
+        place: null,
+      },
+      skyNatal: sky,
+      origin: "library",
+    });
+
+    const uuid = "55555555-5555-5555-5555-555555555555";
+    useSessionStore.getState().attachSavedId(uuid);
+
+    const session = useSessionStore.getState().session;
+    assert.equal(session?.kind, "shelf");
+    assert.equal(session?.savedId, uuid);
+    assert.equal(session?.chartKey, uuid);
+  });
+
   it("preserves research tour, interaction, and close behavior", () => {
     const research = {
       ...nativity,
