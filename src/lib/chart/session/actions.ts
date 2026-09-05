@@ -1,4 +1,5 @@
 import type { AppMode, Selection, SignId } from "@/lib/chart/types";
+import { canEnter } from "./rooms";
 import { closeTarget } from "./selectors";
 import type { BirthFacts, ChartSession, ClaimDraft, Surface } from "./types";
 
@@ -62,6 +63,7 @@ export function setSurfaceState(state: VaultDomainState, surface: Surface): Vaul
 
 export function setModeState(state: VaultDomainState, mode: AppMode): VaultDomainState {
   if (!state.session) return state;
+  if (!canEnter(state.session.kind, mode)) return state;
   if (mode === "ask") {
     return { ...state, session: { ...state.session, mode, hovered: null } };
   }
@@ -102,6 +104,7 @@ export function nextTourState(
   if (!next) {
     return { ...state, session: { ...state.session, tourBeat: null } };
   }
+  if (!canEnter(state.session.kind, next.mode)) return state;
   return {
     ...state,
     session: {
