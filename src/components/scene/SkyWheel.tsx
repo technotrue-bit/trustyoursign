@@ -12,9 +12,9 @@ import {
 import { ASPECT_COLOR } from "@/lib/chart/aspects";
 import { lonToXZ } from "@/lib/chart/geometry";
 import { useNativity } from "@/lib/chart/nativity";
+import { useSessionHovered, useSessionSelection } from "@/lib/chart/session/hooks";
 import type { PlanetId } from "@/lib/chart/types";
 import { isSmallGpu } from "@/lib/gpu";
-import { useVault } from "@/lib/store";
 import { Label } from "./Label";
 import { usePick } from "./pick";
 import { dashBetween, ThinSegments, type Seg } from "./ThinLines";
@@ -100,8 +100,8 @@ function EclipticRings() {
 function WheelLines() {
   const nat = useNativity();
   if (!nat) return null;
-  const selection = useVault((s) => s.selection);
-  const hovered = useVault((s) => s.hovered);
+  const selection = useSessionSelection();
+  const hovered = useSessionHovered();
   const focus =
     (selection?.kind === "planet" && selection.id) ||
     (hovered?.kind === "planet" && hovered.id) ||
@@ -154,7 +154,7 @@ function WheelLines() {
 function WheelLabels() {
   const nat = useNativity();
   if (!nat) return null;
-  const selected = useVault((s) => s.selection);
+  const selected = useSessionSelection();
   return (
     <group>
       {nat.houses.map((c) => {
@@ -201,8 +201,8 @@ function PlanetOrb({ id }: { id: PlanetId }) {
   const planet = nat.planetById[id];
   const group = useRef<Group>(null);
   const glow = useRef<Mesh>(null);
-  const selection = useVault((s) => s.selection);
-  const hovered = useVault((s) => s.hovered);
+  const selection = useSessionSelection();
+  const hovered = useSessionHovered();
   const pick = usePick("planet", id);
   if (!planet) return null;
   const [x, z] = lonToXZ(planet.lon, planet.radius, nat.angles);

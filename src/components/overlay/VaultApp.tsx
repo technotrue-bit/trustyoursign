@@ -10,14 +10,32 @@ import {
 } from "lucide-react";
 import { useNativity } from "@/lib/chart/nativity";
 import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
+import {
+  useClaim,
+  useSessionHovered,
+  useSessionChartKey,
+  useSessionKind,
+  useSessionMode,
+  useSessionOrigin,
+  useSessionStore,
+  useShelfSession,
+  useSurface,
+  useTourBeat,
+  useIsEntered,
+} from "@/lib/chart/session";
 import { beatById } from "@/lib/chart/tour";
-import type { AppMode, ChartId } from "@/lib/chart/types";
+import { isResearchChartId, type AppMode, type ChartId } from "@/lib/chart/types";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
-import { ensureAutoClock, ensureFlyInput, galaxyTravel, noteControl, skipBirth } from "@/lib/galaxy/travel";
+import {
+  ensureAutoClock,
+  ensureFlyInput,
+  galaxyTravel,
+  noteControl,
+  skipBirth,
+} from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
-import { useVault } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { AskPanel } from "./AskPanel";
@@ -58,10 +76,14 @@ const VISITOR_ROOMS = new Set<AppMode>(["sky", "body", "bones", "ask"]);
 export function VaultApp() {
   const [Scene, setScene] = useState<ComponentType | null>(null);
   const [sceneFailed, setSceneFailed] = useState(false);
-  const entered = useVault((s) => s.entered);
-  const gate = useVault((s) => s.gate);
-  const chat = useVault((s) => s.chat);
-  const shelf = useVault((s) => s.shelf);
+  const claim = useClaim();
+  const surface = useSurface();
+  const entered = useIsEntered();
+  const sessionKind = useSessionKind();
+  const sessionOrigin = useSessionOrigin();
+  const chat = claim !== null && !entered;
+  const gate = sessionOrigin ?? surface;
+  const shelf = sessionKind === "shelf";
 
   useEffect(() => {
     if (!shouldUse3D()) {
@@ -93,15 +115,14 @@ export function VaultApp() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const st = useSessionStore.getState();
       if (e.key === "Escape") {
-        const st = useVault.getState();
-        if (st.selection) st.clear();
-        else st.goBack();
+        if (st.session?.selection) st.clear();
+        else st.close();
       }
-      if (e.key === "Enter" && !useVault.getState().entered) {
-        const st = useVault.getState();
-        if (st.gate === "galaxy") {
-          if (st.chat) return;
+      if (e.key === "Enter" && !st.session) {
+        if (st.surface === "galaxy") {
+          if (st.claim) return;
           if (galaxyTravel.birth < 1) {
             skipBirth();
             useGalaxy.getState().markBorn();
@@ -110,14 +131,14 @@ export function VaultApp() {
           const g = useGalaxy.getState();
           if (g.moved) {
             const sign = CONSTELLATIONS[g.signIndex];
-            if (sign) st.openBirthChat(sign.id);
+            if (sign) st.openClaim(sign.id);
           } else st.openLibrary();
         }
       }
       const n = Number(e.key);
       if (n >= 1 && n <= 7) {
         const mode = MODES[n - 1];
-        if (mode && useVault.getState().entered) useVault.getState().setMode(mode.id);
+        if (mode && st.session) st.setMode(mode.id);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -147,7 +168,7 @@ export function VaultApp() {
       skipIntro();
       skipBirth();
       useGalaxy.getState().markBorn();
-      useVault.getState().openLibrary();
+      useSessionStore.getState().openLibrary();
       clean();
       return;
     }
@@ -157,7 +178,7 @@ export function VaultApp() {
       useGalaxy.getState().markBorn();
       void getResearchChart({ data: q })
         .then((nat) => {
-          useVault.getState().openChart(q, nat);
+          useSessionStore.getState().openResearch(q, nat);
           clean();
         })
         .catch(() => clean());
@@ -176,7 +197,7 @@ export function VaultApp() {
       ) : (
         <FallbackSky />
       )}
-      {entered && !shelf || chat || gate === "library" ? <StarBack /> : null}
+      {(entered && !shelf) || chat || gate === "library" ? <StarBack /> : null}
       {!entered && gate === "galaxy" && !chat ? <GalaxyCopy /> : null}
       {!entered && gate === "galaxy" && chat ? <BirthChat /> : null}
       {!entered && gate === "library" ? <Intro /> : null}
@@ -198,7 +219,7 @@ function GalaxyCopy() {
   const introDone = useGalaxy((s) => s.introDone);
   const asking = introVeil > 0.04;
   const titleAnimating = !introDone && introTitle > 0.08;
-  const openBirthChat = useVault((s) => s.openBirthChat);
+  const openClaim = useSessionStore((s) => s.openClaim);
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
 
   if (!born) {
@@ -272,8 +293,14 @@ function GalaxyCopy() {
             </h1>
             {moved && sign ? (
               <div key={sign.id} className="sign-swap pointer-events-auto col-start-1 row-start-1">
-                <button type="button" onClick={() => openBirthChat(sign.id)} className="w-full min-h-11">
-                  <p className="text-[0.65rem] tracking-[0.28em] text-fg-muted uppercase md:text-xs">{sign.month}</p>
+                <button
+                  type="button"
+                  onClick={() => openClaim(sign.id)}
+                  className="w-full min-h-11"
+                >
+                  <p className="text-[0.65rem] tracking-[0.28em] text-fg-muted uppercase md:text-xs">
+                    {sign.month}
+                  </p>
                   <h1 className="galaxy-sign-name mt-1 font-display leading-[1.05] font-medium tracking-tight text-fg italic">
                     {sign.name}
                   </h1>
@@ -295,13 +322,17 @@ function GalaxyCopy() {
         <LegalFooter />
         <SignStrip />
         <p className="px-4 text-center text-[0.7rem] tracking-wide text-fg-subtle md:text-xs">
-          <span className="md:hidden">Slide to fly. Pinch to zoom the sign. Swipe the names to jump.</span>
-          <span className="hidden md:inline">Slide up and down to fly. Scroll to pass through the signs.</span>
+          <span className="md:hidden">
+            Slide to fly. Pinch to zoom the sign. Swipe the names to jump.
+          </span>
+          <span className="hidden md:inline">
+            Slide up and down to fly. Scroll to pass through the signs.
+          </span>
         </p>
         <button
           type="button"
           disabled={!moved}
-          onClick={() => sign && openBirthChat(sign.id)}
+          onClick={() => sign && openClaim(sign.id)}
           className={cn(
             "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase md:min-h-11 md:w-auto",
             moved
@@ -319,7 +350,9 @@ function GalaxyCopy() {
 function Intro() {
   const user = useCurrentUser();
   const owner = isSiteOwner(user);
-  const [desk, setDesk] = useState<{ id: ChartId; title: string; oneCut: string; date: string }[] | null>(null);
+  const [desk, setDesk] = useState<
+    { id: ChartId; title: string; oneCut: string; date: string }[] | null
+  >(null);
 
   useEffect(() => {
     if (!owner) {
@@ -332,8 +365,9 @@ function Intro() {
   }, [owner]);
 
   const openResearch = async (id: ChartId) => {
+    if (!isResearchChartId(id)) return;
     const nat = await getResearchChart({ data: id });
-    useVault.getState().openChart(id, nat);
+    useSessionStore.getState().openResearch(id, nat);
   };
 
   return (
@@ -367,10 +401,13 @@ function Intro() {
                     onClick={() => void openResearch(book.id)}
                     className="w-full rounded-md border border-border bg-bg-elevated/80 px-4 py-4 text-left transition-colors duration-150 hover:bg-bg-subtle"
                   >
-                    <p className="font-display text-xl tracking-tight text-fg italic">{book.title}</p>
+                    <p className="font-display text-xl tracking-tight text-fg italic">
+                      {book.title}
+                    </p>
                     <p className="mt-1 text-sm text-fg-muted">{book.oneCut}</p>
                     <p className="mt-1 text-xs tracking-wide text-fg-subtle uppercase">
-                      {book.id === "saige" ? "Premium house" : "Walkthrough"} · {book.date} · research
+                      {book.id === "saige" ? "Premium house" : "Walkthrough"} · {book.date} ·
+                      research
                     </p>
                   </button>
                 </li>
@@ -382,7 +419,9 @@ function Intro() {
                 <p className="mt-1 text-sm text-fg-muted">
                   Sealed. When the house is finished, this is where it all comes together.
                 </p>
-                <p className="mt-1 text-xs tracking-wide text-fg-subtle uppercase">Not yet · owner</p>
+                <p className="mt-1 text-xs tracking-wide text-fg-subtle uppercase">
+                  Not yet · owner
+                </p>
               </div>
             </li>
           </ul>
@@ -436,12 +475,7 @@ function SavedShelf() {
             <button
               type="button"
               onClick={async () => {
-                if (
-                  c.natal &&
-                  c.birthHour != null &&
-                  c.birthMinute != null &&
-                  c.birthPlace
-                ) {
+                if (c.natal && c.birthHour != null && c.birthMinute != null && c.birthPlace) {
                   try {
                     const { sky, nativity } = await computeVisitorNatal({
                       data: {
@@ -455,27 +489,30 @@ function SavedShelf() {
                         label: c.label,
                       },
                     });
-                    useVault.getState().openVisitor(nativity, sky);
+                    useSessionStore.getState().openVisitor(nativity, sky);
                     return;
                   } catch {
                     /* fall through to shelf */
                   }
                 }
-                useVault.getState().openShelf({
+                useSessionStore.getState().openShelf({
                   id: c.id,
                   label: c.label,
                   signId: c.signId,
-                  birthMonth: c.birthMonth,
-                  birthDay: c.birthDay,
-                  birthYear: c.birthYear,
-                  birthHour: c.birthHour,
-                  birthMinute: c.birthMinute,
-                  birthPlace: c.birthPlace,
-                  natal: c.natal,
+                  birth: {
+                    month: c.birthMonth,
+                    day: c.birthDay,
+                    year: c.birthYear,
+                    hour: c.birthHour,
+                    minute: c.birthMinute,
+                    place: c.birthPlace,
+                  },
+                  skyNatal: c.natal,
                   tone: c.tone,
                   relation: c.relation,
                   personName: c.personName,
-                  from: "library",
+                  origin: "library",
+                  fromSavedId: c.id,
                 });
               }}
               className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-bg-subtle"
@@ -490,7 +527,10 @@ function SavedShelf() {
           </li>
         ))}
       </ul>
-      <Link to="/account" className="mt-3 inline-flex min-h-11 items-center text-xs tracking-[0.18em] text-fg-muted uppercase">
+      <Link
+        to="/account"
+        className="mt-3 inline-flex min-h-11 items-center text-xs tracking-[0.18em] text-fg-muted uppercase"
+      >
         All charts
       </Link>
     </div>
@@ -498,22 +538,29 @@ function SavedShelf() {
 }
 
 function Chrome() {
-  const mode = useVault((s) => s.mode);
-  const setMode = useVault((s) => s.setMode);
-  const hovered = useVault((s) => s.hovered);
-  const shelf = useVault((s) => s.shelf);
-  const chartId = useVault((s) => s.chartId);
+  const sessionKind = useSessionKind();
+  const sessionChartKey = useSessionChartKey();
+  const mode = useSessionMode();
+  const setMode = useSessionStore((s) => s.setMode);
+  const hovered = useSessionHovered();
+  const shelf = useShelfSession();
+  const chartKey =
+    sessionKind === "visitor"
+      ? "visitor"
+      : sessionKind === "research"
+        ? (sessionChartKey as ChartId)
+        : null;
   const nat = useNativity();
   const rooms = shelf
     ? MODES.filter((m) => m.id === "sky" || m.id === "ask")
-    : chartId === "visitor"
+    : chartKey === "visitor"
       ? MODES.filter((m) => VISITOR_ROOMS.has(m.id))
       : MODES;
-  const title = shelf ? shelf.label : nat?.meta.name ?? "The Vault";
+  const title = shelf ? shelf.label : (nat?.meta.name ?? "The Vault");
   const who = shelf
-    ? `${shelf.signId} · ${shelf.birthMonth}/${shelf.birthDay}/${shelf.birthYear}`
-    : chartRole(chartId, nat?.meta.date);
-  const tourBeat = useVault((s) => s.tourBeat);
+    ? `${shelf.signId} · ${shelf.birth.month}/${shelf.birth.day}/${shelf.birth.year}`
+    : chartRole(chartKey, nat?.meta.date);
+  const tourBeat = useTourBeat();
   const tourRoom = beatById(tourBeat)?.mode;
   return (
     <>
@@ -526,7 +573,7 @@ function Chrome() {
           <p className="hidden max-w-56 text-right text-xs leading-relaxed text-fg-subtle md:block">
             {shelf ? (
               "Sun-sign shelf. Not a natal."
-            ) : chartId === "visitor" && nat ? (
+            ) : chartKey === "visitor" && nat ? (
               <>
                 {nat.meta.zodiac} · {nat.meta.houses}
                 <br />

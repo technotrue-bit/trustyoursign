@@ -4,8 +4,8 @@ import { Billboard } from "@react-three/drei";
 import { AdditiveBlending, DoubleSide, Group, Mesh } from "three";
 import { lonToXZ } from "@/lib/chart/geometry";
 import { useNativity } from "@/lib/chart/nativity";
+import { useSessionHovered, useSessionSelection } from "@/lib/chart/session/hooks";
 import type { ChakraId, GateId } from "@/lib/chart/types";
-import { useVault } from "@/lib/store";
 import { Label } from "./Label";
 import { usePick } from "./pick";
 import { ThinLoop } from "./ThinLines";
@@ -48,8 +48,8 @@ function ChakraOrb({ id }: { id: ChakraId }) {
   const chakra = nat.chakraById[id];
   const glow = useRef<Mesh>(null);
   const ring = useRef<Mesh>(null);
-  const selection = useVault((s) => s.selection);
-  const hovered = useVault((s) => s.hovered);
+  const selection = useSessionSelection();
+  const hovered = useSessionHovered();
   const pick = usePick("chakra", id);
   const active =
     (selection?.kind === "chakra" && selection.id === id) ||
@@ -122,8 +122,8 @@ function GatePortal({ id, x }: { id: GateId; x: number }) {
   if (!nat) return null;
   const gate = nat.gates.find((g) => g.id === id);
   const glow = useRef<Mesh>(null);
-  const selection = useVault((s) => s.selection);
-  const hovered = useVault((s) => s.hovered);
+  const selection = useSessionSelection();
+  const hovered = useSessionHovered();
   const pick = usePick("gate", id);
   const colors: Record<GateId, string> = {
     rising: "#d8cfc0",
@@ -240,8 +240,8 @@ function MachineNode({
   z: number;
 }) {
   const glow = useRef<Group>(null);
-  const selection = useVault((s) => s.selection);
-  const hovered = useVault((s) => s.hovered);
+  const selection = useSessionSelection();
+  const hovered = useSessionHovered();
   const pick = usePick("step", String(n));
   const active =
     (selection?.kind === "step" && selection.id === String(n)) ||
