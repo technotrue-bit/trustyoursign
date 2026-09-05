@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   applyCloseState,
+  nextTourState,
   openClaimState,
   openSessionState,
   patchSessionState,
@@ -9,7 +10,7 @@ import {
   setSurfaceState,
   type VaultDomainState,
 } from "./actions.ts";
-import { fromVisitor } from "./factories.ts";
+import { fromShelf, fromVisitor } from "./factories.ts";
 import type { Nativity } from "@/lib/chart/schema";
 
 const empty: VaultDomainState = { session: null, claim: null, surface: "galaxy" };
@@ -64,5 +65,38 @@ describe("session actions", () => {
     assert.equal(sky.session?.selection, null);
     const ask = setModeState(withSel, "ask");
     assert.equal(ask.session?.selection?.id, "sun");
+  });
+
+  it("setModeState no-ops forbidden modes for visitor", () => {
+    const opened = openSessionState(empty, session);
+    const blocked = setModeState(opened, "gates");
+    assert.equal(blocked.session?.mode, "sky");
+    assert.equal(blocked, opened);
+  });
+
+  it("setModeState still applies allowed modes", () => {
+    const opened = openSessionState(empty, session);
+    const next = setModeState(opened, "bones");
+    assert.equal(next.session?.mode, "bones");
+  });
+
+  it("nextTourState no-ops when beat mode is illegal for kind", () => {
+    const shelf = fromShelf({
+      signId: "leo",
+      birth: { year: 2004, month: 7, day: 26, hour: null, minute: null, place: null },
+      skyNatal: null,
+      label: "Shelf chart",
+      origin: "library",
+      mode: "sky",
+    });
+    const opened = openSessionState(empty, shelf);
+    const blocked = nextTourState(opened, {
+      id: "body-wells",
+      mode: "body",
+      selection: { kind: "planet", id: "sun" },
+    });
+    assert.equal(blocked.session?.mode, "sky");
+    assert.equal(blocked.session?.tourBeat, null);
+    assert.equal(blocked, opened);
   });
 });
