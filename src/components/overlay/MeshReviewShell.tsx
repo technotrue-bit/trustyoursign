@@ -55,7 +55,7 @@ export function MeshReviewShell() {
   );
 }
 
-export function wantsMeshReview(search = typeof window !== "undefined" ? window.location.search : "") {
-  const q = new URLSearchParams(search).get("mesh");
+export function wantsMeshReview(search = "") {
+  const q = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("mesh");
   return q === "sagittarius" || q === "1" || q === "sagitarius";
 }

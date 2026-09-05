@@ -29,8 +29,13 @@ import { StarBack } from "./StarBack";
 import { NatalShell } from "./NatalShell";
 import { resolveGate } from "./resolveGate";
 
-export function VaultApp() {
-  const [meshReview] = useState(() => wantsMeshReview());
+type VaultAppProps = {
+  /** From route search — keeps SSR/client mesh-review branch in sync. */
+  meshParam?: string;
+};
+
+export function VaultApp({ meshParam }: VaultAppProps = {}) {
+  const meshReview = wantsMeshReview(meshParam ? `?mesh=${meshParam}` : "");
   const [Scene, setScene] = useState<ComponentType | null>(null);
   const [sceneFailed, setSceneFailed] = useState(false);
   const claim = useClaim();
