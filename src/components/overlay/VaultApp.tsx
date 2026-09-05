@@ -3,6 +3,7 @@ import { getResearchChart } from "@/lib/chart/research";
 import {
   useClaim,
   useSessionKind,
+  useSessionOrigin,
   useSessionStore,
   useSurface,
   useIsEntered,
@@ -34,9 +35,13 @@ export function VaultApp() {
   const surface = useSurface();
   const entered = useIsEntered();
   const sessionKind = useSessionKind();
+  const sessionOrigin = useSessionOrigin();
   const claiming = claim !== null && !entered;
   const shelf = sessionKind === "shelf";
   const gate = resolveGate({ entered, claiming, surface });
+  // StarBack parity with pre-shell VaultApp: (entered && !shelf) || chat || (origin ?? surface) === "library"
+  const showStarBack =
+    (entered && !shelf) || claiming || (sessionOrigin ?? surface) === "library";
 
   useEffect(() => {
     if (!shouldUse3D()) {
@@ -152,9 +157,7 @@ export function VaultApp() {
       ) : (
         <FallbackSky />
       )}
-      {(gate === "natal" && !shelf) || gate === "claim" || gate === "library" ? (
-        <StarBack />
-      ) : null}
+      {showStarBack ? <StarBack /> : null}
       {gate === "galaxy" ? <GalaxyShell /> : null}
       {gate === "claim" ? <ClaimShell /> : null}
       {gate === "library" ? <LibraryShell /> : null}
