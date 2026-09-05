@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import {
   ACESFilmicToneMapping,
@@ -65,7 +65,14 @@ import {
   primeSignArt,
   plateReady,
 } from "@/lib/galaxy/signArt";
-import { denseCloud, getSignVolume, primeSignVolumes, volumeChest } from "@/lib/galaxy/signVolume";
+import {
+  denseCloud,
+  getSignVolume,
+  hasVolumeSign,
+  interiorCloud,
+  primeSignVolumes,
+  volumeChest,
+} from "@/lib/galaxy/signVolume";
 import { buildBirthNebula, makeNebulaMaterial } from "@/lib/galaxy/nebula";
 import { makeStarSprite } from "@/lib/galaxy/celestial";
 import {
@@ -87,6 +94,7 @@ import { useShelfSession } from "@/lib/chart/session/hooks";
 import { useSessionStore } from "@/lib/chart/session/store";
 import { CelestialSky } from "./CelestialSky";
 import { CornerGalaxies } from "./CornerGalaxies";
+import { SignShell } from "./SignShell";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const DUST_N = SMALL ? 180 : 320;
@@ -405,6 +413,7 @@ function BirthNebula() {
 }
 
 function Station({ index, sign, eager }: { index: number; sign: TempleSign; eager: boolean }) {
+  const useVolume = hasVolumeSign(sign.id);
   const group = useRef<Group>(null);
   const cores = useRef<Points>(null);
   const art = useRef<Mesh>(null);
@@ -434,7 +443,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const g = new BufferGeometry();
     if (eager) {
       scatter.current = makeScatter(index, n);
-      const cloud = denseCloud(sign.id, n);
+      const cloud = useVolume ? interiorCloud(sign.id, n) : denseCloud(sign.id, n);
       fillMorphCloud(g, cloud, scatter.current, n, morphPairs);
       hydrated.current = cloud.length > n * 0.4;
     } else {
@@ -442,7 +451,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       g.setDrawRange(0, 0);
     }
     return g;
-  }, [eager, index, n, sign.id, morphPairs]);
+  }, [eager, index, n, sign.id, morphPairs, useVolume]);
   const pick = () => useSessionStore.getState().openClaim(sign.id);
 
   useEffect(() => {
@@ -532,7 +541,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const vol = volEarly;
     if (!hydrated.current && (focused || incoming || held || eager || ready)) {
       if (!scatter.current) scatter.current = makeScatter(index, n);
-      const cloud = denseCloud(sign.id, n);
+      const cloud = useVolume ? interiorCloud(sign.id, n) : denseCloud(sign.id, n);
       if (cloud.length > n * 0.4) {
         fillMorphCloud(starGeo, cloud, scatter.current, n, morphPairs);
         hydrated.current = true;
@@ -550,7 +559,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         ? Math.max(0, (arrive - 0.12) / 0.62)
         : smooth(Math.max(0, (gather - 0.52) / 0.48));
 
-    if (art.current && artTex) {
+    if (art.current && artTex && !useVolume) {
       const mat = art.current.material as MeshBasicMaterial;
       const plateOn = Boolean(artTex && (artReady(artTex) || ready));
       const bornIn = plateReveal;
@@ -642,6 +651,13 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           side={DoubleSide}
         />
       </mesh>
+      {useVolume ? (
+        <group position={[0, 0.05, -0.06]}>
+          <Suspense fallback={null}>
+            <SignShell signId={sign.id} plateWide={PLATE_WIDE} />
+          </Suspense>
+        </group>
+      ) : null}
       <points
         ref={cores}
         geometry={starGeo}
@@ -743,6 +759,7 @@ function TempleRig() {
   const epoch = useRef(galaxyTravel.epoch);
   const lastPub = useRef(-1);
   const booted = useRef(false);
+  const diveAmount = useRef(0);
 
   useEffect(() => {
     ensureAutoClock();
@@ -851,6 +868,18 @@ function TempleRig() {
       _cam.x += galaxyTravel.ptrX * 0.35;
       _cam.y += galaxyTravel.ptrY * 0.2;
     }
+    // Local dive: while a volume-gated station is held (BirthChat or shelf),
+    // ease the camera a small step toward the shell/station center. Does not
+    // alter the travel curve, target station, or look-at math above.
+    const heldSignId = chatting ? state.claim?.signId : shelfOn ? state.session?.signId : undefined;
+    const diveTarget = heldSignId && hasVolumeSign(heldSignId) ? 0.35 * PLATE_WIDE : 0;
+    diveAmount.current = lerpToward({
+      current: diveAmount.current,
+      target: diveTarget,
+      dt: d,
+      rate: 2.2,
+    });
+    if (diveAmount.current > 0.0005) _cam.z -= diveAmount.current;
     if (!Number.isFinite(_cam.x) || !Number.isFinite(_look.x)) return;
     camera.up.copy(_up);
     if (!booted.current || arriving) {
