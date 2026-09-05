@@ -40,7 +40,7 @@ Sign PNG ──► SignVolume (alpha + depth)
 
 | Unit | Responsibility |
 | --- | --- |
-| `src/lib/galaxy/signVolume.ts` | Deeper depth field; `buildShellGeometry(id)`; `interiorCloud(id, count)` sampling ±Z inside the body. `sculptRelief` may stay unused or be retired once the shell ships. |
+| `src/lib/galaxy/signVolume.ts` | Deeper depth field; `buildShellGeometry(id)`; `interiorCloud(id, count)` sampling ±Z inside the body. Existing `sculptRelief` may stay unused or be retired once the shell ships; `denseCloud` remains for ungated signs. |
 | `SignShell.tsx` (new under `src/components/scene/`) | Closed mesh + thin-gold `MeshPhysicalMaterial` (albedo from existing sign art). Props: `signId`, fit height/scale. |
 | `SignStarVolume.tsx` (new under `src/components/scene/`) | Interior points; reuse station star shaders / morph hooks from the existing star render path where Station still needs them. |
 | `MeshReviewCanvas.tsx` / `SagittariusMesh.tsx` | Replace live OBJ path with `SignShell` + `SignStarVolume` for Sagittarius; orbit + dive controls. |
