@@ -57,27 +57,28 @@ STOP WHEN: bars met on hot path · or same gap 3 rounds · or you stop the run
 | 4 | build (fly gap) | PENDING critic | Closed fly-sign-travel cost: prebake morph attrs on image-ready; TempleRig uses aimed volume only (no mid-seek `getSignVolume` builds); mid-flight station cores off + thin plate path; SignDisk frozen/hidden during seek; celestial arms/field/haze/corners/dust off while seeking; skip direct-seek `t` publish churn; CLOUD_N 1100/1800. Measure (390×844 + 4× CPU, multi-run): fly avg **~16.71–16.75** (was **16.873**); fly max **~33ms** (was **50**); long tasks **0**; hot-path avg **~16.70–16.73** (borderline ≤16.7 — run-to-run variance from rare ~33ms rAF). birthchat-slide + vault-phase tests green; `tsc` clean. BirthChat dock deferral untouched. | Residual: hot-path avg still flirts with 16.7 under variance; occasional ~33ms rAF (not >50 longtask) |
 | 4 | critic (re-judge fly) | **FAIL** BAR(1) | Fresh blind critic on `06241ed`. Same harness: 390×844 DPR2, CDP CPU 4×, Skip → strip fly → plate gather → BirthChat claim (no forge). **3 runs** (variance high): (1) hot **16.683** PASS / fly **16.707** / LT **0**; (2) hot **16.716** FAIL / fly **16.707** / birth **16.779** max rAF **33.4** / LT **0**; (3) hot **16.683** PASS / fly **16.707** / LT **0**. Median hot **16.683**; worst hot **16.716**. Long tasks **0** all runs (no >50ms). Fly improved vs prior critic **16.873** but stays **16.707**. Fail run driven by rare ~33ms rAF in birthchat-slide, not a longtask. Artifact: `screenshots/bar1-frame-measure.json` (= run2 FAIL) + `bar1-critic-run{1,2,3}.json`. BAR(2): `threeValueImports: 0` (54). BAR(3): `FORGE_PROSE_BATCH = 3` + `proseAdvanceBatch` + `Promise.allSettled`. | **Hot-path avg still not reliably ≤16.7** — worst **16.716** (birthchat ~33ms rAF); fly alone steady **16.707** |
 | 4 | build (dock rAF gap) | PENDING critic | Closed rare birthchat-slide ~33ms rAF / hot-avg variance: SignDisk freeze + station cores off while dock open; FOV/well gated behind `dockCamReady` (no snap); full-seek midFly thin until seek ends; defer neighbor `primeSignArt` off seek-start; BirthChat shell thinner + body at 48ms; dockPaint 3 rAF. Prior claim deferral (`4228cb1`) + mid-flight thin (`06241ed`) kept. Measure 3× (390×844 + 4× CPU): hot **16.683 / 16.683 / 16.683** all PASS; birth **16.666** max **16.8**; LT **0**; fly **~16.707**. birthchat-slide + vault-phase tests green; `tsc` clean. | Critic re-judge for reliable ≤16.7 worst-of-3 |
+| 4 | critic (re-judge dock) | **PASS** BAR(1) | Fresh blind critic on `aeb4721`. Same harness: 390×844 DPR2, CDP CPU 4×, Skip → strip fly → plate gather → BirthChat claim (no forge). **3/3 PASS**: (1) hot **16.683** / birth **16.666** max **16.8** / LT **0**; (2) hot **16.683** / birth **16.666** max **16.8** / LT **0**; (3) hot **16.666** / fly **16.666** / birth **16.666** / LT **0**. Worst hot **16.683**; median **16.683**. Long tasks **0** all runs (no >50ms). Birthchat ~33ms rAF gap closed vs prior critic worst **16.716**. Artifact: `screenshots/bar1-frame-measure.json` + `bar1-critic-run{1,2,3}.json`. BAR(2): `threeValueImports: 0` (54). BAR(3): `FORGE_PROSE_BATCH = 3` + `proseAdvanceBatch` + `Promise.allSettled`. | none — BAR(1) met worst-of-3 |
 
 ## Critic round (blind re-judge)
 
-**VERDICT: FAIL** BAR(1) — hot-path avg not reliably ≤16.7 under multi-run (worst **16.716**); long-task criterion met (**0** >50ms).
+**VERDICT: PASS** BAR(1) — all 3 runs hot-path avg ≤16.7 (worst **16.683**); long tasks **0** (>50ms) all runs.
 
 **EVIDENCE**
-- HEAD `06241ed`; method: `node scripts/measure-bar1-frames.mjs`, viewport **390×844** DPR2, CDP CPU **4×**, Skip → fly → plate gather → BirthChat claim.
-- Run1: hot **16.683** / fly **16.707** / max **33.3** / LT **0** → PASS
-- Run2: hot **16.716** / fly **16.707** / birth **16.779** max **33.4** / LT **0** → FAIL
-- Run3: hot **16.683** / fly **16.707** / max **33.3** / LT **0** → PASS
-- Median hot **16.683**; worst **16.716**. Fly phase identical **16.707** all three (down from prior critic **16.873**).
-- BAR(2) light: `threeValueImports: 0` (54 modules). BAR(3) light: batch=3 + `Promise.allSettled` present.
+- HEAD `aeb4721`; method: `node scripts/measure-bar1-frames.mjs`, viewport **390×844** DPR2, CDP CPU **4×**, Skip → fly → plate gather → BirthChat claim.
+- Run1: hot **16.683** / fly **16.707** / birth **16.666** max **16.8** / LT **0** → PASS
+- Run2: hot **16.683** / fly **16.708** / birth **16.666** max **16.8** / LT **0** → PASS
+- Run3: hot **16.666** / fly **16.666** / birth **16.666** max **16.8** / LT **0** → PASS
+- Median hot **16.683**; worst **16.683**. Prior critic fail (worst **16.716**, birth ~33ms rAF) closed.
+- BAR(2) light: `threeValueImports: 0` (54 modules). BAR(3) light: `FORGE_PROSE_BATCH = 3` + `proseAdvanceBatch` + `Promise.allSettled`.
 
-**LARGEST GAP:** Hot-path avg still exceeds **16.7** on noisy runs (**16.716** worst) when a ~33ms rAF lands (observed in birthchat-slide on fail run)—not a >50ms long task; fly alone holds at **16.707**.
+**LARGEST GAP:** none (BAR(1) met).
 
 ## Remaining gaps
 
-- **BAR(1)** — builder closed dock ~33ms gap under 3× measure (hot **16.683** all PASS); critic re-judge pending for reliable ≤16.7.
-- Overlay thrash (Wave 2 residual) — not re-measured; secondary to BAR(1).
+- **BAR(1)** — met under blind critic 3/3 (worst hot **16.683**, LT **0**).
+- Overlay thrash (Wave 2 residual) — not re-measured; secondary.
 - Live XAI forge wall-clock (Wave 3 residual) — batching landed; end-to-end timing not measured.
 
 ## Close-out
 
-Remediation waves 1–4 are complete (Tier A/B/C + integration). **BAR(2)** and **BAR(3)** hold under blind re-check. **BAR(1)** BirthChat long-task closed; fly-travel improved; dock rAF gap closed in builder measure (3/3 PASS at **16.683**) — **critic re-judge pending**.
+Remediation waves 1–4 are complete (Tier A/B/C + integration). **BAR(1)**, **BAR(2)**, and **BAR(3)** hold under blind critic re-check on `aeb4721` (3/3 hot ≤16.7, LT 0; import graph three=0; forge batch=3).
