@@ -5,7 +5,6 @@ import {
   BufferAttribute,
   Color,
   DoubleSide,
-  Group,
   Mesh,
   MeshPhysicalMaterial,
   SRGBColorSpace,
@@ -28,7 +27,6 @@ type Props = {
 };
 
 export function SignShell({ signId, fitHeight = 3.4, plateWide }: Props) {
-  const root = useRef<Group>(null);
   const meshRef = useRef<Mesh>(null);
   const albedo = useLoader(TextureLoader, SIGN_ART[signId]);
   const geo = useMemo(() => buildShellGeometry(signId), [signId]);
@@ -73,7 +71,9 @@ export function SignShell({ signId, fitHeight = 3.4, plateWide }: Props) {
 
   useLayoutEffect(() => {
     if (!meshRef.current || !geo) return;
-    const box = new Box3().setFromObject(meshRef.current);
+    const box = new Box3().setFromBufferAttribute(
+      geo.getAttribute("position") as BufferAttribute,
+    );
     const center = new Vector3();
     box.getCenter(center);
     meshRef.current.position.set(-center.x, -center.y, -center.z);
@@ -94,7 +94,7 @@ export function SignShell({ signId, fitHeight = 3.4, plateWide }: Props) {
   if (!geo) return null;
 
   return (
-    <group ref={root} scale={scale}>
+    <group scale={scale}>
       <mesh
         ref={meshRef}
         geometry={geo}
