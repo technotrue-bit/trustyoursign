@@ -1,8 +1,8 @@
 /** Shared mutable travel. Written every frame by the camera. Not React state. */
 import { CONSTELLATIONS, nearestSign, signStation, signedDelta, wrap12 } from "./constellations";
-import { primeSignArt } from "./signArt";
+import { primeSignArt } from "./signArtMedia";
 import { useGalaxy, currentConstellation } from "./store";
-import { clamp01, stationFromT, stationT } from "./temple";
+import { clamp01, stationFromT, stationT } from "./temple-data";
 import { introPlaying, skipIntro, introCanSkip } from "./intro";
 
 export { signedDelta, wrap12 };

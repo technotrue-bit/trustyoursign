@@ -1,29 +1,34 @@
 import { CanvasTexture, ClampToEdgeWrapping, LinearFilter, SRGBColorSpace } from "three";
 import type { SignId } from "@/lib/chart/types";
+import {
+  SIGN_ART,
+  ensureSignImage,
+  getSignAspectMap,
+  getSignImageMap,
+  imageReady,
+  onSignImageReady,
+} from "./signArtMedia";
 
-export const SIGN_ART: Record<SignId, string> = {
-  aries: "/signs/aries.png",
-  taurus: "/signs/taurus.png",
-  gemini: "/signs/gemini.png",
-  cancer: "/signs/cancer.png",
-  leo: "/signs/leo.png",
-  virgo: "/signs/virgo.png",
-  libra: "/signs/libra.png",
-  scorpio: "/signs/scorpio.png",
-  sagittarius: "/signs/sagittarius.png",
-  capricorn: "/signs/capricorn.png",
-  aquarius: "/signs/aquarius.png",
-  pisces: "/signs/pisces.png",
-};
+export {
+  SIGN_ART,
+  primeSignArt,
+  preloadSignArt,
+  preloadSignArtRest,
+  signArtImage,
+} from "./signArtMedia";
 
 const W = 1024;
 const H = 576;
-const images = new Map<string, HTMLImageElement>();
 /** Every canvas for a URL — independent, never shared across meshes. */
 const texturesByUrl = new Map<string, Set<CanvasTexture>>();
 /** Textures that actually had pixels drawn — keyed by texture, not URL. */
 const paintedTex = new WeakSet<CanvasTexture>();
-const aspects = new Map<string, number>();
+
+onSignImageReady((id) => {
+  const set = texturesByUrl.get(SIGN_ART[id]);
+  if (!set) return;
+  for (const tex of set) raster(id, tex);
+});
 
 function style(tex: CanvasTexture) {
   tex.colorSpace = SRGBColorSpace;
@@ -51,37 +56,9 @@ function register(url: string, tex: CanvasTexture) {
   set.add(tex);
 }
 
-function rasterAll(id: SignId) {
-  const set = texturesByUrl.get(SIGN_ART[id]);
-  if (!set) return;
-  for (const tex of set) raster(id, tex);
-}
-
-function ensureImage(id: SignId) {
-  const url = SIGN_ART[id];
-  let img = images.get(url);
-  if (img) return img;
-  img = new Image();
-  img.decoding = "async";
-  img.onload = () => {
-    const paint = () => rasterAll(id);
-    if (typeof img.decode === "function") img.decode().then(paint).catch(paint);
-    else paint();
-  };
-  img.onerror = () => {
-    window.setTimeout(() => {
-      images.delete(url);
-      ensureImage(id);
-    }, 700);
-  };
-  img.src = url;
-  images.set(url, img);
-  return img;
-}
-
 function raster(id: SignId, tex: CanvasTexture) {
   const url = SIGN_ART[id];
-  const img = images.get(url);
+  const img = getSignImageMap().get(url);
   if (!img || !img.complete || (img.naturalWidth ?? 0) < 2) return false;
   const canvas = tex.image as HTMLCanvasElement;
   if (!canvas || typeof canvas.getContext !== "function") return false;
@@ -108,7 +85,7 @@ function raster(id: SignId, tex: CanvasTexture) {
     dx = (W - dw) / 2;
   }
   ctx.drawImage(img, dx, dy, dw, dh);
-  aspects.set(url, img.naturalWidth / Math.max(1, img.naturalHeight));
+  getSignAspectMap().set(url, img.naturalWidth / Math.max(1, img.naturalHeight));
   style(tex);
   tex.needsUpdate = true;
   paintedTex.add(tex);
@@ -119,7 +96,7 @@ function raster(id: SignId, tex: CanvasTexture) {
 /** Draw this sign onto THIS texture. Never skip just because another canvas for the same URL was painted. */
 export function hydrateSignArt(id: SignId, tex: CanvasTexture) {
   register(SIGN_ART[id], tex);
-  ensureImage(id);
+  ensureSignImage(id);
   if (paintedTex.has(tex)) return true;
   return raster(id, tex);
 }
@@ -129,29 +106,9 @@ export function loadSignArt(id: SignId): CanvasTexture {
   const tex = new CanvasTexture(blankCanvas());
   style(tex);
   register(SIGN_ART[id], tex);
-  ensureImage(id);
+  ensureSignImage(id);
   hydrateSignArt(id, tex);
   return tex;
-}
-
-/** Warm the PNG only — does not allocate a canvas. */
-export function primeSignArt(id: SignId) {
-  if (typeof window === "undefined") return;
-  ensureImage(id);
-}
-
-export function preloadSignArt() {
-  if (typeof window === "undefined") return;
-  ensureImage("aries");
-  ensureImage("taurus");
-}
-
-export function preloadSignArtRest() {
-  if (typeof window === "undefined") return;
-  (Object.keys(SIGN_ART) as SignId[]).forEach((id) => {
-    if (id === "aries" || id === "taurus") return;
-    ensureImage(id);
-  });
 }
 
 export function artReady(tex: CanvasTexture) {
@@ -159,14 +116,11 @@ export function artReady(tex: CanvasTexture) {
 }
 
 export function artAspect(tex: CanvasTexture, fallback = 16 / 9) {
+  const aspects = getSignAspectMap();
   for (const [url, set] of texturesByUrl) {
     if (set.has(tex)) return aspects.get(url) ?? fallback;
   }
   return fallback;
-}
-
-export function signArtImage(id: SignId): HTMLImageElement {
-  return ensureImage(id);
 }
 
 export function plateReady(id: SignId) {
@@ -176,6 +130,5 @@ export function plateReady(id: SignId) {
       if (paintedTex.has(tex)) return true;
     }
   }
-  const img = images.get(SIGN_ART[id]);
-  return Boolean(img?.complete && (img.naturalWidth ?? 0) > 2);
+  return imageReady(id);
 }

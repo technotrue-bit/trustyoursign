@@ -43,6 +43,7 @@ import {
   introField,
   introPlaying,
   introAries,
+  introVeil,
   skipIntro,
   stepIntro,
   uAssemble,
@@ -240,7 +241,7 @@ function SignDisk() {
     const dist = Math.abs(galaxyTravel.t - stationT(idx));
     const gather = 1 - Math.min(1, dist / 0.07);
     const intro = introPlaying() ? introAries() : 1;
-    const veil = useGalaxy.getState().introVeil;
+    const veil = introVeil();
     const chatting = useVault.getState().chat;
     const picked = chatting && useVault.getState().pickedSign === sign.id;
     const show = gather > 0.32 && intro > 0.4 && veil < 0.45;

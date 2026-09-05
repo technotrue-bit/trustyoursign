@@ -1,5 +1,5 @@
 import type { Nativity } from "./schema";
-import type { TempleSign } from "@/lib/galaxy/temple";
+import type { TempleSign } from "@/lib/galaxy/temple-data";
 import type { SkyNatal } from "./ephemeris";
 
 type Hit = { score: number; text: string };

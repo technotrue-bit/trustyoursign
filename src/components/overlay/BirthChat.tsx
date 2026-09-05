@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
-import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
+import { TEMPLE_SIGNS } from "@/lib/galaxy/temple-data";
 import { daysForSign, formatBirth, formatClock, isDateInSign, monthsForSign, sunSignOn } from "@/lib/chart/sun";
 import { useVault } from "@/lib/store";
 import { useCurrentUser } from "@/lib/auth/use-current-user";

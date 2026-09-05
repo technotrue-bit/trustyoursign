@@ -27,31 +27,32 @@ STOP WHEN: bars met on hot path · or same gap 3 rounds · or you stop the run
 
 | ID | Bottleneck | Status | Notes |
 | --- | --- | --- | --- |
-| B1 | `three` leaks via temple → store | pending | Wave 2 |
-| B2 | Eager BirthChat / ChartForge / panels | pending | Wave 2 |
-| B3 | Intro opacity via zustand | pending | Wave 2 |
-| B4 | Chrome re-renders on hover | pending | Wave 2 |
-| B5 | `filter: blur` / backdrop over canvas | pending | Wave 2 |
+| B1 | `three` leaks via temple → store | done | `temple-data.ts` (no three) + curve in `temple.ts`; store/travel/FallbackSky → data; `signArtMedia` splits PNG warm from three textures |
+| B2 | Eager BirthChat / ChartForge / panels | done | `React.lazy` BirthChat/ChartForge/DetailPanel/AskPanel/TourGuide by phase/entered |
+| B3 | Intro opacity via zustand | done | Continuous fades via `--intro-*` CSS vars; discrete `introAsking`/`introSkip`/`introDone` only |
+| B4 | Chrome re-renders on hover | done | `useSceneHover` + `HoverHint`; DetailPanel sibling of Chrome (not under hover parent) |
+| B5 | `filter: blur` / backdrop over canvas | done | Stage overlays use opacity/transform; solid elevated bg instead of backdrop-filter |
 
 ### Tier C — server / forge
 
 | ID | Bottleneck | Status | Notes |
 | --- | --- | --- | --- |
-| C1 | 6 sequential xAI prose polls | pending | Wave 3 |
-| C2 | Forge `select *` every 1.6s | pending | Wave 3 |
-| C3 | Uncached geocode | pending | Wave 3 |
-| C4 | Dual Neon pools | pending | Wave 3 |
-| C5 | Desk `loadDesk` every AI call | pending | Wave 3 |
+| C1 | 6 sequential xAI prose polls | done | Wave 3: `proseAdvanceBatch` ≤3 via `Promise.allSettled` |
+| C2 | Forge `select *` every 1.6s | done | Wave 3: lean status cols; full blobs when ready |
+| C3 | Uncached geocode | done | Wave 3: in-memory Map by normalized place |
+| C4 | Dual Neon pools | done | Wave 3: shared `getNeonPool` |
+| C5 | Desk `loadDesk` every AI call | done | Wave 3: process memo + invalidate on save |
 
 ## Wave log
 
 | Wave | Round | VERDICT | EVIDENCE | LARGEST GAP |
 | --- | --- | --- | --- | --- |
 | 1 | build | PENDING critic | Tier A A1–A7 landed; birthchat-slide 19/19, vault-phase 3/3, forge 8/8, tsc clean. BAR(1) Chrome Performance not captured this wave. | Critic must measure mid-session frame time on fly + gather + BirthChat slide against ≤16.7ms / no >50ms long tasks |
+| 2 | build | PASS (builder) BAR(2) | Import graph: `store.ts` + `VaultApp.tsx` static walk → 0 value imports of `three`/`@react-three` (`scripts/check-bar2-import-graph.mjs`). ChartCanvas remains `import()`. birthchat-slide 19/19, vault-phase 3/3, forge+geocode tests green, `tsc` clean. | Blind critic should re-run import graph; overlay thrash not measured in Chrome |
+| 3 | build | PASS (builder) | C1–C5 in `bdd8a10`; forge advance batches keys; lean poll path | Live XAI wall-clock not measured |
 
 ## Remaining gaps
 
-- **BAR(1)** — needs blind critic Chrome Performance on `/` fly + plate gather + BirthChat slide (not run in Wave 1 builder).
-- Tier B (B1–B5) load graph — Wave 2.
-- Tier C (C1–C5) server/forge — Wave 3.
-- Wave 4 integration smooth + reduced-motion sanity after B/C.
+- **BAR(1)** — needs blind critic Chrome Performance on `/` fly + plate gather + BirthChat slide.
+- Wave 4 integration smooth + reduced-motion sanity after B/C (not run this wave).
+- Wave 2 critic: confirm no overlay thrash from remaining discrete intro flags / hover store.

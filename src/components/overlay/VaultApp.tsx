@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from "react";
+import { lazy, Suspense, useEffect, useState, type ComponentType, type CSSProperties } from "react";
 import {
   BookOpen,
   Columns3,
@@ -21,22 +21,24 @@ import { useVault } from "@/lib/store";
 import { busyFromPhase } from "@/lib/vault-phase";
 import { cn } from "@/lib/utils";
 import { SceneErrorBoundary } from "../scene-error-boundary";
-import { AskPanel } from "./AskPanel";
-import { BirthChat } from "./BirthChat";
-import { ChartForge, resumeForgeIfAny } from "./ChartForge";
-import { DetailPanel } from "./DetailPanel";
+import { useSceneHover } from "../scene/hover";
 import { FallbackSky } from "./FallbackSky";
 import { Gloss, GlossRoot, GlossStage } from "./Gloss";
 import { SignStrip } from "./SignStrip";
 import { StarBack } from "./StarBack";
 import { AuthSlot } from "./AuthSlot";
 import { LegalFooter } from "./LegalFooter";
-import { TourGuide } from "./TourGuide";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { listCharts, type SavedChart } from "@/lib/charts";
 import { computeVisitorNatal } from "@/lib/chart/sky";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { Link } from "@tanstack/react-router";
+
+const BirthChat = lazy(() => import("./BirthChat").then((m) => ({ default: m.BirthChat })));
+const ChartForge = lazy(() => import("./ChartForge").then((m) => ({ default: m.ChartForge })));
+const DetailPanel = lazy(() => import("./DetailPanel").then((m) => ({ default: m.DetailPanel })));
+const AskPanel = lazy(() => import("./AskPanel").then((m) => ({ default: m.AskPanel })));
+const TourGuide = lazy(() => import("./TourGuide").then((m) => ({ default: m.TourGuide })));
 
 function chartRole(id: ChartId | null, date?: string) {
   if (id === "saige") return date ? `Premium house · ${date}` : "Premium house";
@@ -135,7 +137,9 @@ export function VaultApp() {
   }, []);
 
   useEffect(() => {
-    void resumeForgeIfAny(useVault.getState().enterForge, useVault.getState().openVisitor);
+    void import("./ChartForge").then((m) =>
+      m.resumeForgeIfAny(useVault.getState().enterForge, useVault.getState().openVisitor),
+    );
   }, []);
 
   useEffect(() => {
@@ -179,7 +183,17 @@ export function VaultApp() {
   return (
     <main
       className="vault-stage relative overflow-hidden bg-bg text-fg"
-      style={{ background: "#0c0b0a", color: "#efe8dc" }}
+      style={
+        {
+          background: "#0c0b0a",
+          color: "#efe8dc",
+          "--intro-title": "0",
+          "--intro-chrome": "0",
+          "--intro-ask": "0",
+          "--intro-veil": "0",
+          "--intro-skip": "0",
+        } as CSSProperties
+      }
     >
       {Scene && !sceneFailed ? (
         <SceneErrorBoundary fallback={<FallbackSky />}>
@@ -190,11 +204,15 @@ export function VaultApp() {
       )}
       {(entered && !shelf) || chat || showForge || gate === "library" ? <StarBack /> : null}
       {showFly ? <GalaxyCopy /> : null}
-      {showDock ? <BirthChat /> : null}
-      {showForge ? <ChartForge /> : null}
-      {!entered && gate === "library" ? <Intro /> : null}
-      {entered ? <Chrome /> : null}
-      {entered ? <TourGuide /> : null}
+      <Suspense fallback={null}>
+        {showDock ? <BirthChat /> : null}
+        {showForge ? <ChartForge /> : null}
+        {!entered && gate === "library" ? <Intro /> : null}
+        {entered ? <Chrome /> : null}
+        {entered ? <DetailPanel /> : null}
+        {entered ? <HoverHint /> : null}
+        {entered ? <TourGuide /> : null}
+      </Suspense>
     </main>
   );
 }
@@ -203,14 +221,10 @@ function GalaxyCopy() {
   const moved = useGalaxy((s) => s.moved);
   const signIndex = useGalaxy((s) => s.signIndex);
   const born = useGalaxy((s) => s.born);
-  const introTitle = useGalaxy((s) => s.introTitle);
-  const introChrome = useGalaxy((s) => s.introChrome);
-  const introAsk = useGalaxy((s) => s.introAsk);
-  const introVeil = useGalaxy((s) => s.introVeil);
   const introSkip = useGalaxy((s) => s.introSkip);
   const introDone = useGalaxy((s) => s.introDone);
-  const asking = introVeil > 0.04;
-  const titleAnimating = !introDone && introTitle > 0.08;
+  const asking = useGalaxy((s) => s.introAsking);
+  const titleAnimating = !introDone;
   const openBirthChat = useVault((s) => s.openBirthChat);
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
 
@@ -225,20 +239,22 @@ function GalaxyCopy() {
   return (
     <div className="vault-overlay pointer-events-none absolute inset-0 z-30">
       <div className="galaxy-vignette" aria-hidden />
-      {asking ? (
-        <div
-          className="absolute inset-0 z-50 flex items-center justify-center bg-bg px-6"
-          style={{ opacity: introVeil }}
-          aria-hidden={introAsk < 0.05}
+      <div
+        className="absolute inset-0 z-50 flex items-center justify-center bg-bg px-6"
+        style={{
+          opacity: "var(--intro-veil)",
+          pointerEvents: asking ? "auto" : "none",
+          visibility: asking ? "visible" : "hidden",
+        }}
+        aria-hidden={!asking}
+      >
+        <p
+          className="font-display text-center text-[clamp(1.75rem,6.4vw,3.5rem)] leading-[1.18] font-medium tracking-tight text-fg italic antialiased"
+          style={{ opacity: "var(--intro-ask)" }}
         >
-          <p
-            className="font-display text-center text-[clamp(1.75rem,6.4vw,3.5rem)] leading-[1.18] font-medium tracking-tight text-fg italic antialiased"
-            style={{ opacity: introAsk }}
-          >
-            The Universe Asks You…
-          </p>
-        </div>
-      ) : null}
+          The Universe Asks You…
+        </p>
+      </div>
       {!asking ? (
         <div
           data-no-fly
@@ -249,6 +265,7 @@ function GalaxyCopy() {
               type="button"
               onClick={() => skipIntro()}
               className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+              style={{ opacity: "var(--intro-skip)" }}
             >
               Skip
             </button>
@@ -258,12 +275,12 @@ function GalaxyCopy() {
       ) : null}
       <GlossRoot>
         <div
+          data-no-fly
           className="galaxy-title-slot absolute top-[var(--chrome-top)] right-16 left-16 text-center md:top-[max(2.5rem,var(--safe-top))] md:right-24 md:left-24"
           onPointerDown={noteControl}
           style={{
-            opacity: asking || moved ? undefined : introTitle,
+            opacity: asking || moved ? undefined : "var(--intro-title)",
             visibility: asking ? "hidden" : undefined,
-            filter: moved || introDone ? undefined : `blur(${(1 - introTitle) * 4}px)`,
           }}
         >
           <div className="relative mx-auto grid min-h-14 place-items-center md:min-h-44">
@@ -271,8 +288,8 @@ function GalaxyCopy() {
               className={cn(
                 "galaxy-title col-start-1 row-start-1 font-display leading-[1.08] font-medium tracking-tight text-fg italic",
                 titleAnimating ? "sign-soft" : "intro-hold",
-                "transition-[opacity,filter] duration-500 ease-out",
-                moved ? "pointer-events-none opacity-0 blur-sm" : "opacity-100",
+                "transition-opacity duration-500 ease-out",
+                moved ? "pointer-events-none opacity-0" : "opacity-100",
               )}
               aria-hidden={moved}
             >
@@ -291,7 +308,7 @@ function GalaxyCopy() {
 
       <div
         className="galaxy-chrome pointer-events-none absolute inset-x-0 bottom-[var(--chrome-bottom)] flex flex-col items-center gap-2 md:bottom-8 md:gap-3"
-        style={{ opacity: asking ? 0 : introChrome, animation: "none" }}
+        style={{ opacity: asking ? 0 : "var(--intro-chrome)", animation: "none" }}
       >
         <LegalFooter />
         <SignStrip />
@@ -542,10 +559,27 @@ function SavedShelf() {
   );
 }
 
+function HoverHint() {
+  const hovered = useSceneHover((s) => s.hovered);
+  const mode = useVault((s) => s.mode);
+  if (mode === "sky" && !hovered) {
+    return (
+      <p className="pointer-events-none absolute bottom-24 left-4 z-20 hidden max-w-56 text-xs leading-relaxed text-fg-subtle md:block">
+        Drag the sky. Click a planet or a sign.
+      </p>
+    );
+  }
+  if (!hovered) return null;
+  return (
+    <div className="pointer-events-none absolute bottom-28 left-1/2 z-20 hidden -translate-x-1/2 rounded-md bg-bg-elevated px-3 py-1.5 text-xs tracking-wide text-fg-muted md:block">
+      {hovered.kind} · {hovered.id}
+    </div>
+  );
+}
+
 function Chrome() {
   const mode = useVault((s) => s.mode);
   const setMode = useVault((s) => s.setMode);
-  const hovered = useVault((s) => s.hovered);
   const shelf = useVault((s) => s.shelf);
   const chartId = useVault((s) => s.chartId);
   const nat = useNativity();
@@ -592,17 +626,10 @@ function Chrome() {
           <AuthSlot />
         </header>
       ) : null}
-      <DetailPanel />
-      {mode === "ask" ? <AskPanel /> : null}
-      {mode === "sky" && !hovered ? (
-        <p className="pointer-events-none absolute bottom-24 left-4 z-20 hidden max-w-56 text-xs leading-relaxed text-fg-subtle md:block">
-          Drag the sky. Click a planet or a sign.
-        </p>
-      ) : null}
-      {hovered ? (
-        <div className="pointer-events-none absolute bottom-28 left-1/2 z-20 hidden -translate-x-1/2 rounded-md bg-bg-elevated px-3 py-1.5 text-xs tracking-wide text-fg-muted md:block">
-          {hovered.kind} · {hovered.id}
-        </div>
+      {mode === "ask" ? (
+        <Suspense fallback={null}>
+          <AskPanel />
+        </Suspense>
       ) : null}
       <nav
         className="pointer-events-auto absolute right-0 bottom-0 left-0 z-30 flex w-full items-center justify-center pb-[var(--chrome-bottom)] md:bottom-5 md:left-1/2 md:w-auto md:-translate-x-1/2 md:pb-0"

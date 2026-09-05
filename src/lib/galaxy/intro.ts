@@ -51,31 +51,45 @@ function markSeen() {
   }
 }
 
+function introRoot(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return document.querySelector<HTMLElement>(".vault-stage") ?? document.documentElement;
+}
+
+/** Drive overlay fades without zustand → React re-render every frame. */
+function publishCss(title: number, chrome: number, ask: number, veil: number, skip: boolean) {
+  const el = introRoot();
+  if (!el) return;
+  el.style.setProperty("--intro-title", String(title));
+  el.style.setProperty("--intro-chrome", String(chrome));
+  el.style.setProperty("--intro-ask", String(ask));
+  el.style.setProperty("--intro-veil", String(veil));
+  el.style.setProperty("--intro-skip", skip ? "1" : "0");
+  el.dataset.introAsking = veil > 0.04 ? "1" : "0";
+  el.dataset.introDone = templeIntro.done ? "1" : "0";
+}
+
+function publishDiscrete(skip: boolean, asking: boolean) {
+  const st = useGalaxy.getState();
+  if (st.introSkip === skip && st.introDone === templeIntro.done && st.introAsking === asking) {
+    return;
+  }
+  useGalaxy.setState({
+    introSkip: skip,
+    introDone: templeIntro.done,
+    introAsking: asking,
+  });
+}
+
 function publish() {
   const title = introTitle();
   const chrome = introChrome();
   const ask = introAsk();
   const veil = introVeil();
   const skip = introCanSkip() && (templeIntro.asking || chrome < 0.55);
-  const st = useGalaxy.getState();
-  if (
-    Math.abs(st.introTitle - title) < 0.012 &&
-    Math.abs(st.introChrome - chrome) < 0.012 &&
-    Math.abs(st.introAsk - ask) < 0.012 &&
-    Math.abs(st.introVeil - veil) < 0.012 &&
-    st.introSkip === skip &&
-    st.introDone === templeIntro.done
-  ) {
-    return;
-  }
-  useGalaxy.setState({
-    introTitle: title,
-    introChrome: chrome,
-    introAsk: ask,
-    introVeil: veil,
-    introSkip: skip,
-    introDone: templeIntro.done,
-  });
+  const asking = veil > 0.04;
+  publishCss(title, chrome, ask, veil, skip);
+  publishDiscrete(skip, asking);
 }
 
 /** Ember → expand → ignite. Visible from the first frames. */
@@ -168,13 +182,11 @@ export function skipIntro() {
   templeIntro.done = true;
   markSeen();
   useGalaxy.getState().markBorn();
+  publishCss(1, 1, 0, 0, false);
   useGalaxy.setState({
-    introTitle: 1,
-    introChrome: 1,
-    introAsk: 0,
-    introVeil: 0,
     introSkip: false,
     introDone: true,
+    introAsking: false,
   });
   return true;
 }
@@ -197,13 +209,11 @@ export function stepIntro(dt: number) {
     templeIntro.done = true;
     markSeen();
     useGalaxy.getState().markBorn();
+    publishCss(1, 1, 0, 0, false);
     useGalaxy.setState({
-      introTitle: 1,
-      introChrome: 1,
-      introAsk: 0,
-      introVeil: 0,
       introSkip: false,
       introDone: true,
+      introAsking: false,
     });
     return true;
   }

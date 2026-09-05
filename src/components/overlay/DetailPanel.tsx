@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { formatDegree } from "@/lib/chart/geometry";
 import { useNativity } from "@/lib/chart/nativity";
 import { formatBirth, formatClock } from "@/lib/chart/sun";
-import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
+import { TEMPLE_SIGNS } from "@/lib/galaxy/temple-data";
 import { signAtLon } from "@/lib/chart/signs";
 import type {
   ChakraId,

@@ -139,7 +139,8 @@
 }
 
 .vault-page-shell [class*="bg-bg-elevated/"] {
-  backdrop-filter: blur(8px);
+  /* Prefer solid opacity over backdrop-filter over the WebGL stage (B5). */
+  background-color: color-mix(in oklab, var(--color-bg-elevated) 92%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -174,14 +175,12 @@
   .sign-soft .word {
     animation: none !important;
     opacity: 1 !important;
-    filter: none !important;
     transform: none !important;
   }
 }
 
 .stagger-in > * {
   opacity: 0;
-  filter: blur(4px);
   transform: translateY(12px);
   animation: vault-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
@@ -208,7 +207,6 @@
 @keyframes vault-in {
   to {
     opacity: 1;
-    filter: blur(0);
     transform: translateY(0);
   }
 }
@@ -256,13 +254,11 @@
 @keyframes sign-soft {
   0% {
     opacity: 0;
-    filter: blur(14px);
-    transform: translateY(10px);
+    transform: translateY(10px) scale(0.98);
   }
   to {
     opacity: 1;
-    filter: blur(0);
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -270,7 +266,6 @@
   display: inline-block;
   margin-inline: 0.18em;
   opacity: 0;
-  filter: blur(16px);
   transform: translateY(12px);
   animation: sign-soft 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
@@ -291,7 +286,6 @@
 .intro-hold .word {
   animation: none;
   opacity: 1;
-  filter: none;
   transform: none;
 }
 

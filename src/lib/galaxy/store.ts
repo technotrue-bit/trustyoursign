@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { CONSTELLATIONS } from "./constellations";
-import { stationFromT } from "./temple";
+import { stationFromT } from "./temple-data";
 
 type GalaxyState = {
   t: number;
@@ -10,10 +10,8 @@ type GalaxyState = {
   signPlateIndex: number | null;
   born: boolean;
   chakraNote: string | null;
-  introTitle: number;
-  introChrome: number;
-  introAsk: number;
-  introVeil: number;
+  /** Discrete intro flags only — continuous opacities use CSS vars (B3). */
+  introAsking: boolean;
   introSkip: boolean;
   introDone: boolean;
   setTravel: (t: number, moved?: boolean, signIndexOverride?: number) => void;
@@ -28,10 +26,7 @@ export const useGalaxy = create<GalaxyState>((set, get) => ({
   signPlateIndex: null,
   born: false,
   chakraNote: null,
-  introTitle: 0,
-  introChrome: 0,
-  introAsk: 0,
-  introVeil: 0,
+  introAsking: false,
   introSkip: false,
   introDone: false,
   setTravel: (t, moved, signIndexOverride) => {

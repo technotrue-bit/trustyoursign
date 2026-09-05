@@ -1,7 +1,6 @@
-import { BufferAttribute, BufferGeometry } from "three";
 import type { SignId } from "@/lib/chart/types";
 import { isSmallGpu } from "@/lib/gpu";
-import { SIGN_ART, signArtImage } from "./signArt";
+import { SIGN_ART, signArtImage } from "./signArtMedia";
 
 export type VolumeStar = { x: number; y: number; z: number; mag: number };
 
@@ -200,20 +199,4 @@ export function denseCloudPooled(id: SignId, count: number): VolumeStar[] {
 
 export function prebakeSignClouds(ids: SignId[], count: number) {
   for (const id of ids) denseCloudPooled(id, count);
-}
-
-/** Push a unit plane into the sign's body so it reads as sculpture, not a card. */
-export function sculptRelief(geo: BufferGeometry, vol: SignVolume) {
-  const pos = geo.getAttribute("position") as BufferAttribute;
-  const uv = geo.getAttribute("uv") as BufferAttribute;
-  if (!pos || !uv) return;
-  for (let i = 0; i < pos.count; i++) {
-    const u = uv.getX(i);
-    const v = uv.getY(i);
-    const a = sampleField(vol.alpha, vol, u, v);
-    const d = sampleField(vol.depth, vol, u, v);
-    pos.setZ(i, a > 0.06 ? d : 0);
-  }
-  pos.needsUpdate = true;
-  geo.computeVertexNormals();
 }

@@ -5,7 +5,7 @@ import { askTheSky } from "@/lib/chart/sky";
 import { answerFromBones, answerFromShelf, answerFromSky } from "@/lib/chart/bones-ask";
 import { formatBirth, formatClock } from "@/lib/chart/sun";
 import { useNativity } from "@/lib/chart/nativity";
-import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
+import { TEMPLE_SIGNS } from "@/lib/galaxy/temple-data";
 import type { ChakraId, GateId, PlanetId, ReadingId, Selection } from "@/lib/chart/types";
 import { isResearchChartId } from "@/lib/chart/types";
 import {
