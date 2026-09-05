@@ -242,8 +242,10 @@ function SignDisk() {
     const gather = 1 - Math.min(1, dist / 0.07);
     const intro = introPlaying() ? introAries() : 1;
     const veil = introVeil();
-    const chatting = useVault.getState().chat;
-    const picked = chatting && useVault.getState().pickedSign === sign.id;
+    const chatting = useVault.getState().chat || galaxyTravel.dockSlide;
+    const picked =
+      chatting &&
+      (useVault.getState().pickedSign === sign.id || galaxyTravel.dockSign === sign.id);
     const show = gather > 0.32 && intro > 0.4 && veil < 0.45;
     g.visible = show;
     if (!show) {
@@ -444,9 +446,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const g = group.current;
     const mesh = cores.current;
     if (!g || !mesh) return;
-    const chatting = useVault.getState().chat;
+    const chatting = useVault.getState().chat || galaxyTravel.dockSlide;
     const shelf = useVault.getState().shelf;
-    const picked = chatting && useVault.getState().pickedSign === sign.id;
+    const picked =
+      chatting &&
+      (useVault.getState().pickedSign === sign.id || galaxyTravel.dockSign === sign.id);
     const held = picked || (Boolean(shelf) && shelf?.signId === sign.id);
     const t = galaxyTravel.t;
     const direct = galaxyTravel.seekDirect && galaxyTravel.seek != null;
@@ -777,7 +781,7 @@ function TempleRig() {
       if (galaxyTravel.awaken < 0.2) galaxyTravel.awaken = 1;
     }
     stepIntro(d);
-    const chatting = useVault.getState().chat;
+    const chatting = useVault.getState().chat || galaxyTravel.dockSlide;
     const arriving = introPlaying();
     const sought = stepSeek(current.current, d);
     if (sought.active) {
@@ -786,7 +790,8 @@ function TempleRig() {
     }
     galaxyTravel.traveling = sought.active;
     if (chatting) {
-      const i = CONSTELLATIONS.findIndex((c) => c.id === useVault.getState().pickedSign);
+      const dockId = useVault.getState().pickedSign ?? galaxyTravel.dockSign;
+      const i = CONSTELLATIONS.findIndex((c) => c.id === dockId);
       if (i >= 0) galaxyTravel.tTarget = stationT(i);
     } else if (!arriving && !sought.active) {
       const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;

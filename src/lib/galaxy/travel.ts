@@ -76,6 +76,10 @@ export const galaxyTravel = {
   traveling: false,
   /** Chat, vault, or still birthing — don't auto-walk. */
   busy: false,
+  /** BirthChat slide armed before React dock phase commits (avoids one fat click task). */
+  dockSlide: false,
+  /** Sign id for dockSlide before pickedSign lands in the vault store. */
+  dockSign: null as string | null,
   /** Station whose plate has appeared (for title delay + auto-arm). */
   signImageIndex: -1,
   /** performance.now() when that plate first appeared. */
@@ -200,6 +204,8 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.handsOn = false;
   galaxyTravel.traveling = false;
   galaxyTravel.busy = false;
+  galaxyTravel.dockSlide = false;
+  galaxyTravel.dockSign = null;
   galaxyTravel.hold = 0;
   galaxyTravel.steer = 0;
   galaxyTravel.dragging = false;

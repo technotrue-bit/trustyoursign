@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ComponentType, type CSSProperties } from "react";
+import { lazy, memo, Suspense, useEffect, useState, type ComponentType, type CSSProperties } from "react";
 import {
   BookOpen,
   Columns3,
@@ -34,11 +34,21 @@ import { computeVisitorNatal } from "@/lib/chart/sky";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { Link } from "@tanstack/react-router";
 
-const BirthChat = lazy(() => import("./BirthChat").then((m) => ({ default: m.BirthChat })));
+/** Shared loader so idle warm + React.lazy hit the same module graph. */
+function loadBirthChat() {
+  return import("./BirthChat").then((m) => ({ default: m.BirthChat }));
+}
+
+const BirthChat = lazy(loadBirthChat);
 const ChartForge = lazy(() => import("./ChartForge").then((m) => ({ default: m.ChartForge })));
 const DetailPanel = lazy(() => import("./DetailPanel").then((m) => ({ default: m.DetailPanel })));
 const AskPanel = lazy(() => import("./AskPanel").then((m) => ({ default: m.AskPanel })));
 const TourGuide = lazy(() => import("./TourGuide").then((m) => ({ default: m.TourGuide })));
+
+/** Warm BirthChat chunk off the claim click — during galaxy idle / plate gather. */
+function warmBirthChat() {
+  void loadBirthChat();
+}
 
 function chartRole(id: ChartId | null, date?: string) {
   if (id === "saige") return date ? `Premium house · ${date}` : "Premium house";
@@ -142,6 +152,30 @@ export function VaultApp() {
     );
   }, []);
 
+  // Prefetch BirthChat while flying / gathering so claim → dock does not parse the chunk mid-slide.
+  useEffect(() => {
+    if (entered || gate !== "galaxy") return;
+    let cancelled = false;
+    const warm = () => {
+      if (!cancelled) warmBirthChat();
+    };
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const ric = typeof window !== "undefined" ? window.requestIdleCallback : undefined;
+    if (typeof ric === "function") {
+      idleId = ric(warm, { timeout: 1800 });
+    } else {
+      timeoutId = setTimeout(warm, 350);
+    }
+    return () => {
+      cancelled = true;
+      if (idleId != null && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId != null) clearTimeout(timeoutId);
+    };
+  }, [entered, gate]);
+
   useEffect(() => {
     galaxyTravel.busy = busyFromPhase(phase, entered);
   }, [phase, entered]);
@@ -176,9 +210,25 @@ export function VaultApp() {
   }, []);
 
   const onGalaxy = !entered && gate === "galaxy";
-  const showFly = onGalaxy && phase === "galaxy";
+  const showFly = onGalaxy && (phase === "galaxy" || phase === "dock");
   const showDock = onGalaxy && phase === "dock";
   const showForge = onGalaxy && phase === "forge";
+  // Mount dock one frame after phase flip so slide/FOV work does not share the first BirthChat commit.
+  const [dockPaint, setDockPaint] = useState(false);
+  useEffect(() => {
+    if (!showDock) {
+      setDockPaint(false);
+      return;
+    }
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setDockPaint(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [showDock]);
 
   return (
     <main
@@ -203,9 +253,13 @@ export function VaultApp() {
         <FallbackSky />
       )}
       {(entered && !shelf) || chat || showForge || gate === "library" ? <StarBack /> : null}
-      {showFly ? <GalaxyCopy /> : null}
+      {showFly ? (
+        <div className={phase === "dock" ? "pointer-events-none" : undefined} aria-hidden={phase === "dock"}>
+          <GalaxyCopyView />
+        </div>
+      ) : null}
       <Suspense fallback={null}>
-        {showDock ? <BirthChat /> : null}
+        {showDock && dockPaint ? <BirthChat /> : null}
         {showForge ? <ChartForge /> : null}
         {!entered && gate === "library" ? <Intro /> : null}
         {entered ? <Chrome /> : null}
@@ -227,6 +281,12 @@ function GalaxyCopy() {
   const titleAnimating = !introDone;
   const openBirthChat = useVault((s) => s.openBirthChat);
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
+
+  // Plate gather / claim-ready: ensure BirthChat module is warm before "This is my sign".
+  useEffect(() => {
+    if (!moved || !born) return;
+    warmBirthChat();
+  }, [moved, born]);
 
   if (!born) {
     return (
@@ -333,6 +393,9 @@ function GalaxyCopy() {
     </div>
   );
 }
+
+/** Memoized so vault phase flips (dock) do not rebuild the fly chrome tree. */
+const GalaxyCopyView = memo(GalaxyCopy);
 
 function SignSwap({
   sign,

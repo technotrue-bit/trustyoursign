@@ -3,7 +3,7 @@ import type { AppMode, ChartId, Selection, SignId } from "@/lib/chart/types";
 import type { Nativity } from "@/lib/chart/schema";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
-import { OPEN_T, resetTravel, seekSign } from "@/lib/galaxy/travel";
+import { OPEN_T, galaxyTravel, resetTravel, seekSign } from "@/lib/galaxy/travel";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { isDateInSign } from "@/lib/chart/sun";
 import { followingBeat, markBeatSeen, markTourDone, nextJoeyBeat } from "@/lib/chart/tour";
@@ -241,21 +241,32 @@ export const useVault = create<VaultState>((set, get) => ({
     }),
   openBirthChat: (sign) => {
     const i = CONSTELLATIONS.findIndex((c) => c.id === sign);
-    if (i >= 0) seekSign(i);
-    set({
-      ...withPhase(phaseAfterOpenBirthChat()),
-      pickedSign: sign,
-      gate: "galaxy",
-      birth: null,
-      forgeJobId: null,
-    });
+    // Skip seek when already on this sign — claim frame must not re-prime art + publishTravel.
+    if (i >= 0 && useGalaxy.getState().signIndex !== i) seekSign(i);
+    // Start 3D slide immediately; defer React dock phase so the click task stays short.
+    galaxyTravel.dockSlide = true;
+    galaxyTravel.dockSign = sign;
+    galaxyTravel.busy = true;
+    const commit = () =>
+      set({
+        ...withPhase(phaseAfterOpenBirthChat()),
+        pickedSign: sign,
+        gate: "galaxy",
+        birth: null,
+        forgeJobId: null,
+      });
+    // Next macrotask — must not share the click long-task with React dock commit.
+    setTimeout(commit, 0);
   },
-  closeBirthChat: () =>
+  closeBirthChat: () => {
+    galaxyTravel.dockSlide = false;
+    galaxyTravel.dockSign = null;
     set({
       ...withPhase(phaseAfterCloseBirthChat()),
       birth: null,
       forgeJobId: null,
-    }),
+    });
+  },
   enterForge: (jobId) =>
     set({
       ...withPhase("forge"),
