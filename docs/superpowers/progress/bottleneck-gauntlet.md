@@ -53,25 +53,26 @@ STOP WHEN: bars met on hot path · or same gap 3 rounds · or you stop the run
 | 4 | integrate | PASS (builder) | Integration: A4 phase mutex intact with B2 lazy overlays (mutex in `GalaxyIntro` SignDisk/BirthNebula/Station; overlays gated by phase only). Reduced-motion: `bootIntro` skip + `prefersReducedMotion` disk freeze + CSS `@media` still present. Forge resume: VaultApp mount still `import("./ChartForge").then(resumeForgeIfAny)`. birthchat-slide math untouched (19/19). Full verify: `npm test` 81 pass / 0 fail; `typecheck` clean; `build` clean. BAR(2) re-run: `threeValueImports: 0`, `threeDynamicOnly: 0`, 54 modules. BAR(1) not measured (no Chrome Performance mid-phone profile this wave — critic-pending). No integration bugs found; no code fixes. | **BAR(1)** Chrome Performance mid-session ≤16.7ms / no >50ms long tasks on mid-phone profile — still critic-pending |
 | 4 | critic | **FAIL** BAR(1) | Blind critic. Method: Playwright Chromium + CDP `Emulation.setCPUThrottlingRate: 4`, viewport **390×844** DPR2, headless, `/` after Skip. Harness `scripts/measure-bar1-frames.mjs` (rAF pacing + `PerformanceObserver` longtask). Hot path (fly + plate gather + BirthChat slide): **avg 16.832ms** (limit 16.7), **1 long task 78ms** (BirthChat slide), max rAF **66.7ms**. Fly alone: avg 16.914ms, max 50ms, 0 longtasks. Plate gather: avg **16.666ms**, max 16.8ms, 0 longtasks. Settle baseline: avg 16.564ms clean. Artifact: `screenshots/bar1-frame-measure.json`. BAR(2) re-check: `node scripts/check-bar2-import-graph.mjs` → `threeValueImports: 0` (54 modules). BAR(3): `FORGE_PROSE_BATCH = 3` + `proseAdvanceBatch` + `Promise.allSettled` in `forge-api.ts` (no live XAI). | **BirthChat slide open** — 78ms main-thread long task when claiming sign / mounting dock (lazy BirthChat + slide); primary BAR(1) miss. Secondary: hot-path avg 16.832ms slightly over 16.7 |
 | 4 | build (gap) | PENDING critic | Closed BirthChat claim long-task: defer React dock `set()` to `setTimeout(0)` while arming `galaxyTravel.dockSlide`/`dockSign` for immediate 3D slide; idle-warm BirthChat chunk; shell→body split; year options on focus; skip redundant `seekSign`; memo fly chrome; dynamic forge/sky/charts imports. Measure (`measure-bar1-frames.mjs`, 390×844 + 4× CPU): **0 long tasks** (was 78ms); birthchat-slide longTaskMax **0**; hot-path avg **16.882ms** still >16.7; max rAF 50ms. birthchat-slide + vault-phase tests green; `tsc` clean. | Residual: hot-path avg 16.882ms > 16.7 (fly spikes); not the prior 78ms dock long task |
+| 4 | critic (re-judge) | **FAIL** BAR(1) | Fresh blind critic on `4228cb1`. Same harness/conditions: 390×844 DPR2, CDP CPU 4×, Skip → strip fly → plate gather → BirthChat claim (no forge). Hot path: avg **16.783ms** (limit 16.7), max rAF 50ms, **0 long tasks** / longTaskMax 0 (prior 78ms closed). Phases: settle 16.596; fly **16.873** (max 50, 2× >33.4); plate gather **16.666**; birthchat-slide 16.781 / 0 LT. Artifact: `screenshots/bar1-frame-measure.json`. BAR(2): `threeValueImports: 0` (54 modules). BAR(3): `FORGE_PROSE_BATCH = 3` + `proseAdvanceBatch` + `Promise.allSettled` in forge path. | **fly-sign-travel** avg 16.873ms (and ~50ms rAF spikes) — primary remaining BAR(1) miss; BirthChat long-task gap closed |
 
-## Critic round (blind)
+## Critic round (blind re-judge)
 
-**VERDICT: FAIL** (BAR(1) unmet; BAR(2)/BAR(3) hold)
+**VERDICT: FAIL** (BAR(1) avg unmet; long-task half of BAR(1) now holds; BAR(2)/BAR(3) hold)
 
 **EVIDENCE**
-- Conditions: mid-phone proxy = 390×844 + 4× CPU throttle; Playwright Chromium headless; URL `http://127.0.0.1:8080/`; exercised Skip → 5 strip seeks (Aries/Leo/Scorpio/Aquarius/Gemini) → Leo gather hold → Virgo + “This is my sign” BirthChat dock (no forge AI).
-- Hot path: avg **16.832ms** / p50 16.7 / p95 16.8 / max **66.7ms** / ~59.4 fps pacing; **longtask 78ms** during `birthchat-slide`.
-- Plate gather meets frame budget alone; fly has one ~50ms rAF spike but no >50ms longtask.
-- BAR(2): `threeValueImports: 0`. BAR(3): batch size 3 via `Promise.allSettled` (code evidence).
+- HEAD: `4228cb1` (builder dock defer). Conditions: mid-phone proxy = 390×844 + DPR2 + CDP `Emulation.setCPUThrottlingRate: 4`; Playwright Chromium headless; `http://127.0.0.1:8080/`; Skip → 5 strip seeks → Leo gather → Virgo “This is my sign” BirthChat (no forge AI).
+- Hot path: avg **16.783ms** / p50 16.7 / p95 16.8 / max **50ms** / ~59.6 fps pacing; **longtask count 0** (was 78ms on prior critic).
+- Phase avgs: settle **16.596**; fly **16.873**; plate gather **16.666**; birthchat-slide **16.781** (longTaskMax **0**).
+- BAR(2): `threeValueImports: 0`. BAR(3): `FORGE_PROSE_BATCH = 3` via `Promise.allSettled` (code evidence).
 
-**LARGEST GAP:** BirthChat slide / dock mount long task (~78ms under 4× CPU) when opening from galaxy claim — follow-up builder should cut main-thread work on `openBirthChat` / lazy chunk / slide path before re-judge.
+**LARGEST GAP:** `fly-sign-travel` mid-session avg (**16.873ms**) and intermittent ~50ms rAF spikes under 4× CPU — next builder should cut fly-path frame cost (not BirthChat dock; that long-task gap is closed).
 
 ## Remaining gaps
 
-- **BAR(1)** — primary long-task gap closed this builder round (0× >50ms on hot path). Hot-path avg still **16.882ms** (>16.7) from fly/slide rAF pacing — secondary for next critic.
+- **BAR(1)** — long-task criterion met (0× >50ms on hot path). Hot-path avg still **16.783ms** (>16.7); fly phase is the largest contributor.
 - Overlay thrash (Wave 2 residual) — not re-measured; secondary to BAR(1).
 - Live XAI forge wall-clock (Wave 3 residual) — batching landed; end-to-end timing not measured.
 
 ## Close-out
 
-Remediation waves 1–4 are complete (Tier A/B/C + integration). **BAR(2)** and **BAR(3)** hold under blind re-check. **BAR(1)** long-task gap addressed in builder gap round — awaiting critic re-judge (avg frame may still fail).
+Remediation waves 1–4 are complete (Tier A/B/C + integration). **BAR(2)** and **BAR(3)** hold under blind re-check. **BAR(1)** BirthChat long-task gap closed on re-judge; **avg frame still FAIL** — fly travel is the remaining bottleneck.
