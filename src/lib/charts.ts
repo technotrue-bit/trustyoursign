@@ -285,6 +285,7 @@ export const acceptLegal = createServerFn({ method: "POST" })
 
 function asChartKey(k: string) {
   const v = k.trim().toLowerCase();
+  if (v === "visitor") throw new Error("Unknown chart");
   if (v === "saige" || v === "joey") return v;
   if (/^[0-9a-f-]{8,64}$/.test(v)) return v;
   if (/^shelf-\d{6,}$/.test(v)) return v;
