@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { SavedChart } from "./charts.ts";
-import { GUEST_ASK_KEY, hasTimedNatal, isUuidChartId } from "./charts-saved.ts";
+import { asChartKey, GUEST_ASK_KEY, hasTimedNatal, isUuidChartId } from "./charts-saved.ts";
 
 const base: SavedChart = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -43,5 +43,10 @@ describe("charts-saved helpers", () => {
 
   it("GUEST_ASK_KEY is the legacy local visitor key", () => {
     assert.equal(GUEST_ASK_KEY, "visitor");
+  });
+
+  it("asChartKey rejects bare visitor for server ask", () => {
+    assert.throws(() => asChartKey("visitor"), /Unknown chart/);
+    assert.throws(() => asChartKey("  VISITOR  "), /Unknown chart/);
   });
 });

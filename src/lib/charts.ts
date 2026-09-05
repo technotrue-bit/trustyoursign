@@ -5,6 +5,7 @@ import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal";
 import type { SignId } from "@/lib/chart/types";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { FieldNote, ThreadTurn } from "@/lib/field-notes";
+import { asChartKey } from "@/lib/charts-saved";
 
 const SIGNS: SignId[] = [
   "aries",
@@ -283,14 +284,6 @@ export const acceptLegal = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-function asChartKey(k: string) {
-  const v = k.trim().toLowerCase();
-  if (v === "visitor") throw new Error("Unknown chart");
-  if (v === "saige" || v === "joey") return v;
-  if (/^[0-9a-f-]{8,64}$/.test(v)) return v;
-  if (/^shelf-\d{6,}$/.test(v)) return v;
-  throw new Error("Unknown chart");
-}
 
 function cleanThread(rows: unknown): ThreadTurn[] {
   if (!Array.isArray(rows)) return [];
