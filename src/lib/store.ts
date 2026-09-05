@@ -246,6 +246,7 @@ export const useVault = create<VaultState>((set, get) => ({
     // Start 3D slide immediately; defer React dock phase so the click task stays short.
     galaxyTravel.dockSlide = true;
     galaxyTravel.dockSign = sign;
+    galaxyTravel.dockCamReady = false;
     galaxyTravel.busy = true;
     const commit = () =>
       set({
@@ -256,11 +257,20 @@ export const useVault = create<VaultState>((set, get) => ({
         forgeJobId: null,
       });
     // Next macrotask — must not share the click long-task with React dock commit.
-    setTimeout(commit, 0);
+    setTimeout(() => {
+      commit();
+      // FOV/well after a couple paints so React dock set does not share a projection snap.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          galaxyTravel.dockCamReady = true;
+        });
+      });
+    }, 0);
   },
   closeBirthChat: () => {
     galaxyTravel.dockSlide = false;
     galaxyTravel.dockSign = null;
+    galaxyTravel.dockCamReady = false;
     set({
       ...withPhase(phaseAfterCloseBirthChat()),
       birth: null,

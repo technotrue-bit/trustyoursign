@@ -213,7 +213,7 @@ export function VaultApp() {
   const showFly = onGalaxy && (phase === "galaxy" || phase === "dock");
   const showDock = onGalaxy && phase === "dock";
   const showForge = onGalaxy && phase === "forge";
-  // Mount dock one frame after phase flip so slide/FOV work does not share the first BirthChat commit.
+  // Mount dock a few paints after phase flip so slide work does not share BirthChat commit.
   const [dockPaint, setDockPaint] = useState(false);
   useEffect(() => {
     if (!showDock) {
@@ -221,12 +221,16 @@ export function VaultApp() {
       return;
     }
     let raf2 = 0;
+    let raf3 = 0;
     const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setDockPaint(true));
+      raf2 = requestAnimationFrame(() => {
+        raf3 = requestAnimationFrame(() => setDockPaint(true));
+      });
     });
     return () => {
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
+      cancelAnimationFrame(raf3);
     };
   }, [showDock]);
 

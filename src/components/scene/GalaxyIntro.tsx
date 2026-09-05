@@ -82,8 +82,6 @@ const DUST_N = SMALL ? 180 : 320;
 /** Full cloud only for aimed ±1 (A2); neighbors stay thin. */
 const CLOUD_N = SMALL ? 1100 : 1800;
 const CLOUD_N_FAR = SMALL ? 360 : 520;
-/** Mid-flight: keep destination plate visible but thin until near arrival. */
-const CLOUD_APPROACH_DIST = 0.1;
 
 const _cam = new Vector3();
 const _look = new Vector3();
@@ -93,8 +91,6 @@ const _bg = new Color();
 const _accent = new Color();
 const _up = new Vector3(0, 1, 0);
 const _sitCam = new Vector3();
-const _camRight = new Vector3();
-const _camUp = new Vector3();
 
 function wrapStationDelta(a: number, b: number) {
   const d = Math.abs(a - b) % 12;
@@ -237,12 +233,9 @@ function StationLight() {
 
 function SignDisk() {
   const group = useRef<Group>(null);
-  const slideX = useRef(0);
-  const slideY = useRef(0);
-  const scaleBoost = useRef(1);
   const sim = useMemo(() => createDiskSim(DISK_N), []);
   useEffect(() => () => disposeDisk(sim), [sim]);
-  useFrame(({ clock, gl, camera }, dt) => {
+  useFrame(({ clock, gl }, dt) => {
     const g = group.current;
     if (!g) return;
     const idx = aimedIndex();
@@ -257,12 +250,11 @@ function SignDisk() {
     const intro = introPlaying() ? introAries() : 1;
     const veil = introVeil();
     const chatting = useVault.getState().chat || galaxyTravel.dockSlide;
-    const picked =
-      chatting &&
-      (useVault.getState().pickedSign === sign.id || galaxyTravel.dockSign === sign.id);
     // Hide disk for most of a seek — stepDisk + unsettled mix is the fly hitch (A1 leftover).
+    // Also freeze while BirthChat dock is open — plate+slide owns the frame (dock ~33ms rAF).
     const flying = galaxyTravel.seek != null || galaxyTravel.traveling;
-    const show = gather > (flying ? 0.72 : 0.32) && intro > 0.4 && veil < 0.45;
+    const show =
+      !chatting && gather > (flying ? 0.72 : 0.32) && intro > 0.4 && veil < 0.45;
     g.visible = show;
     if (!show) {
       // Freeze + no GPU upload when off-screen (A1).
@@ -278,29 +270,7 @@ function SignDisk() {
     }
     const chest = volumeChest(sign.id);
     const aspect = getSignVolume(sign.id)?.aspect ?? 16 / 9;
-    const cam = camera as PerspectiveCamera;
-    _sitCam.copy(sit);
-    cam.worldToLocal(_sitCam);
-    const slide = computeBirthChatSlide({
-      picked,
-      travelT: galaxyTravel.t,
-      stationT: stationT(idx),
-      fov: cam.fov,
-      sitCameraZ: _sitCam.z,
-      aspect: cam.aspect,
-      cssWidth: cssViewWidth(),
-      plateWide: PLATE_WIDE,
-      plateAspect: aspect,
-      currentScale: scaleBoost.current,
-    });
-    slideX.current = lerpToward({ current: slideX.current, target: slide.offsetX, dt, rate: 2.2 });
-    slideY.current = lerpToward({ current: slideY.current, target: slide.offsetY, dt, rate: 2.2 });
-    scaleBoost.current = lerpToward({ current: scaleBoost.current, target: slide.targetScale, dt, rate: 2.2 });
     g.position.set(sit.x + chest.x * PLATE_WIDE * 0.55, sit.y + chest.y * (PLATE_WIDE / aspect) * 0.45, sit.z + 0.22);
-    _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
-    _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
-    g.position.addScaledVector(_camRight, slideX.current);
-    g.position.addScaledVector(_camUp, slideY.current);
     g.scale.setScalar(3.2);
     // Phase mutex: thin disk while birth nebula is dense (A4); keep thin while mix unsettles after a seek.
     const birthHot = introPlaying() && uAssemble() < 0.85;
@@ -517,7 +487,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
 
     const sit = TEMPLE_STATIONS[index]!;
     const flying = galaxyTravel.seek != null || galaxyTravel.traveling;
-    const midFly = flying && !held && dist >= CLOUD_APPROACH_DIST;
+    // Entire seek stays thin — exiting midFly before seek ends was the ~33ms approach hitch.
+    const midFly = flying && !held;
     // Mid-flight: billboard + plate only — skip slide math / cores / morph (fly budget).
     if (midFly) {
       g.position.copy(sit);
@@ -639,6 +610,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const birthHot = introPlaying() && uAssemble() < 0.85;
     // Full cloud only after seek lands — approach ramp was a fly-phase hitch.
     const approachCloud = !flying || held;
+    // Dock open: plate + slide only — cores off so claim/React frames stay ≤1 rAF.
+    if (chatting && held) {
+      mesh.visible = false;
+      starGeo.setDrawRange(0, 0);
+      return;
+    }
     const drawN = fullCloud && approachCloud
       ? birthHot
         ? Math.floor(CLOUD_N * 0.45)
@@ -851,6 +828,8 @@ function TempleRig() {
     }
     stepIntro(d);
     const chatting = useVault.getState().chat || galaxyTravel.dockSlide;
+    // FOV/well only after React dock has settled — slide starts on dockSlide alone.
+    const dockLayout = galaxyTravel.dockCamReady;
     const arriving = introPlaying();
     const sought = stepSeek(current.current, d);
     if (sought.active) {
@@ -886,7 +865,7 @@ function TempleRig() {
     const plateA = vol?.aspect ?? 16 / 9;
     const shelfOn = Boolean(useVault.getState().entered && useVault.getState().shelf);
     const well =
-      chatting || shelfOn
+      dockLayout || shelfOn
         ? { top: 0.12, bottom: 0.48 }
         : { top: 0.15, bottom: 0.24 };
     const frame = heroFrame(aspect, arriving ? introCam() : 1, plateA, PLATE_WIDE, well);
@@ -915,12 +894,13 @@ function TempleRig() {
       camera.lookAt(_look);
     }
     if (camera instanceof PerspectiveCamera) {
-      const fovWant = chatting
+      const fovWant = dockLayout
         ? Math.min(52, frame.fov)
         : arriving
           ? frame.fov - (1 - introCam()) * 4
           : frame.fov / (0.92 + (zoom - 1) * 0.18);
-      if (arriving || Math.abs(camera.fov - fovWant) > 3) camera.fov = fovWant;
+      // Never snap FOV into dock — snap + projection update stacked with React claim.
+      if (arriving || (!dockLayout && Math.abs(camera.fov - fovWant) > 3)) camera.fov = fovWant;
       else camera.fov += (fovWant - camera.fov) * k;
       camera.aspect = aspect;
       const farWant = 2500;
@@ -938,8 +918,8 @@ function TempleRig() {
       }
     }
     if (scene.fog instanceof FogExp2) {
-      // Skip fog/background writes mid-seek — saves Color work on the fly hot path.
-      if (!(galaxyTravel.seek != null || galaxyTravel.traveling)) {
+      // Skip fog/background writes mid-seek / dock — saves Color work on fly + claim paths.
+      if (!(galaxyTravel.seek != null || galaxyTravel.traveling || chatting)) {
         lerpFog(t, _fog);
         scene.fog.color.copy(_fog);
         // Reuse _bg Color — no per-frame clone (A6).

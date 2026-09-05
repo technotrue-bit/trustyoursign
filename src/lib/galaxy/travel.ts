@@ -1,7 +1,7 @@
 /** Shared mutable travel. Written every frame by the camera. Not React state. */
 import { CONSTELLATIONS, nearestSign, signStation, signedDelta, wrap12 } from "./constellations";
 import { primeSignArt } from "./signArtMedia";
-import { useGalaxy, currentConstellation } from "./store";
+import { useGalaxy } from "./store";
 import { clamp01, stationFromT, stationT } from "./temple-data";
 import { introPlaying, skipIntro, introCanSkip } from "./intro";
 
@@ -80,6 +80,8 @@ export const galaxyTravel = {
   dockSlide: false,
   /** Sign id for dockSlide before pickedSign lands in the vault store. */
   dockSign: null as string | null,
+  /** True after dock FOV/well may run — set a few frames after React dock commit. */
+  dockCamReady: false,
   /** Station whose plate has appeared (for title delay + auto-arm). */
   signImageIndex: -1,
   /** performance.now() when that plate first appeared. */
@@ -206,6 +208,7 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.busy = false;
   galaxyTravel.dockSlide = false;
   galaxyTravel.dockSign = null;
+  galaxyTravel.dockCamReady = false;
   galaxyTravel.hold = 0;
   galaxyTravel.steer = 0;
   galaxyTravel.dragging = false;
@@ -271,13 +274,15 @@ export function seekSign(index: number, opts?: SeekOptions) {
   }
   const sign = CONSTELLATIONS[i];
   if (sign) primeSignArt(sign.id);
-  const nxt = CONSTELLATIONS[(i + 1) % 12];
-  if (nxt) primeSignArt(nxt.id);
-  const prev = CONSTELLATIONS[(i + 11) % 12];
-  if (prev) primeSignArt(prev.id);
+  // Neighbor primes off the strip-click / seek-start task (fly ~33ms rAF budget).
+  queueMicrotask(() => {
+    const nxt = CONSTELLATIONS[(i + 1) % 12];
+    if (nxt) primeSignArt(nxt.id);
+    const prev = CONSTELLATIONS[(i + 11) % 12];
+    if (prev) primeSignArt(prev.id);
+  });
   restIdle();
   publishTravel(dest, true);
-  primeSignArt(currentConstellation().id);
   return i;
 }
 

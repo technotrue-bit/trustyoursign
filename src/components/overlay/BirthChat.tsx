@@ -46,14 +46,9 @@ export function BirthChat() {
   const [bodyReady, setBodyReady] = useState(false);
 
   useEffect(() => {
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setBodyReady(true));
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-    };
+    // Shell paints first; defer copy+form so claim frames stay one rAF.
+    const id = window.setTimeout(() => setBodyReady(true), 48);
+    return () => window.clearTimeout(id);
   }, []);
 
   return (
@@ -76,21 +71,27 @@ export function BirthChat() {
         <h2 className="font-display text-[2rem] leading-[1.08] font-medium tracking-tight text-fg italic md:text-4xl">
           {sign.name}.
         </h2>
-        <p className="mt-2 text-[0.7rem] tracking-[0.2em] text-fg-subtle uppercase">
-          {temple.element} · {temple.modality}
-        </p>
-        <p className="mt-3 max-w-sm text-sm leading-relaxed text-fg-muted md:text-base">{temple.essence}</p>
-        <ul className="mt-4 max-w-sm space-y-2 text-sm leading-relaxed text-fg-muted">
-          {temple.lines.slice(0, 2).map((line) => (
-            <li key={line.slice(0, 24)}>{line}</li>
-          ))}
-          {temple.lines.slice(2, 4).map((line) => (
-            <li key={line.slice(0, 24)} className="birth-chat-lines-extra">
-              {line}
-            </li>
-          ))}
-        </ul>
-        {bodyReady ? <BirthChatBody signId={sign.id} /> : <div className="mt-8 h-40" aria-hidden />}
+        {bodyReady ? (
+          <>
+            <p className="mt-2 text-[0.7rem] tracking-[0.2em] text-fg-subtle uppercase">
+              {temple.element} · {temple.modality}
+            </p>
+            <p className="mt-3 max-w-sm text-sm leading-relaxed text-fg-muted md:text-base">{temple.essence}</p>
+            <ul className="mt-4 max-w-sm space-y-2 text-sm leading-relaxed text-fg-muted">
+              {temple.lines.slice(0, 2).map((line) => (
+                <li key={line.slice(0, 24)}>{line}</li>
+              ))}
+              {temple.lines.slice(2, 4).map((line) => (
+                <li key={line.slice(0, 24)} className="birth-chat-lines-extra">
+                  {line}
+                </li>
+              ))}
+            </ul>
+            <BirthChatBody signId={sign.id} />
+          </>
+        ) : (
+          <div className="mt-8 h-56" aria-hidden />
+        )}
       </div>
     </div>
   );
