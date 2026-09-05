@@ -26,9 +26,30 @@ const SMALL = typeof window !== "undefined" && isSmallGpu();
 const COLS = SMALL ? 52 : 72;
 const ROWS = SMALL ? 30 : 42;
 const STAR_CAP = SMALL ? 480 : 860;
-/** Scales relief depth so half-thickness reads ~0.22–0.35 in unit plate space. */
-const DEPTH_SCALE = 1.75;
+/**
+ * Depth factor ranges (see `depthFactor`) — each spans up to 1.0 so the
+ * product's theoretical ceiling is exactly 1.0, keeping `MAX_DEPTH_FACTOR`
+ * an honest bound rather than an unreachable worst case.
+ */
+const EDGE_MIN = 0.5;
+const EDGE_SPAN = 0.5;
+const BODY_MIN = 0.6;
+const BODY_SPAN = 0.4;
+/** Worst-case (edge=1, body=1) value of `depthFactor` — used to bound DEPTH_SCALE. */
+export const MAX_DEPTH_FACTOR = (EDGE_MIN + EDGE_SPAN) * (BODY_MIN + BODY_SPAN);
+/**
+ * Scales relief depth so half-thickness reads ~0.22–0.35 in unit plate space
+ * on real sign art (measured on sagittarius.png: ~0.23 at full 72×42 grid,
+ * ~0.28 at the small-GPU 52×30 grid). `MAX_DEPTH_FACTOR * DEPTH_SCALE` must
+ * stay ≤ 0.35 — see signVolume.test.ts.
+ */
+export const DEPTH_SCALE = 0.35;
 const ALPHA_CUT = 0.06;
+
+/** Relief depth multiplier from silhouette-edge distance and pixel luma, both 0–1. */
+export function depthFactor(edge: number, body: number): number {
+  return (EDGE_MIN + edge * EDGE_SPAN) * (BODY_MIN + body * BODY_SPAN);
+}
 
 function hash(i: number) {
   const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
@@ -94,7 +115,7 @@ function build(id: SignId, img: HTMLImageElement): SignVolume {
       const ny = 0.5 - y / (rows - 1);
       const edge = Math.min(1, dist[i]! / maxD);
       const body = luma[i]!;
-      const z = (0.12 + edge * 0.88) * (0.38 + body * 0.78) * DEPTH_SCALE;
+      const z = depthFactor(edge, body) * DEPTH_SCALE;
       depth[i] = z;
       const pick = hash(i + 19) < 0.38 + body * 0.45 + a * 0.2;
       if (!pick || a < 0.1) continue;

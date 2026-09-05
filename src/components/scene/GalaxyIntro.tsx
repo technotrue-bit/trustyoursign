@@ -413,7 +413,13 @@ function BirthNebula() {
 }
 
 function Station({ index, sign, eager }: { index: number; sign: TempleSign; eager: boolean }) {
-  const useVolume = hasVolumeSign(sign.id);
+  const volumeGated = hasVolumeSign(sign.id);
+  // Volume geometry loads async from the sign's PNG — until it's actually
+  // ready, stay on the plate + denseCloud path instead of hiding the plate
+  // for a shell that has no geometry yet (or never builds one).
+  const volReady = useRef(volumeGated && Boolean(getSignVolume(sign.id)));
+  const [, bumpVolReady] = useState(0);
+  const useVolume = volumeGated && volReady.current;
   const group = useRef<Group>(null);
   const cores = useRef<Points>(null);
   const art = useRef<Mesh>(null);
@@ -471,6 +477,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const g = group.current;
     const mesh = cores.current;
     if (!g || !mesh) return;
+    if (volumeGated && !volReady.current && getSignVolume(sign.id)) {
+      volReady.current = true;
+      bumpVolReady((n) => n + 1);
+    }
     const state = useSessionStore.getState();
     const chatting = state.claim !== null && state.session === null;
     const shelf = state.session?.kind === "shelf" ? state.session : null;

@@ -8,6 +8,9 @@ import {
   hasVolumeSign,
   buildShellGeometryFromVolume,
   interiorCloudFromVolume,
+  depthFactor,
+  MAX_DEPTH_FACTOR,
+  DEPTH_SCALE,
   type SignVolume,
 } from "./signVolume.ts";
 
@@ -37,6 +40,17 @@ function fixtureVolume(): SignVolume {
     stars: [{ x: 0, y: 0, z: 0.2, mag: 1 }],
   };
 }
+
+describe("depth calibration", () => {
+  it("caps the theoretical worst-case half-thickness at 0.35 (target band 0.22–0.35)", () => {
+    // Measured on real sagittarius.png after art load: ~0.23 at 72x42 (full),
+    // ~0.28 at 52x30 (small-GPU) grid — both inside the 0.22–0.35 target band.
+    const worstCase = depthFactor(1, 1) * DEPTH_SCALE;
+    assert.equal(worstCase, MAX_DEPTH_FACTOR * DEPTH_SCALE);
+    assert.ok(worstCase <= 0.35, `expected worst-case depth <= 0.35, got ${worstCase}`);
+    assert.ok(worstCase >= 0.2, `expected worst-case depth to still read as a body, got ${worstCase}`);
+  });
+});
 
 describe("VOLUME_SIGN_IDS", () => {
   it("gates sagittarius only at start", () => {

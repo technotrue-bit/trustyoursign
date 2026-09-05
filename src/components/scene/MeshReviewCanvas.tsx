@@ -162,6 +162,7 @@ export function MeshReviewCanvas() {
           ref={controlsRef}
           makeDefault
           enablePan={false}
+          enableZoom={false}
           enableDamping
           dampingFactor={0.06}
           minDistance={2.2}
