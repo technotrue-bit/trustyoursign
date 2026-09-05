@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Nativity } from "@/lib/chart/schema";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
+import type { SavedChart } from "@/lib/charts.ts";
 import {
   fromResearch,
+  fromSavedChart,
   fromShelf,
   fromVisitor,
   newSessionId,
@@ -34,6 +36,23 @@ const sky = {
 } as SkyNatal;
 
 const nat = { id: "visitor", meta: { name: "Test" } } as Nativity;
+
+const savedShelf: SavedChart = {
+  id: "22222222-2222-2222-2222-222222222222",
+  label: "Shelf",
+  relation: "self",
+  personName: null,
+  signId: "aries",
+  birthMonth: 4,
+  birthDay: 10,
+  birthYear: 2000,
+  birthHour: null,
+  birthMinute: null,
+  birthPlace: null,
+  natal: null,
+  tone: "vault",
+  createdAt: "2026-01-01T00:00:00.000Z",
+};
 
 describe("session factories", () => {
   it("fromVisitor builds kind visitor with required nativity", () => {
@@ -152,6 +171,30 @@ describe("session factories", () => {
   it("newSessionId returns a string", () => {
     assert.equal(typeof newSessionId(), "string");
     assert.ok(newSessionId().length > 4);
+  });
+
+  it("fromSavedChart opens shelf when timed natal is missing", () => {
+    const s = fromSavedChart({ chart: savedShelf, origin: "library" });
+    assert.equal(s.kind, "shelf");
+    assert.equal(s.savedId, savedShelf.id);
+    assert.equal(s.origin, "library");
+  });
+
+  it("fromSavedChart opens visitor when nativity + sky provided", () => {
+    const s = fromSavedChart({
+      chart: {
+        ...savedShelf,
+        birthHour: 8,
+        birthMinute: 15,
+        birthPlace: "Paris",
+        natal: { tone: "warm" } as SavedChart["natal"],
+      },
+      origin: "library",
+      nativity: nat,
+      skyNatal: sky,
+    });
+    assert.equal(s.kind, "visitor");
+    assert.equal(s.savedId, savedShelf.id);
   });
 
   it("derives visitor birth facts and sign from nativity metadata", () => {

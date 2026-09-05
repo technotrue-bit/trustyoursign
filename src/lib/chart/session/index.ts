@@ -20,6 +20,7 @@ export {
   fromVisitor,
   fromResearch,
   fromShelf,
+  fromSavedChart,
   newSessionId,
   visitorBirth,
   visitorSign,
