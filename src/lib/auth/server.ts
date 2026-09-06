@@ -43,7 +43,7 @@ import {
   GROK_ISSUER_DEFAULT,
   PREVIEW_ALLOWED_HOSTS,
   PREVIEW_CLIENT_ID,
-  PREVIEW_CLIENT_SECRET,
+  PreviewOAuthSecret,
 } from "./preview";
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
@@ -78,7 +78,7 @@ const authDisabled = env("VITE_AUTH_ENABLED") === "false";
 // for any `*.grok-sandbox.com` callback (see `./preview`).
 const grokIssuer = env("GROK_AUTH_ISSUER") ?? GROK_ISSUER_DEFAULT;
 const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? PREVIEW_CLIENT_ID;
-const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET;
+const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PreviewOAuthSecret.read();
 
 /** True when federated sign-in is active (real auth is enforced). */
 export const authConfigured =
@@ -227,6 +227,19 @@ export const auth = betterAuth({
       session_data: { name: "__Host-grok-auth.session_data" },
       account_data: { name: "__Host-grok-auth.account_data" },
       dont_remember: { name: "__Host-grok-auth.dont_remember" },
+    },
+  },
+
+  // Login / auth abuse controls — enabled in all environments (fail closed on brute force).
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 60,
+    customRules: {
+      "/sign-in/email": { window: 60, max: 5 },
+      "/sign-up/email": { window: 60, max: 3 },
+      "/request-password-reset": { window: 60, max: 3 },
+      "/forget-password": { window: 60, max: 3 },
     },
   },
 
