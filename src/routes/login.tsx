@@ -3,13 +3,9 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
 import { MIN_AGE } from "@/lib/legal";
 import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
-import { primeOwner } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/login")({
-  beforeLoad: async () => {
-    await primeOwner();
-  },
   component: Login,
 });
 
@@ -18,6 +14,7 @@ function Login() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [hpCompany, setHpCompany] = useState("");
   const [ageOk, setAgeOk] = useState(false);
   const [legalOk, setLegalOk] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -36,6 +33,10 @@ function Login() {
 
   const emailAuth = async () => {
     setError(null);
+    if (hpCompany.trim()) {
+      setError("Could not continue");
+      return;
+    }
     if (mode === "up" && (!ageOk || !legalOk)) {
       setError(`Confirm you are ${MIN_AGE} or older and accept the terms.`);
       return;
@@ -62,6 +63,12 @@ function Login() {
           email: addr,
           password,
           callbackURL: owner ? "/admin" : "/account",
+          fetchOptions: {
+            headers: (() => {
+              const token = typeof window !== "undefined" ? (window as unknown as { __turnstileToken?: string }).__turnstileToken : undefined;
+              return token ? { "x-captcha-response": token } : undefined;
+            })(),
+          },
         });
         if (err) throw new Error(err.message ?? "Could not sign in");
       }
@@ -132,7 +139,7 @@ function Login() {
             </button>
           </div>
           <form
-            className="mt-4 space-y-3"
+            className="relative mt-4 space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
               void emailAuth();
@@ -173,6 +180,16 @@ function Login() {
                 className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
                 autoComplete={mode === "up" ? "new-password" : "current-password"}
                 minLength={mode === "up" ? 8 : 1}
+              />
+            </label>
+            <label className="absolute -left-[9999px] h-0 w-0 overflow-hidden" aria-hidden="true">
+              <span>Company</span>
+              <input
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                value={hpCompany}
+                onChange={(e) => setHpCompany(e.target.value)}
               />
             </label>
             {mode === "up" ? (
