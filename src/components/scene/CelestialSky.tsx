@@ -12,7 +12,7 @@ import {
 import { introArms, introBulge, introField, introHaze } from "@/lib/galaxy/intro";
 import { buildNearSky, makeNearSkyMaterial } from "@/lib/galaxy/nearSky";
 import { TEMPLE_STATIONS, stationFromT } from "@/lib/galaxy/temple";
-import { galaxyTravel } from "@/lib/galaxy/travel";
+import { exploringSign, galaxyTravel } from "@/lib/galaxy/travel";
 
 function noopRaycast() {
   /* sky never steals picks */
@@ -67,10 +67,11 @@ export function CelestialSky() {
     }
     const t = clock.elapsedTime;
     for (const m of mats.current) m.uniforms.uTime.value = t;
-    const field = introField();
-    const haze = introHaze();
-    const bulge = introBulge();
-    const arms = introArms();
+    const world = exploringSign() ? galaxyTravel.worldFade : 1;
+    const field = introField() * world;
+    const haze = introHaze() * world;
+    const bulge = introBulge() * world;
+    const arms = introArms() * world;
     matField.uniforms.uOpacity.value = 0.7 * field;
     matNear.uniforms.uOpacity.value = 0.5 * field;
     matBulge.uniforms.uOpacity.value = 0.95 * bulge;
