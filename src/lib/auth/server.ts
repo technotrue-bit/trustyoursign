@@ -30,7 +30,7 @@
  * a verified id via `@/lib/auth/middleware`.
  */
 import { betterAuth } from "better-auth";
-import { bearer, genericOAuth } from "better-auth/plugins";
+import { bearer, genericOAuth, captcha } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
@@ -44,7 +44,7 @@ import {
   GROK_ISSUER_DEFAULT,
   PREVIEW_ALLOWED_HOSTS,
   PREVIEW_CLIENT_ID,
-  PREVIEW_CLIENT_SECRET,
+  PreviewOAuthSecret,
 } from "./preview";
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
@@ -79,7 +79,7 @@ const authDisabled = env("VITE_AUTH_ENABLED") === "false";
 // for any `*.grok-sandbox.com` callback (see `./preview`).
 const grokIssuer = env("GROK_AUTH_ISSUER") ?? GROK_ISSUER_DEFAULT;
 const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? PREVIEW_CLIENT_ID;
-const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET;
+const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PreviewOAuthSecret.read();
 
 /** True when federated sign-in is active (real auth is enforced). */
 export const authConfigured =
@@ -231,8 +231,32 @@ export const auth = betterAuth({
     },
   },
 
+  // Login / auth abuse controls — enabled in all environments (fail closed on brute force).
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 60,
+    customRules: {
+      "/sign-in/email": { window: 60, max: 5 },
+      "/sign-up/email": { window: 60, max: 3 },
+      "/request-password-reset": { window: 60, max: 3 },
+      "/forget-password": { window: 60, max: 3 },
+    },
+  },
+
   plugins: [
     gateIdentitySessions(),
+
+    // Bot protection: Cloudflare Turnstile when TURNSTILE_SECRET_KEY is set.
+    // Pair with VITE_TURNSTILE_SITE_KEY on the login form (see docs/security).
+    ...(env("TURNSTILE_SECRET_KEY") && env("VITE_TURNSTILE_SITE_KEY")
+      ? [
+          captcha({
+            provider: "cloudflare-turnstile",
+            secretKey: env("TURNSTILE_SECRET_KEY")!,
+          }),
+        ]
+      : []),
 
     // One genericOAuth provider per upstream (when auth is on), all federating
     // to the broker with the SAME client and differing only by the `idp` hint.
