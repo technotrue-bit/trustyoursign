@@ -3,6 +3,12 @@ import type { SignId } from "@/lib/chart/types";
 import { isSmallGpu } from "@/lib/gpu";
 import { SIGN_ART, signArtImage } from "./signArt";
 
+export const VOLUME_SIGN_IDS: ReadonlySet<SignId> = new Set(["sagittarius"]);
+
+export function hasVolumeSign(id: SignId) {
+  return VOLUME_SIGN_IDS.has(id);
+}
+
 export type VolumeStar = { x: number; y: number; z: number; mag: number };
 
 export type SignVolume = {
@@ -20,6 +26,30 @@ const SMALL = typeof window !== "undefined" && isSmallGpu();
 const COLS = SMALL ? 52 : 72;
 const ROWS = SMALL ? 30 : 42;
 const STAR_CAP = SMALL ? 480 : 860;
+/**
+ * Depth factor ranges (see `depthFactor`) — each spans up to 1.0 so the
+ * product's theoretical ceiling is exactly 1.0, keeping `MAX_DEPTH_FACTOR`
+ * an honest bound rather than an unreachable worst case.
+ */
+const EDGE_MIN = 0.5;
+const EDGE_SPAN = 0.5;
+const BODY_MIN = 0.6;
+const BODY_SPAN = 0.4;
+/** Worst-case (edge=1, body=1) value of `depthFactor` — used to bound DEPTH_SCALE. */
+export const MAX_DEPTH_FACTOR = (EDGE_MIN + EDGE_SPAN) * (BODY_MIN + BODY_SPAN);
+/**
+ * Scales relief depth so half-thickness reads ~0.22–0.35 in unit plate space
+ * on real sign art (measured on sagittarius.png: ~0.23 at full 72×42 grid,
+ * ~0.28 at the small-GPU 52×30 grid). `MAX_DEPTH_FACTOR * DEPTH_SCALE` must
+ * stay ≤ 0.35 — see signVolume.test.ts.
+ */
+export const DEPTH_SCALE = 0.35;
+const ALPHA_CUT = 0.06;
+
+/** Relief depth multiplier from silhouette-edge distance and pixel luma, both 0–1. */
+export function depthFactor(edge: number, body: number): number {
+  return (EDGE_MIN + edge * EDGE_SPAN) * (BODY_MIN + body * BODY_SPAN);
+}
 
 function hash(i: number) {
   const x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
@@ -85,7 +115,7 @@ function build(id: SignId, img: HTMLImageElement): SignVolume {
       const ny = 0.5 - y / (rows - 1);
       const edge = Math.min(1, dist[i]! / maxD);
       const body = luma[i]!;
-      const z = (0.12 + edge * 0.88) * (0.38 + body * 0.78);
+      const z = depthFactor(edge, body) * DEPTH_SCALE;
       depth[i] = z;
       const pick = hash(i + 19) < 0.38 + body * 0.45 + a * 0.2;
       if (!pick || a < 0.1) continue;
@@ -184,6 +214,170 @@ export function denseCloud(id: SignId, count: number): VolumeStar[] {
     };
   }
   return out;
+}
+
+function gridXY(cols: number, rows: number, cx: number, cy: number) {
+  return {
+    x: cx / (cols - 1) - 0.5,
+    y: 0.5 - cy / (rows - 1),
+    u: cx / (cols - 1),
+    v: 1 - cy / (rows - 1),
+  };
+}
+
+function cellOpaque(alpha: Float32Array, cols: number, rows: number, cx: number, cy: number) {
+  if (cx < 0 || cy < 0 || cx >= cols - 1 || cy >= rows - 1) return false;
+  const i00 = cy * cols + cx;
+  const i10 = cy * cols + cx + 1;
+  const i01 = (cy + 1) * cols + cx;
+  const i11 = (cy + 1) * cols + cx + 1;
+  return (
+    alpha[i00]! > ALPHA_CUT ||
+    alpha[i10]! > ALPHA_CUT ||
+    alpha[i01]! > ALPHA_CUT ||
+    alpha[i11]! > ALPHA_CUT
+  );
+}
+
+/** Closed front/back shell with rim quads from a baked sign volume. */
+export function buildShellGeometryFromVolume(vol: SignVolume): BufferGeometry {
+  const { cols, rows, alpha, depth } = vol;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  const vertCount = cols * rows;
+  const frontBase = 0;
+  const backBase = vertCount;
+
+  for (let cy = 0; cy < rows; cy++) {
+    for (let cx = 0; cx < cols; cx++) {
+      const i = cy * cols + cx;
+      const { x, y, u, v } = gridXY(cols, rows, cx, cy);
+      const d = alpha[i]! > ALPHA_CUT ? depth[i]! : 0;
+      positions.push(x, y, d);
+      uvs.push(u, v);
+      positions.push(x, y, -d);
+      uvs.push(1 - u, v);
+    }
+  }
+
+  const pushQuad = (a: number, b: number, c: number, d: number) => {
+    indices.push(a, b, c, a, c, d);
+  };
+
+  for (let cy = 0; cy < rows - 1; cy++) {
+    for (let cx = 0; cx < cols - 1; cx++) {
+      if (!cellOpaque(alpha, cols, rows, cx, cy)) continue;
+      const i00 = cy * cols + cx;
+      const i10 = cy * cols + cx + 1;
+      const i01 = (cy + 1) * cols + cx;
+      const i11 = (cy + 1) * cols + cx + 1;
+      pushQuad(
+        frontBase + i00,
+        frontBase + i10,
+        frontBase + i11,
+        frontBase + i01,
+      );
+      pushQuad(
+        backBase + i00,
+        backBase + i01,
+        backBase + i11,
+        backBase + i10,
+      );
+    }
+  }
+
+  for (let cy = 0; cy < rows - 1; cy++) {
+    for (let cx = 0; cx < cols - 1; cx++) {
+      const left = cellOpaque(alpha, cols, rows, cx - 1, cy);
+      const right = cellOpaque(alpha, cols, rows, cx, cy);
+      if (left === right) continue;
+      const vx = cx;
+      const v0 = cy * cols + vx;
+      const v1 = (cy + 1) * cols + vx;
+      if (right) {
+        pushQuad(frontBase + v0, frontBase + v1, backBase + v1, backBase + v0);
+      } else {
+        pushQuad(frontBase + v1, frontBase + v0, backBase + v0, backBase + v1);
+      }
+    }
+  }
+
+  for (let cy = 0; cy < rows - 1; cy++) {
+    for (let cx = 0; cx < cols - 1; cx++) {
+      const top = cellOpaque(alpha, cols, rows, cx, cy - 1);
+      const bottom = cellOpaque(alpha, cols, rows, cx, cy);
+      if (top === bottom) continue;
+      const vy = cy;
+      const v0 = vy * cols + cx;
+      const v1 = vy * cols + cx + 1;
+      if (bottom) {
+        pushQuad(frontBase + v0, frontBase + v1, backBase + v1, backBase + v0);
+      } else {
+        pushQuad(frontBase + v1, frontBase + v0, backBase + v0, backBase + v1);
+      }
+    }
+  }
+
+  const geo = new BufferGeometry();
+  geo.setAttribute("position", new BufferAttribute(new Float32Array(positions), 3));
+  geo.setAttribute("uv", new BufferAttribute(new Float32Array(uvs), 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+export function buildShellGeometry(id: SignId): BufferGeometry | null {
+  const vol = getSignVolume(id);
+  if (!vol) return null;
+  return buildShellGeometryFromVolume(vol);
+}
+
+/** Rejection-sample interior points through ±Z inside the volume body. */
+export function interiorCloudFromVolume(vol: SignVolume, count: number): VolumeStar[] {
+  const n = Math.max(1, Math.floor(count));
+  const out: VolumeStar[] = new Array(n);
+  const { cols, rows, alpha, depth } = vol;
+  const cells: number[] = [];
+  for (let cy = 0; cy < rows - 1; cy++) {
+    for (let cx = 0; cx < cols - 1; cx++) {
+      if (!cellOpaque(alpha, cols, rows, cx, cy)) continue;
+      cells.push(cy * cols + cx);
+    }
+  }
+  if (!cells.length) {
+    for (let i = 0; i < n; i++) out[i] = { x: 0, y: 0, z: 0, mag: 0 };
+    return out;
+  }
+  for (let i = 0; i < n; i++) {
+    const seed = i * 17 + 3;
+    const cell = cells[Math.floor(hash(seed) * cells.length)]!;
+    const cx = cell % cols;
+    const cy = Math.floor(cell / cols);
+    const jx = hash(seed + 1);
+    const jy = hash(seed + 2);
+    const jz = hash(seed + 3);
+    const x = (cx + jx) / (cols - 1) - 0.5;
+    const y = 0.5 - (cy + jy) / (rows - 1);
+    const idx = Math.min(cols * rows - 1, cy * cols + cx);
+    const d = depth[idx]! > 0 ? depth[idx]! : 0.1;
+    const z = (jz * 2 - 1) * d;
+    const a = alpha[idx] ?? 0;
+    out[i] = {
+      x,
+      y,
+      z,
+      mag: Math.min(1, 0.25 + a * 0.5 + d * 0.35),
+    };
+  }
+  return out;
+}
+
+export function interiorCloud(id: SignId, count: number): VolumeStar[] {
+  const vol = getSignVolume(id);
+  if (!vol) return [];
+  return interiorCloudFromVolume(vol, count);
 }
 
 /** Push a unit plane into the sign's body so it reads as sculpture, not a card. */

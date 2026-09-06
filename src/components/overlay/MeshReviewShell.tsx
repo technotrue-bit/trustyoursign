@@ -35,8 +35,9 @@ export function MeshReviewShell() {
               Sagittarius
             </h1>
             <p className="mt-2 max-w-sm text-sm leading-relaxed text-fg-muted">
-              Extruded OBJ from Sagittarius-3D with thin-gold albedo. Drag to orbit — judge volume
-              against the flat plates before scaling the other eleven.
+              Procedural gold shell from the Sagittarius plate art, filled with stars. Drag to
+              orbit, W/scroll to dive through — judge real volume before enabling the other
+              eleven.
             </p>
           </div>
           <button
@@ -48,7 +49,7 @@ export function MeshReviewShell() {
           </button>
         </div>
         <p className="absolute bottom-[max(1rem,var(--safe-bottom))] left-1/2 -translate-x-1/2 text-[0.65rem] tracking-[0.22em] text-fg-subtle uppercase">
-          Drag · scroll zoom · auto-orbit
+          Drag · W / scroll dive · auto-orbit
         </p>
       </div>
     </main>
