@@ -260,17 +260,18 @@ export function clearSignGalaxyCache() {
 
 /** Ease helpers for the enter choreography. */
 export function enterWorldFade(progress: number) {
-  return 1 - smooth01(Math.min(1, progress / 0.28));
+  return 1 - smooth01(Math.min(1, progress / 0.22));
 }
 
 export function enterPlateFade(progress: number) {
-  return 1 - smooth01(Math.max(0, (progress - 0.18) / 0.42));
+  // Plate must be gone early — no lingering 2D card while diving.
+  return 1 - smooth01(Math.max(0, (progress - 0.06) / 0.28));
 }
 
 export function enterGalaxyForm(progress: number) {
-  return smooth01(Math.max(0, (progress - 0.32) / 0.62));
+  return smooth01(Math.max(0, (progress - 0.18) / 0.55));
 }
 
 export function enterDive(progress: number) {
-  return smooth01(Math.max(0, (progress - 0.12) / 0.55));
+  return smooth01(Math.max(0, (progress - 0.08) / 0.5));
 }

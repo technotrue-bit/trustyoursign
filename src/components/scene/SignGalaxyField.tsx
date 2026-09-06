@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
+  AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
   Color,
-  DoubleSide,
   Group,
   Vector3,
 } from "three";
@@ -31,14 +31,17 @@ export function SignGalaxyField({
   const galaxy = useMemo(() => getSignGalaxy(sign.id), [sign.id]);
   const lineGeo = useMemo(() => buildLineGeo(galaxy), [galaxy]);
   const starGeo = useMemo(() => buildStarGeo(galaxy), [galaxy]);
+  const pointGeo = useMemo(() => buildPointGeo(galaxy), [galaxy]);
   const tint = useMemo(() => new Color(sign.palette.particle), [sign.palette.particle]);
+  const accent = useMemo(() => new Color(sign.palette.accent), [sign.palette.accent]);
 
   useEffect(
     () => () => {
       lineGeo.dispose();
       starGeo.dispose();
+      pointGeo.dispose();
     },
-    [lineGeo, starGeo],
+    [lineGeo, starGeo, pointGeo],
   );
 
   useFrame(() => {
@@ -49,18 +52,32 @@ export function SignGalaxyField({
     const form = exploring ? galaxyTravel.galaxyForm : 0;
     g.visible = form > 0.02;
     if (!g.visible) return;
-    const span = (PLATE_WIDE / GALAXY_SPAN) * (0.92 + form * 0.55);
+    const span = (PLATE_WIDE / GALAXY_SPAN) * (1.05 + form * 0.35);
     g.scale.setScalar(span);
-    g.traverse((obj) => {
-      const mat = (obj as { material?: { opacity?: number; color?: Color } }).material;
-      if (!mat || typeof mat.opacity !== "number") return;
-      mat.opacity = Math.min(1, form * 1.15);
-      if (mat.color) mat.color.copy(tint);
-    });
+    const lineMat = (g.children[0] as { material?: { opacity?: number; color?: Color } } | undefined)
+      ?.material;
+    const starMat = (g.children[1] as { material?: { opacity?: number; color?: Color; size?: number } } | undefined)
+      ?.material;
+    const pointMat = (g.children[2] as { material?: { opacity?: number; color?: Color; size?: number } } | undefined)
+      ?.material;
+    if (lineMat) {
+      lineMat.opacity = Math.min(1, form * 0.85);
+      if (lineMat.color) lineMat.color.copy(accent);
+    }
+    if (starMat) {
+      starMat.opacity = Math.min(1, 0.35 + form * 0.9);
+      if (starMat.color) starMat.color.copy(tint);
+      if (typeof starMat.size === "number") starMat.size = 0.28 + form * 0.12;
+    }
+    if (pointMat) {
+      pointMat.opacity = Math.min(1, form * 1.05);
+      if (pointMat.color) pointMat.color.copy(accent);
+      if (typeof pointMat.size === "number") pointMat.size = 0.38 + form * 0.12;
+    }
   });
 
   return (
-    <group ref={group} visible={false} position={[0, 0.05, 0.2]}>
+    <group ref={group} visible={false} position={[0, 0.05, 0.35]}>
       <lineSegments geometry={lineGeo} frustumCulled={false} raycast={noopRaycast}>
         <lineBasicMaterial
           color={sign.palette.accent}
@@ -73,12 +90,25 @@ export function SignGalaxyField({
       <points geometry={starGeo} frustumCulled={false} raycast={noopRaycast}>
         <pointsMaterial
           color={sign.palette.chest}
-          size={0.22}
+          size={0.3}
           sizeAttenuation
           transparent
           opacity={0}
           depthWrite={false}
           toneMapped={false}
+          blending={AdditiveBlending}
+        />
+      </points>
+      <points geometry={pointGeo} frustumCulled={false} raycast={noopRaycast}>
+        <pointsMaterial
+          color={sign.palette.accent}
+          size={0.7}
+          sizeAttenuation
+          transparent
+          opacity={0}
+          depthWrite={false}
+          toneMapped={false}
+          blending={AdditiveBlending}
         />
       </points>
       {galaxy.points.map((p, pi) => (
@@ -91,15 +121,8 @@ export function SignGalaxyField({
             seekGalaxyPoint(pi);
           }}
         >
-          <sphereGeometry args={[p.isHub ? 0.55 : 0.38, 12, 10]} />
-          <meshBasicMaterial
-            color={p.isHub ? sign.palette.accent : sign.palette.particle}
-            transparent
-            opacity={0}
-            depthWrite={false}
-            toneMapped={false}
-            side={DoubleSide}
-          />
+          <sphereGeometry args={[p.isHub ? 0.72 : 0.52, 16, 14]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
         </mesh>
       ))}
     </group>
@@ -114,6 +137,19 @@ function buildStarGeo(galaxy: SignGalaxy) {
     pos[i * 3] = s.x;
     pos[i * 3 + 1] = s.y;
     pos[i * 3 + 2] = s.z;
+  }
+  g.setAttribute("position", new BufferAttribute(pos, 3));
+  return g;
+}
+
+function buildPointGeo(galaxy: SignGalaxy) {
+  const g = new BufferGeometry();
+  const pos = new Float32Array(galaxy.points.length * 3);
+  for (let i = 0; i < galaxy.points.length; i++) {
+    const p = galaxy.points[i]!;
+    pos[i * 3] = p.x;
+    pos[i * 3 + 1] = p.y;
+    pos[i * 3 + 2] = p.z;
   }
   g.setAttribute("position", new BufferAttribute(pos, 3));
   return g;
@@ -142,6 +178,6 @@ function buildLineGeo(galaxy: SignGalaxy) {
 export function pointLocalOffset(galaxy: SignGalaxy, pointIndex: number, form: number) {
   const p = galaxy.points[pointIndex] ?? galaxy.points[0];
   if (!p) return new Vector3(0, 0, 0);
-  const span = (PLATE_WIDE / GALAXY_SPAN) * (0.92 + form * 0.55);
-  return new Vector3(p.x * span, p.y * span + 0.05, p.z * span + 0.2);
+  const span = (PLATE_WIDE / GALAXY_SPAN) * (1.05 + form * 0.35);
+  return new Vector3(p.x * span, p.y * span + 0.05, p.z * span * 0.35 + 0.35);
 }

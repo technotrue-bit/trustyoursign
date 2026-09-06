@@ -42,10 +42,12 @@ describe("signGalaxy", () => {
 
   it("enter fades plate before galaxy fully forms", () => {
     assert.ok(Math.abs(enterWorldFade(0) - 1) < 0.02);
-    assert.ok(enterWorldFade(0.3) < 0.2);
+    assert.ok(enterWorldFade(0.25) < 0.2);
     assert.ok(Math.abs(enterPlateFade(0) - 1) < 0.02);
-    assert.ok(enterPlateFade(0.7) < 0.15);
-    assert.ok(enterGalaxyForm(0.2) < 0.05);
+    assert.ok(enterPlateFade(0.45) < 0.15);
+    assert.ok(enterGalaxyForm(0.1) < 0.05);
     assert.ok(Math.abs(enterGalaxyForm(1) - 1) < 0.02);
+    // Plate is gone while galaxy is still forming.
+    assert.ok(enterPlateFade(0.4) < enterGalaxyForm(0.4) + 0.35);
   });
 });

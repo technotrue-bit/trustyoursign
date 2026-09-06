@@ -939,7 +939,7 @@ function TempleRig() {
     const volumeDive = heldSignId && hasVolumeSign(heldSignId) ? 0.35 * PLATE_WIDE : 0;
     const exploreDive =
       exploring && galaxyTravel.exploreSignIndex != null
-        ? galaxyTravel.diveBlend * (4.2 + galaxyTravel.galaxyForm * 9.5)
+        ? galaxyTravel.diveBlend * (2.4 + galaxyTravel.galaxyForm * 4.8)
         : 0;
     const diveTarget = Math.max(volumeDive, exploreDive);
     diveAmount.current = lerpToward({
@@ -967,8 +967,10 @@ function TempleRig() {
       _look.addScaledVector(_camUp, local.y);
       _look.z += local.z * 0.15;
       if (galaxyTravel.explorePhase === "inside") {
-        _cam.x += (_look.x - _cam.x) * 0.12;
-        _cam.y += (_look.y - _cam.y) * 0.1;
+        // Gentle bias toward the active point — stay inside the form, don't dock on a star.
+        _cam.x += (_look.x - _cam.x) * 0.045;
+        _cam.y += (_look.y - _cam.y) * 0.035;
+        _look.lerp(_chest, 0.55);
       }
     }
 
