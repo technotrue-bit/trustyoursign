@@ -30,7 +30,7 @@
  * a verified id via `@/lib/auth/middleware`.
  */
 import { betterAuth } from "better-auth";
-import { bearer, genericOAuth } from "better-auth/plugins";
+import { bearer, genericOAuth, captcha } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
@@ -233,6 +233,17 @@ export const auth = betterAuth({
 
   plugins: [
     gateIdentitySessions(),
+
+    // Bot protection: Cloudflare Turnstile when TURNSTILE_SECRET_KEY is set.
+    // Pair with VITE_TURNSTILE_SITE_KEY on the login form (see docs/security/turnstile.md).
+    ...(env("TURNSTILE_SECRET_KEY") && env("VITE_TURNSTILE_SITE_KEY")
+      ? [
+          captcha({
+            provider: "cloudflare-turnstile",
+            secretKey: env("TURNSTILE_SECRET_KEY")!,
+          }),
+        ]
+      : []),
 
     // One genericOAuth provider per upstream (when auth is on), all federating
     // to the broker with the SAME client and differing only by the `idp` hint.
