@@ -13,7 +13,9 @@ The main vault is one shared temple corridor with twelve stations. Constellation
 | Point purpose | Hub = birth chart; unlocked stars = insight / spicy / horror / warning |
 | Entry trigger | Click the **selected** sign (title / station pick) |
 | Entry beat | Everything but that sign’s stars & form fades out → slow dive into the sign-as-galaxy → plate/2D dissolves; stars expand into a volumetric galaxy formed from the animal figure |
-| First star | Land on hub and open birth chart until the sign’s full chart + profile unlocks the rest |
+| First star | Land on hub; guests sign in / sign up; signed-in users open birth chart |
+| Unlock | Signed in **and** full timed natal / saved self profile for that sign |
+| Unlocked lore | Each star: **insight / spicy / horror / warning** facts about the sign |
 | Corridor | Remains for browsing between signs; dive nests inside a station |
 | Tropical order | Untouched (`CONSTELLATIONS` Aries-first; calendar strip mapping unchanged) |
 

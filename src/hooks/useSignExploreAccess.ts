@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import type { SignId } from "@/lib/chart/types";
-import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listCharts, type SavedChart } from "@/lib/charts";
 import { useSessionStore } from "@/lib/chart/session";
-import { canExploreSignStars } from "@/lib/galaxy/exploreAccess";
+import { canExploreSignStars, exploreLockReason } from "@/lib/galaxy/exploreAccess";
 import { setExploreStarsUnlocked } from "@/lib/galaxy/travel";
 
 /** Whether non-hub stars in this sign’s galaxy are unlocked for the viewer. */
 export function useSignExploreAccess(signId: SignId | null) {
-  const user = useCurrentUser();
+  const { user, isPending } = useCurrentUserState();
   const session = useSessionStore((s) => s.session);
   const [savedCharts, setSavedCharts] = useState<SavedChart[] | null>(null);
+  // Real account only — not the unsigned guest. Dev fallback counts as signed in
+  // when auth is disabled for local preview.
+  const signedIn = Boolean(user);
 
   useEffect(() => {
     if (!user) {
@@ -31,16 +34,28 @@ export function useSignExploreAccess(signId: SignId | null) {
   }, [user, session?.savedId]);
 
   const unlocked =
+    !isPending &&
     signId != null &&
     canExploreSignStars({
       signId,
       session,
       savedCharts,
+      signedIn,
     });
+
+  const lockReason =
+    isPending || signId == null
+      ? ("auth" as const)
+      : exploreLockReason({
+          signId,
+          session,
+          savedCharts,
+          signedIn,
+        });
 
   useEffect(() => {
     setExploreStarsUnlocked(unlocked);
   }, [unlocked]);
 
-  return { unlocked, savedCharts, session };
+  return { unlocked, lockReason, signedIn, isPending, savedCharts, session };
 }

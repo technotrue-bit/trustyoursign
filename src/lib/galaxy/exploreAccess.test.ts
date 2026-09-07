@@ -6,6 +6,7 @@ import type { Nativity } from "@/lib/chart/schema";
 import {
   canExploreSignStars,
   chartIsExplorableProfile,
+  exploreLockReason,
   sessionHasFullChart,
 } from "./exploreAccess";
 
@@ -63,7 +64,7 @@ describe("exploreAccess", () => {
     assert.equal(sessionHasFullChart(visitor(), "aries"), false);
   });
 
-  it("treats self timed saved charts as profiles", () => {
+  it("requires signed in plus self timed saved chart", () => {
     const chart = {
       id: "c1",
       relation: "self",
@@ -74,11 +75,42 @@ describe("exploreAccess", () => {
       birthPlace: "NYC",
     } as unknown as SavedChart;
     assert.equal(chartIsExplorableProfile(chart), true);
-    assert.equal(canExploreSignStars({ signId: "leo", session: null, savedCharts: [chart] }), true);
-    assert.equal(canExploreSignStars({ signId: "aries", session: null, savedCharts: [chart] }), false);
+    assert.equal(
+      canExploreSignStars({ signId: "leo", session: null, savedCharts: [chart], signedIn: false }),
+      false,
+    );
+    assert.equal(exploreLockReason({ signId: "leo", session: null, savedCharts: [chart], signedIn: false }), "auth");
+    assert.equal(
+      canExploreSignStars({ signId: "leo", session: null, savedCharts: [chart], signedIn: true }),
+      true,
+    );
+    assert.equal(
+      canExploreSignStars({ signId: "aries", session: null, savedCharts: [chart], signedIn: true }),
+      false,
+    );
   });
 
-  it("unlocks from live full visitor session", () => {
-    assert.equal(canExploreSignStars({ signId: "taurus", session: visitor(), savedCharts: [] }), true);
+  it("unlocks from live full visitor session only when signed in", () => {
+    assert.equal(
+      canExploreSignStars({ signId: "taurus", session: visitor(), savedCharts: [], signedIn: false }),
+      false,
+    );
+    assert.equal(
+      canExploreSignStars({ signId: "taurus", session: visitor(), savedCharts: [], signedIn: true }),
+      true,
+    );
+    assert.equal(
+      exploreLockReason({ signId: "taurus", session: visitor(), savedCharts: [], signedIn: true }),
+      null,
+    );
+    assert.equal(
+      exploreLockReason({
+        signId: "taurus",
+        session: null,
+        savedCharts: [],
+        signedIn: true,
+      }),
+      "chart",
+    );
   });
 });

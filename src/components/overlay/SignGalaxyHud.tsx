@@ -24,7 +24,7 @@ export function SignGalaxyHud() {
 
   const sign =
     explore.signIndex != null ? (CONSTELLATIONS[explore.signIndex] ?? null) : null;
-  const { unlocked } = useSignExploreAccess(sign?.id ?? null);
+  const { unlocked, lockReason, signedIn } = useSignExploreAccess(sign?.id ?? null);
 
   useEffect(() => {
     prompted.current = false;
@@ -37,11 +37,16 @@ export function SignGalaxyHud() {
       return;
     }
     if (claim) return;
+    // Only auto-open birth chart when they already have an account — guests
+    // land on the hub and are prompted to sign in / sign up first.
+    if (!signedIn) {
+      consumeClaimPrompt();
+      return;
+    }
     if (!consumeClaimPrompt() && prompted.current) return;
     prompted.current = true;
-    // Land on the first star → open birth chart for first-time explorers.
     openClaim(sign.id);
-  }, [explore.phase, sign, unlocked, claim, openClaim]);
+  }, [explore.phase, sign, unlocked, claim, openClaim, signedIn]);
 
   if (explore.phase === "idle" || explore.signIndex == null || !sign) return null;
 
@@ -50,6 +55,21 @@ export function SignGalaxyHud() {
   const inside = explore.phase === "inside";
   const entering = explore.phase === "fading" || explore.phase === "diving";
   const lockedPoint = Boolean(point && !point.isHub && !unlocked);
+  const sealedCopy =
+    lockReason === "auth"
+      ? `Sign in or create an account, then keep a full ${sign.name} birth chart to open this star.`
+      : `This star stays sealed until your ${sign.name} birth chart and profile are complete.`;
+  const hubTone = unlocked ? "Home star" : lockReason === "auth" ? "Account" : "First star";
+  const hubTitle = unlocked
+    ? point?.purpose.title
+    : lockReason === "auth"
+      ? "Sign in to open your galaxy"
+      : point?.purpose.title;
+  const hubBody = unlocked
+    ? point?.purpose.body
+    : lockReason === "auth"
+      ? `Create an account or sign in, finish a timed ${sign.name} birth chart, and keep your profile — then every star unlocks with insight, spice, horror, and warning.`
+      : point?.purpose.body;
 
   return (
     <div
@@ -82,7 +102,7 @@ export function SignGalaxyHud() {
           <AuthSlot />
         </div>
       ) : (
-        <div className="flex items-start justify-between gap-3">
+        <div className="relative flex items-start justify-between gap-3">
           <button
             type="button"
             onClick={() => exitSignGalaxy()}
@@ -96,6 +116,11 @@ export function SignGalaxyHud() {
               {sign.name}
             </h2>
           </div>
+          {!signedIn ? (
+            <div className="pointer-events-auto absolute top-0 right-0 -translate-y-1">
+              <AuthSlot />
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -111,22 +136,18 @@ export function SignGalaxyHud() {
           <>
             <p className="text-[0.65rem] tracking-[0.28em] text-fg-subtle uppercase">
               {point.isHub
-                ? unlocked
-                  ? "Home star"
-                  : "First star"
-                : point.purpose.kind === "hub"
-                  ? "Star"
-                  : insightToneLabel(point.purpose.kind)}
+                ? hubTone
+                : lockedPoint
+                  ? "Sealed"
+                  : point.purpose.kind === "hub"
+                    ? "Star"
+                    : insightToneLabel(point.purpose.kind)}
             </p>
             <h3 className="font-display mt-1 text-xl leading-snug font-medium tracking-tight text-fg italic md:text-2xl">
-              {point.purpose.title}
+              {point.isHub ? hubTitle : lockedPoint ? "Still sealed" : point.purpose.title}
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-fg-muted md:text-base">
-              <Gloss card={false}>
-                {lockedPoint
-                  ? `This star stays sealed until your ${sign.name} birth chart and profile are complete.`
-                  : point.purpose.body}
-              </Gloss>
+              <Gloss card={false}>{point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}</Gloss>
             </p>
           </>
         ) : null}
@@ -162,7 +183,15 @@ export function SignGalaxyHud() {
             })}
           </div>
         ) : null}
-        {inside && point?.isHub && !unlocked ? (
+        {inside && point?.isHub && lockReason === "auth" ? (
+          <a
+            href="/login"
+            className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
+          >
+            Sign in / Sign up
+          </a>
+        ) : null}
+        {inside && point?.isHub && lockReason === "chart" ? (
           <button
             type="button"
             onClick={() => openClaim(sign.id)}

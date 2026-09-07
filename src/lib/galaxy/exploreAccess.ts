@@ -23,11 +23,7 @@ export function savedUnlocksSign(charts: SavedChart[] | null | undefined, signId
   return charts.some((c) => chartIsExplorableProfile(c) && c.signId === signId);
 }
 
-/**
- * Stars beyond the hub unlock when the visitor has a full natal for this sign
- * (same visit) or a saved self profile with timed natal for this sign.
- */
-export function canExploreSignStars(opts: {
+export function hasFullChartForSign(opts: {
   signId: SignId;
   session: ChartSession | null | undefined;
   savedCharts?: SavedChart[] | null;
@@ -37,4 +33,31 @@ export function canExploreSignStars(opts: {
     return true;
   }
   return savedUnlocksSign(opts.savedCharts, opts.signId);
+}
+
+export type ExploreLockReason = "auth" | "chart" | null;
+
+/**
+ * Stars beyond the hub unlock only when the viewer is signed in (or signed up)
+ * and has a full timed natal / saved self profile for this sign.
+ */
+export function canExploreSignStars(opts: {
+  signId: SignId;
+  session: ChartSession | null | undefined;
+  savedCharts?: SavedChart[] | null;
+  /** True when the viewer has a real signed-in / signed-up session. */
+  signedIn: boolean;
+}): boolean {
+  return exploreLockReason(opts) == null;
+}
+
+export function exploreLockReason(opts: {
+  signId: SignId;
+  session: ChartSession | null | undefined;
+  savedCharts?: SavedChart[] | null;
+  signedIn: boolean;
+}): ExploreLockReason {
+  if (!opts.signedIn) return "auth";
+  if (!hasFullChartForSign(opts)) return "chart";
+  return null;
 }
