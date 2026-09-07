@@ -1,5 +1,11 @@
 import { useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
+import {
+  TurnstileWidget,
+  resetTurnstile,
+  turnstileCaptchaHeaders,
+  turnstileSiteKey,
+} from "@/components/TurnstileWidget";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
 import { MIN_AGE } from "@/lib/legal";
 import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
@@ -49,12 +55,16 @@ function Login() {
       const ident = email.trim();
       const owner = isOwnerLogin(ident);
       const addr = owner ? SITE_OWNER.email : ident;
+      const captchaHeaders = turnstileCaptchaHeaders();
       if (mode === "up") {
         const { error: err } = await authClient.signUp.email({
           email: email.trim(),
           password,
           name: name.trim() || email.trim(),
           callbackURL: "/account",
+          fetchOptions: {
+            headers: captchaHeaders,
+          },
         });
         if (err) throw new Error(err.message ?? "Could not create the account");
       } else {
@@ -62,11 +72,15 @@ function Login() {
           email: addr,
           password,
           callbackURL: owner ? "/admin" : "/account",
+          fetchOptions: {
+            headers: captchaHeaders,
+          },
         });
         if (err) throw new Error(err.message ?? "Could not sign in");
       }
       window.location.href = mode === "up" ? "/account" : isOwnerLogin(email.trim()) ? "/admin" : "/account";
     } catch (e) {
+      resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not continue");
       setBusy(false);
     }
@@ -197,6 +211,7 @@ function Login() {
                 </label>
               </div>
             ) : null}
+            {turnstileSiteKey() ? <TurnstileWidget /> : null}
             {error ? <p className="text-sm text-wine">{error}</p> : null}
             <button
               type="submit"
