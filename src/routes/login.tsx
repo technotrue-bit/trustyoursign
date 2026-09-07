@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { TurnstileWidget, turnstileCaptchaHeaders, turnstileSiteKey } from "@/components/TurnstileWidget";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
 import { MIN_AGE } from "@/lib/legal";
 import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
@@ -50,12 +51,16 @@ function Login() {
       const ident = email.trim();
       const owner = isOwnerLogin(ident);
       const addr = owner ? SITE_OWNER.email : ident;
+      const captchaHeaders = turnstileCaptchaHeaders();
       if (mode === "up") {
         const { error: err } = await authClient.signUp.email({
           email: email.trim(),
           password,
           name: name.trim() || email.trim(),
           callbackURL: "/account",
+          fetchOptions: {
+            headers: captchaHeaders,
+          },
         });
         if (err) throw new Error(err.message ?? "Could not create the account");
       } else {
@@ -64,10 +69,7 @@ function Login() {
           password,
           callbackURL: owner ? "/admin" : "/account",
           fetchOptions: {
-            headers: (() => {
-              const token = typeof window !== "undefined" ? (window as unknown as { __turnstileToken?: string }).__turnstileToken : undefined;
-              return token ? { "x-captcha-response": token } : undefined;
-            })(),
+            headers: captchaHeaders,
           },
         });
         if (err) throw new Error(err.message ?? "Could not sign in");
@@ -214,6 +216,7 @@ function Login() {
                 </label>
               </div>
             ) : null}
+            {turnstileSiteKey() ? <TurnstileWidget /> : null}
             {error ? <p className="text-sm text-wine">{error}</p> : null}
             <button
               type="submit"

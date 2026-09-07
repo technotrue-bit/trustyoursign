@@ -21,8 +21,10 @@ Set in deployment (Vercel / host). **Do not commit values.**
 | `OWNER_PASSWORD` | Strong owner desk password (email/password). **Rotate** — legacy `True` is compromised and rejected. |
 | `GROK_PREVIEW_CLIENT_SECRET` or `PREVIEW_CLIENT_SECRET` | Preview OAuth client secret (sandbox). Prefer broker-issued secret. |
 | `GROK_AUTH_CLIENT_SECRET` | Per-app OAuth secret when deployed (overrides preview). |
-| `TURNSTILE_SECRET_KEY` (optional) | Enables Better Auth captcha plugin (Cloudflare Turnstile). |
-| `VITE_TURNSTILE_SITE_KEY` (optional) | Client site key if Turnstile UI is wired. |
+| `TURNSTILE_SECRET_KEY` (optional) | Server secret for Better Auth captcha plugin (Cloudflare Turnstile). |
+| `VITE_TURNSTILE_SITE_KEY` (optional) | Client site key — login renders the Turnstile widget when set. |
+
+**Turnstile:** both `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are required together; rebuild/redeploy after setting the `VITE_` key (it is inlined at build time).
 
 ## Rotate steps (Joey) — preview OAuth
 
