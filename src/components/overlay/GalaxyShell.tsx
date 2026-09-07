@@ -53,7 +53,7 @@ export function GalaxyShell() {
           </p>
         </div>
       ) : null}
-      {!asking && worldFade > 0.08 ? (
+      {!asking && !exploring && worldFade > 0.08 ? (
         <div
           data-no-fly
           className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-1"

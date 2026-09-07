@@ -7,10 +7,12 @@ import {
   consumeClaimPrompt,
   exitSignGalaxy,
   seekGalaxyPoint,
+  skipEnterGalaxy,
 } from "@/lib/galaxy/travel";
 import { useSessionStore } from "@/lib/chart/session";
 import { useSignExploreAccess } from "@/hooks/useSignExploreAccess";
 import { Gloss } from "./Gloss";
+import { AuthSlot } from "./AuthSlot";
 import { cn } from "@/lib/utils";
 
 /** HUD while diving into / exploring a selected sign’s animal-star galaxy. */
@@ -54,21 +56,48 @@ export function SignGalaxyHud() {
       data-no-fly
       className="pointer-events-none absolute inset-0 z-40 flex flex-col justify-between px-4 pt-[max(1.25rem,var(--safe-top))] pb-[max(1.25rem,var(--safe-bottom))]"
     >
-      <div className="flex items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => exitSignGalaxy()}
-          className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+      {/* Lock the screen for the whole enter dive — only Skip is live. */}
+      {entering ? (
+        <div
+          className="pointer-events-auto absolute inset-0 z-[55]"
+          aria-hidden
+          onPointerDown={(e) => e.preventDefault()}
+          onWheel={(e) => e.preventDefault()}
+        />
+      ) : null}
+
+      {/* Same top-right Skip slot as the site intro. */}
+      {entering ? (
+        <div
+          data-no-fly
+          className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-1"
         >
-          Back
-        </button>
-        <div className="text-right">
-          <p className="text-[0.65rem] tracking-[0.28em] text-fg-muted uppercase">{sign.month}</p>
-          <h2 className="font-display text-2xl leading-tight font-medium tracking-tight text-fg italic md:text-3xl">
-            {sign.name}
-          </h2>
+          <button
+            type="button"
+            onClick={() => skipEnterGalaxy()}
+            className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+          >
+            Skip
+          </button>
+          <AuthSlot />
         </div>
-      </div>
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => exitSignGalaxy()}
+            className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+          >
+            Back
+          </button>
+          <div className="text-right">
+            <p className="text-[0.65rem] tracking-[0.28em] text-fg-muted uppercase">{sign.month}</p>
+            <h2 className="font-display text-2xl leading-tight font-medium tracking-tight text-fg italic md:text-3xl">
+              {sign.name}
+            </h2>
+          </div>
+        </div>
+      )}
 
       <div
         className={cn(

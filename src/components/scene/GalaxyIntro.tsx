@@ -26,6 +26,7 @@ import {
   aimedIndex,
   ensureAutoClock,
   ensureFlyInput,
+  enterAnimating,
   enterSignGalaxy,
   exitSignGalaxy,
   exploringSign,
@@ -34,6 +35,7 @@ import {
   prefersReducedMotion,
   publishTravel,
   skipBirth,
+  skipEnterGalaxy,
   stepBirth,
   stepExplore,
   stepSeek,
@@ -467,6 +469,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     return g;
   }, [eager, index, n, sign.id, morphPairs, useVolume]);
   const pick = () => {
+    if (enterAnimating()) return;
     if (exploringSign()) {
       if (galaxyTravel.exploreSignIndex === index && galaxyTravel.explorePhase === "inside") {
         useSessionStore.getState().openClaim(sign.id);
@@ -834,6 +837,13 @@ function TempleRig() {
           skipIntro();
           galaxyTravel.birth = 1;
           useGalaxy.getState().markBorn();
+        }
+        return;
+      }
+      if (enterAnimating()) {
+        if (e.key === "Escape" || e.key === "Enter") {
+          skipEnterGalaxy();
+          noteControl();
         }
         return;
       }

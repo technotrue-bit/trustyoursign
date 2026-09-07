@@ -246,6 +246,37 @@ export function insideSignGalaxy() {
   return galaxyTravel.explorePhase === "inside";
 }
 
+/** True while the enter dive is playing — screen should stay locked. */
+export function enterAnimating() {
+  const p = galaxyTravel.explorePhase;
+  return p === "fading" || p === "diving";
+}
+
+function landInsideHub() {
+  applyEnterCurves(1);
+  galaxyTravel.explorePhase = "inside";
+  galaxyTravel.exploreProgress = 1;
+  galaxyTravel.pointIndex = 0;
+  galaxyTravel.pointSeek = null;
+  galaxyTravel.pointT = 0;
+  galaxyTravel.pointTTarget = 0;
+  galaxyTravel.claimPrompt = true;
+  galaxyTravel.hold = 0;
+  galaxyTravel.steer = 0;
+  publishExplore();
+}
+
+/**
+ * Skip the enter dive and land on the first star (hub), same destination
+ * as letting the animation finish.
+ */
+export function skipEnterGalaxy() {
+  if (!enterAnimating()) return false;
+  landInsideHub();
+  noteControl();
+  return true;
+}
+
 /**
  * Begin the selected-sign dive: fade the world, approach the animal form,
  * dissolve the plate, and bloom stars into a per-sign galaxy.
@@ -286,6 +317,8 @@ export function enterSignGalaxy(index?: number) {
 /** Leave the sign galaxy and restore the corridor. */
 export function exitSignGalaxy() {
   if (!exploringSign()) return false;
+  // Keep the enter dive whole — only Skip can jump to the hub mid-animation.
+  if (enterAnimating()) return false;
   if (galaxyTravel.explorePhase === "exiting") return true;
   galaxyTravel.explorePhase = "exiting";
   galaxyTravel.pointSeek = null;
@@ -356,12 +389,8 @@ export function stepExplore(dt: number) {
   if (next < 0.28) galaxyTravel.explorePhase = "fading";
   else if (next < 0.98) galaxyTravel.explorePhase = "diving";
   else {
-    galaxyTravel.explorePhase = "inside";
-    applyEnterCurves(1);
-    galaxyTravel.pointIndex = 0;
-    galaxyTravel.pointT = 0;
-    galaxyTravel.pointTTarget = 0;
-    galaxyTravel.claimPrompt = true;
+    landInsideHub();
+    return;
   }
   publishExplore();
 }
@@ -397,6 +426,7 @@ function clearDirectSeek() {
 
 /** Jump the flight path to a sign. Arrive as the animal and hold until they fly or rest. */
 export function seekSign(index: number, opts?: SeekOptions) {
+  if (enterAnimating()) return galaxyTravel.exploreSignIndex ?? 0;
   if (exploringSign() && galaxyTravel.explorePhase !== "fading") {
     // Strip / external seek leaves an open galaxy first.
     if (galaxyTravel.exploreSignIndex !== ((Math.round(index) % 12) + 12) % 12) {
