@@ -115,6 +115,10 @@ export const galaxyTravel = {
   pointSeek: null as number | null,
   pointT: 0,
   pointTTarget: 0,
+  /** Non-hub stars seekable after full chart + profile for this sign. */
+  starsUnlocked: false,
+  /** Pulse once when enter lands on hub — UI may open birth claim. */
+  claimPrompt: false,
 };
 
 export function prefersReducedMotion() {
@@ -228,6 +232,8 @@ export function resetExplore(publish = true) {
   galaxyTravel.pointSeek = null;
   galaxyTravel.pointT = 0;
   galaxyTravel.pointTTarget = 0;
+  galaxyTravel.starsUnlocked = false;
+  galaxyTravel.claimPrompt = false;
   if (publish) publishExplore();
 }
 
@@ -267,6 +273,8 @@ export function enterSignGalaxy(index?: number) {
   galaxyTravel.hold = 0;
   galaxyTravel.steer = 0;
   galaxyTravel.zoomTarget = 1.35;
+  galaxyTravel.starsUnlocked = false;
+  galaxyTravel.claimPrompt = false;
   applyEnterCurves(0);
   primeSignArt(sign.id);
   getSignGalaxy(sign.id);
@@ -287,11 +295,23 @@ export function exitSignGalaxy() {
   return true;
 }
 
+export function setExploreStarsUnlocked(unlocked: boolean) {
+  galaxyTravel.starsUnlocked = Boolean(unlocked);
+}
+
+export function consumeClaimPrompt() {
+  if (!galaxyTravel.claimPrompt) return false;
+  galaxyTravel.claimPrompt = false;
+  return true;
+}
+
 export function seekGalaxyPoint(pointIndex: number) {
   if (!insideSignGalaxy() || galaxyTravel.exploreSignIndex == null) return false;
   const galaxy = getSignGalaxy(CONSTELLATIONS[galaxyTravel.exploreSignIndex]!.id);
   if (galaxy.points.length === 0) return false;
   const i = ((Math.round(pointIndex) % galaxy.points.length) + galaxy.points.length) % galaxy.points.length;
+  const point = galaxy.points[i]!;
+  if (!point.isHub && !galaxyTravel.starsUnlocked) return false;
   galaxyTravel.pointSeek = i;
   galaxyTravel.pointTTarget = i;
   galaxyTravel.pointIndex = i;
@@ -341,6 +361,7 @@ export function stepExplore(dt: number) {
     galaxyTravel.pointIndex = 0;
     galaxyTravel.pointT = 0;
     galaxyTravel.pointTTarget = 0;
+    galaxyTravel.claimPrompt = true;
   }
   publishExplore();
 }

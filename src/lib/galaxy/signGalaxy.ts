@@ -1,5 +1,6 @@
 import type { SignId } from "@/lib/chart/types";
 import { CONSTELLATIONS, type Figure, type StarPt } from "./constellations";
+import { insightsForSign, type InsightTone } from "./signInsights";
 import { TEMPLE_SIGNS, type TempleSign } from "./temple";
 
 export type ExplorePhase = "idle" | "fading" | "diving" | "inside" | "exiting";
@@ -12,15 +13,7 @@ export type GalaxyStar = {
   mag: number;
 };
 
-export type PointPurposeKind =
-  | "hub"
-  | "essence"
-  | "element"
-  | "modality"
-  | "chakra"
-  | "line"
-  | "dates"
-  | "body";
+export type PointPurposeKind = "hub" | InsightTone;
 
 export type PointPurpose = {
   kind: PointPurposeKind;
@@ -125,60 +118,37 @@ export function pickMajorStarIndices(figure: Figure, maxPoints = 10): number[] {
 }
 
 function purposeCatalog(temple: TempleSign): PointPurpose[] {
-  const modalityTitle =
-    temple.modality === "cardinal"
-      ? "Cardinal"
-      : temple.modality === "fixed"
-        ? "Fixed"
-        : "Mutable";
-  const elementTitle =
-    temple.element === "fire"
-      ? "Fire"
-      : temple.element === "earth"
-        ? "Earth"
-        : temple.element === "air"
-          ? "Air"
-          : "Water";
+  const insights = insightsForSign(temple.id);
   const list: PointPurpose[] = [
     {
       kind: "hub",
-      title: "Your door",
-      body: `Stand in ${temple.name}. When you are ready, claim this sign as yours.`,
-    },
-    {
-      kind: "essence",
-      title: "Essence",
-      body: temple.essence,
-    },
-    {
-      kind: "element",
-      title: elementTitle,
-      body: `${temple.name} moves as ${elementTitle.toLowerCase()} — the weather of this galaxy.`,
-    },
-    {
-      kind: "modality",
-      title: modalityTitle,
-      body: `${modalityTitle} tempo: how ${temple.name} begins, holds, or changes.`,
-    },
-    {
-      kind: "chakra",
-      title: temple.chakra[0]!.toUpperCase() + temple.chakra.slice(1),
-      body: temple.chakraNote,
-    },
-    {
-      kind: "dates",
-      title: "Season",
-      body: temple.dates,
-    },
-    {
-      kind: "body",
-      title: "In the body",
-      body: temple.chakraNote,
+      title: "Your first star",
+      body: `Begin here. Fill out your birth chart to open the rest of ${temple.name}'s galaxy.`,
     },
   ];
-  for (const line of temple.lines) {
-    list.push({ kind: "line", title: temple.name, body: line });
+  for (const insight of insights) {
+    list.push({
+      kind: insight.tone,
+      title: insight.title,
+      body: insight.body,
+    });
   }
+  // Keep a few temple facets as extra "info" stars when the figure has many points.
+  list.push({
+    kind: "info",
+    title: "Essence",
+    body: temple.essence,
+  });
+  list.push({
+    kind: "info",
+    title: "Season",
+    body: temple.dates,
+  });
+  list.push({
+    kind: "info",
+    title: temple.chakra[0]!.toUpperCase() + temple.chakra.slice(1),
+    body: temple.chakraNote,
+  });
   return list;
 }
 
@@ -209,7 +179,9 @@ function assignPurposes(
     const starIndex = starIndices[ord]!;
     const g = stars[starIndex]!;
     const isHub = ord === hubAt;
-    const purpose = isHub ? catalog[0]! : catalog[1 + (purposeCursor++ % Math.max(1, catalog.length - 1))]!;
+    const purpose = isHub
+      ? catalog[0]!
+      : catalog[1 + (purposeCursor++ % Math.max(1, catalog.length - 1))]!;
     points.push({
       id: `${signId}-${starIndex}`,
       starIndex,

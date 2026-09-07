@@ -10,16 +10,17 @@ The main vault is one shared temple corridor with twelve stations. Constellation
 | --- | --- |
 | Layout source | **Animal figure** stars (`CONSTELLATIONS[i].animal`) — how the sign is formed |
 | Travel points | Placed at animal-star positions (major joints / bright vertices as interactive points; full animal field as the galaxy spine) |
-| Point purpose | Lore facets + claim hub (hybrid): brightest/central star = claim; others = essence, element, modality, chakra, body lines, dates |
+| Point purpose | Hub = birth chart; unlocked stars = insight / spicy / horror / warning |
 | Entry trigger | Click the **selected** sign (title / station pick) |
 | Entry beat | Everything but that sign’s stars & form fades out → slow dive into the sign-as-galaxy → plate/2D dissolves; stars expand into a volumetric galaxy formed from the animal figure |
+| First star | Land on hub and open birth chart until the sign’s full chart + profile unlocks the rest |
 | Corridor | Remains for browsing between signs; dive nests inside a station |
 | Tropical order | Untouched (`CONSTELLATIONS` Aries-first; calendar strip mapping unchanged) |
 
 ## Non-goals
 
 - Reordering `CONSTELLATIONS` / travel indices
-- Auth / DB
+- Auth / DB / new profile tables (reuse timed natal + saved self charts)
 - Free 6DOF rewrite of the whole vault corridor
 - Authored per-sign mesh assets (reuse volume recipe where gated)
 
