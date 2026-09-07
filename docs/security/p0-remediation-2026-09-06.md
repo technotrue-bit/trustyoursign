@@ -21,10 +21,15 @@ Set in deployment (Vercel / host). **Do not commit values.**
 | `OWNER_PASSWORD` | Strong owner desk password (email/password). **Rotate** — legacy `True` is compromised and rejected. |
 | `GROK_PREVIEW_CLIENT_SECRET` or `PREVIEW_CLIENT_SECRET` | Preview OAuth client secret (sandbox). Prefer broker-issued secret. |
 | `GROK_AUTH_CLIENT_SECRET` | Per-app OAuth secret when deployed (overrides preview). |
-| `TURNSTILE_SECRET_KEY` (optional) | Server secret for Better Auth captcha plugin (Cloudflare Turnstile). |
-| `VITE_TURNSTILE_SITE_KEY` (optional) | Client site key — login renders the Turnstile widget when set. |
+| `TURNSTILE_SECRET_KEY` (optional) | Server secret for Better Auth captcha plugin (Cloudflare Turnstile). Set in Vercel only — **never** commit or paste in chat/repo. |
+| `VITE_TURNSTILE_SITE_KEY` (optional) | Client site key (public). Joey’s existing widget: `0x4AAAAAAErVvyAn66cRPEas` — set on Vercel **Production + Preview**. |
 
-**Turnstile:** both `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are required together; rebuild/redeploy after setting the `VITE_` key (it is inlined at build time).
+**Turnstile (Joey’s existing Cloudflare widget — do not create a new one):**
+
+- Both `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are required together (Better Auth captcha plugin + login widget).
+- Rebuild/redeploy after setting `VITE_TURNSTILE_SITE_KEY` (Vite inlines it at build time).
+- Allowed hostnames on the Cloudflare widget: `trustyoursigns.grok.me`, Vercel preview hosts, `localhost`.
+- Never paste `TURNSTILE_SECRET_KEY` into chat or the repo.
 
 ## Rotate steps (Joey) — preview OAuth
 

@@ -8,12 +8,14 @@ type TurnstileApi = {
     el: HTMLElement,
     opts: {
       sitekey: string;
+      action?: string;
       callback: (token: string) => void;
       "expired-callback"?: () => void;
       "error-callback"?: () => void;
       theme?: "light" | "dark" | "auto";
     },
   ) => string;
+  reset: (widgetId: string) => void;
   remove: (widgetId: string) => void;
 };
 
@@ -24,7 +26,10 @@ declare global {
   }
 }
 
-/** Site key from Vite env at build time — undefined when unset/empty. */
+/** Active widget id for reset after failed auth (Joey’s existing Turnstile widget). */
+let activeWidgetId: string | null = null;
+
+/** Site key from Vite env at build time — undefined when unset/empty. Never hardcode. */
 export function turnstileSiteKey(): string | undefined {
   const key = import.meta.env.VITE_TURNSTILE_SITE_KEY;
   return typeof key === "string" && key.trim().length > 0 ? key.trim() : undefined;
@@ -36,16 +41,26 @@ function setTurnstileToken(token: string | undefined) {
   else delete window.__turnstileToken;
 }
 
-/** Headers login already sends as `x-captcha-response` when a token exists. */
+/** Headers login sends as `x-captcha-response` when a token exists. */
 export function turnstileCaptchaHeaders(): Record<string, string> | undefined {
   if (typeof window === "undefined") return undefined;
   const token = window.__turnstileToken;
   return token ? { "x-captcha-response": token } : undefined;
 }
 
+/** Clear stored token and reset the widget so a fresh challenge is required. */
+export function resetTurnstile() {
+  setTurnstileToken(undefined);
+  if (typeof window === "undefined") return;
+  if (activeWidgetId !== null && window.turnstile) {
+    window.turnstile.reset(activeWidgetId);
+  }
+}
+
 /**
- * Renders Cloudflare Turnstile when `VITE_TURNSTILE_SITE_KEY` is set at build.
- * Writes the solved token to `window.__turnstileToken` for the login fetch path.
+ * Renders Joey’s existing Cloudflare Turnstile widget when
+ * `VITE_TURNSTILE_SITE_KEY` is set at build. Writes the solved token to
+ * `window.__turnstileToken` for the login `x-captcha-response` path.
  */
 export function TurnstileWidget() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -63,13 +78,16 @@ export function TurnstileWidget() {
     const mount = () => {
       if (cancelled || !containerRef.current || !window.turnstile) return;
       if (widgetIdRef.current !== null) return;
-      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+      const id = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
+        action: "login",
         callback: (token) => setTurnstileToken(token),
         "expired-callback": clearToken,
         "error-callback": clearToken,
         theme: "auto",
       });
+      widgetIdRef.current = id;
+      activeWidgetId = id;
     };
 
     const existing = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
@@ -95,6 +113,7 @@ export function TurnstileWidget() {
       scriptEl?.removeEventListener("load", mount);
       if (widgetIdRef.current !== null && window.turnstile) {
         window.turnstile.remove(widgetIdRef.current);
+        if (activeWidgetId === widgetIdRef.current) activeWidgetId = null;
         widgetIdRef.current = null;
       }
     };

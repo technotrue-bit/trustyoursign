@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { TurnstileWidget, turnstileCaptchaHeaders, turnstileSiteKey } from "@/components/TurnstileWidget";
+import {
+  TurnstileWidget,
+  resetTurnstile,
+  turnstileCaptchaHeaders,
+  turnstileSiteKey,
+} from "@/components/TurnstileWidget";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
 import { MIN_AGE } from "@/lib/legal";
 import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
@@ -76,6 +81,7 @@ function Login() {
       }
       window.location.href = mode === "up" ? "/account" : isOwnerLogin(email.trim()) ? "/admin" : "/account";
     } catch (e) {
+      resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not continue");
       setBusy(false);
     }
