@@ -171,11 +171,6 @@ export function BirthChat() {
           {temple.lines.slice(0, 2).map((line) => (
             <li key={line.slice(0, 24)}>{line}</li>
           ))}
-          {temple.lines.slice(2, 4).map((line) => (
-            <li key={line.slice(0, 24)} className="birth-chat-lines-extra">
-              {line}
-            </li>
-          ))}
         </ul>
 
         {!birth ? (
@@ -261,6 +256,11 @@ export function BirthChat() {
               Keep flying
             </button>
             <p className="max-w-sm text-xs leading-relaxed text-fg-subtle">{temple.chakraNote}</p>
+            <ul className="max-w-sm space-y-2 text-sm leading-relaxed text-fg-muted birth-chat-lines-extra">
+              {temple.lines.slice(2, 4).map((line) => (
+                <li key={line.slice(0, 24)}>{line}</li>
+              ))}
+            </ul>
           </form>
         ) : step === "offer" ? (
           <div className="mt-8 space-y-5">
