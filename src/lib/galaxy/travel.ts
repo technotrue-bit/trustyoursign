@@ -15,10 +15,17 @@ import { introPlaying, skipIntro, introCanSkip } from "./intro";
 
 export { signedDelta, wrap12 };
 export type { ExplorePhase };
+export type EnterSkipPhase = "idle" | "out" | "hold" | "in";
 
 /** Seconds for the full enter morph (fade → dive → galaxy form). */
-const ENTER_SEC = 4.6;
+const ENTER_SEC = 4.5;
 const EXIT_SEC = 1.55;
+const SKIP_OUT = 0.42;
+const SKIP_HOLD = 0.2;
+const SKIP_IN = 0.48;
+const SKIP_OUT_RM = 0.18;
+const SKIP_HOLD_RM = 0.1;
+const SKIP_IN_RM = 0.22;
 
 export const BIRTH_SECONDS = 3.85;
 /** Idle drift toward you. Keep this low — the sky should feel patient. */
@@ -107,6 +114,9 @@ export const galaxyTravel = {
   explorePhase: "idle" as ExplorePhase,
   exploreSignIndex: null as number | null,
   exploreProgress: 0,
+  enterSkip: "idle" as EnterSkipPhase,
+  enterSkipElapsed: 0,
+  skipVeil: 0,
   worldFade: 1,
   plateFade: 1,
   galaxyForm: 0,
@@ -205,6 +215,8 @@ function publishExplore() {
     phase: galaxyTravel.explorePhase,
     signIndex: galaxyTravel.exploreSignIndex,
     progress: galaxyTravel.exploreProgress,
+    skipPhase: galaxyTravel.enterSkip,
+    skipVeil: galaxyTravel.skipVeil,
     worldFade: galaxyTravel.worldFade,
     plateFade: galaxyTravel.plateFade,
     galaxyForm: galaxyTravel.galaxyForm,
@@ -220,10 +232,23 @@ function applyEnterCurves(p: number) {
   galaxyTravel.diveBlend = enterDive(p);
 }
 
+function skipDurations() {
+  return prefersReducedMotion()
+    ? { out: SKIP_OUT_RM, hold: SKIP_HOLD_RM, in: SKIP_IN_RM }
+    : { out: SKIP_OUT, hold: SKIP_HOLD, in: SKIP_IN };
+}
+
+function clearEnterSkip() {
+  galaxyTravel.enterSkip = "idle";
+  galaxyTravel.enterSkipElapsed = 0;
+  galaxyTravel.skipVeil = 0;
+}
+
 export function resetExplore(publish = true) {
   galaxyTravel.explorePhase = "idle";
   galaxyTravel.exploreSignIndex = null;
   galaxyTravel.exploreProgress = 0;
+  clearEnterSkip();
   galaxyTravel.worldFade = 1;
   galaxyTravel.plateFade = 1;
   galaxyTravel.galaxyForm = 0;
@@ -248,6 +273,7 @@ export function insideSignGalaxy() {
 
 /** True while the enter dive is playing — screen should stay locked. */
 export function enterAnimating() {
+  if (galaxyTravel.enterSkip !== "idle") return true;
   const p = galaxyTravel.explorePhase;
   return p === "fading" || p === "diving";
 }
@@ -271,9 +297,14 @@ function landInsideHub() {
  * as letting the animation finish.
  */
 export function skipEnterGalaxy() {
-  if (!enterAnimating()) return false;
-  landInsideHub();
+  if (galaxyTravel.enterSkip !== "idle") return false;
+  if (!(galaxyTravel.explorePhase === "fading" || galaxyTravel.explorePhase === "diving")) {
+    return false;
+  }
+  galaxyTravel.enterSkip = "out";
+  galaxyTravel.enterSkipElapsed = 0;
   noteControl();
+  publishExplore();
   return true;
 }
 
@@ -353,7 +384,44 @@ export function seekGalaxyPoint(pointIndex: number) {
   return true;
 }
 
+function stepEnterSkip(dt: number) {
+  const d = skipDurations();
+  galaxyTravel.enterSkipElapsed += dt;
+  const phase = galaxyTravel.enterSkip;
+  if (phase === "out") {
+    const u = Math.min(1, galaxyTravel.enterSkipElapsed / d.out);
+    galaxyTravel.skipVeil = smooth01(u);
+    if (u >= 1) {
+      galaxyTravel.enterSkip = "hold";
+      galaxyTravel.enterSkipElapsed = 0;
+      galaxyTravel.skipVeil = 1;
+      landInsideHub();
+    }
+    publishExplore();
+    return;
+  }
+  if (phase === "hold") {
+    galaxyTravel.skipVeil = 1;
+    if (galaxyTravel.enterSkipElapsed >= d.hold) {
+      galaxyTravel.enterSkip = "in";
+      galaxyTravel.enterSkipElapsed = 0;
+    }
+    publishExplore();
+    return;
+  }
+  if (phase === "in") {
+    const u = Math.min(1, galaxyTravel.enterSkipElapsed / d.in);
+    galaxyTravel.skipVeil = 1 - smooth01(u);
+    if (u >= 1) clearEnterSkip();
+    publishExplore();
+  }
+}
+
 export function stepExplore(dt: number) {
+  if (galaxyTravel.enterSkip !== "idle") {
+    stepEnterSkip(dt);
+    return;
+  }
   const phase = galaxyTravel.explorePhase;
   if (phase === "idle") return;
 
@@ -383,7 +451,7 @@ export function stepExplore(dt: number) {
   }
 
   // fading → diving → inside
-  const rate = prefersReducedMotion() ? 0.55 : ENTER_SEC;
+  const rate = prefersReducedMotion() ? 0.7 : ENTER_SEC;
   const next = Math.min(1, galaxyTravel.exploreProgress + dt / rate);
   applyEnterCurves(next);
   if (next < 0.28) galaxyTravel.explorePhase = "fading";
