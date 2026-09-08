@@ -53,10 +53,10 @@ describe("depth calibration", () => {
 });
 
 describe("VOLUME_SIGN_IDS", () => {
-  it("gates sagittarius only at start", () => {
-    assert.equal(hasVolumeSign("sagittarius"), true);
+  it("keeps the vault on painted plates (volume is mesh-review only)", () => {
+    assert.equal(hasVolumeSign("sagittarius"), false);
     assert.equal(hasVolumeSign("aries"), false);
-    assert.equal(VOLUME_SIGN_IDS.size, 1);
+    assert.equal(VOLUME_SIGN_IDS.size, 0);
   });
 });
 

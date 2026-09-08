@@ -3,7 +3,8 @@ import type { SignId } from "@/lib/chart/types";
 import { isSmallGpu } from "@/lib/gpu";
 import { SIGN_ART, signArtImage } from "./signArt";
 
-export const VOLUME_SIGN_IDS: ReadonlySet<SignId> = new Set(["sagittarius"]);
+/** Live vault stations use the painted plate. Opt into volume via mesh review (`/?mesh=…`). */
+export const VOLUME_SIGN_IDS: ReadonlySet<SignId> = new Set();
 
 export function hasVolumeSign(id: SignId) {
   return VOLUME_SIGN_IDS.has(id);
