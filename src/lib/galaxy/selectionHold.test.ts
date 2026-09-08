@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { templeIntro } from "./intro";
-import { useGalaxy } from "./store";
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import { templeIntro } from "./intro.ts";
+import { useGalaxy } from "./store.ts";
 import {
   SELECTION_HOLD_MS,
   armSelectionHold,
@@ -9,12 +10,16 @@ import {
   resetTravel,
   seekSign,
   stepSelectionHold,
-} from "./travel";
+} from "./travel.ts";
 
 describe("selection hold", () => {
-  let nowSpy: ReturnType<typeof vi.spyOn>;
+  let now = 1_000;
+  let originalNow: () => number;
 
   beforeEach(() => {
+    originalNow = performance.now.bind(performance);
+    now = 1_000;
+    performance.now = () => now;
     resetTravel(false);
     galaxyTravel.birth = 1;
     galaxyTravel.busy = false;
@@ -27,17 +32,16 @@ describe("selection hold", () => {
       introDone: true,
       introVeil: 0,
     });
-    nowSpy = vi.spyOn(performance, "now").mockReturnValue(1_000);
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    performance.now = originalNow;
   });
 
   it("arms a 10s countdown when seeking a sign", () => {
     seekSign(4, { direct: true });
-    expect(galaxyTravel.moved).toBe(true);
-    expect(galaxyTravel.selectionHoldLeft).toBe(SELECTION_HOLD_MS);
+    assert.equal(galaxyTravel.moved, true);
+    assert.equal(galaxyTravel.selectionHoldLeft, SELECTION_HOLD_MS);
   });
 
   it("counts down and clears selection at zero", () => {
@@ -45,16 +49,16 @@ describe("selection hold", () => {
     galaxyTravel.moved = true;
     useGalaxy.setState({ moved: true });
 
-    nowSpy.mockReturnValue(1_000 + 4_000);
+    now = 1_000 + 4_000;
     stepSelectionHold();
-    expect(galaxyTravel.selectionHoldLeft).toBe(SELECTION_HOLD_MS - 4_000);
-    expect(galaxyTravel.moved).toBe(true);
+    assert.equal(galaxyTravel.selectionHoldLeft, SELECTION_HOLD_MS - 4_000);
+    assert.equal(galaxyTravel.moved, true);
 
-    nowSpy.mockReturnValue(1_000 + SELECTION_HOLD_MS);
+    now = 1_000 + SELECTION_HOLD_MS;
     stepSelectionHold();
-    expect(galaxyTravel.moved).toBe(false);
-    expect(galaxyTravel.selectionHoldLeft).toBeNull();
-    expect(useGalaxy.getState().moved).toBe(false);
+    assert.equal(galaxyTravel.moved, false);
+    assert.equal(galaxyTravel.selectionHoldLeft, null);
+    assert.equal(useGalaxy.getState().moved, false);
   });
 
   it("pauses while busy and resumes afterward", () => {
@@ -62,20 +66,20 @@ describe("selection hold", () => {
     galaxyTravel.moved = true;
     galaxyTravel.busy = true;
 
-    nowSpy.mockReturnValue(1_000 + 5_000);
+    now = 1_000 + 5_000;
     stepSelectionHold();
-    expect(galaxyTravel.selectionHoldLeft).toBe(SELECTION_HOLD_MS);
+    assert.equal(galaxyTravel.selectionHoldLeft, SELECTION_HOLD_MS);
 
     galaxyTravel.busy = false;
-    nowSpy.mockReturnValue(1_000 + 8_000);
+    now = 1_000 + 8_000;
     stepSelectionHold();
-    expect(galaxyTravel.selectionHoldLeft).toBe(SELECTION_HOLD_MS - 3_000);
+    assert.equal(galaxyTravel.selectionHoldLeft, SELECTION_HOLD_MS - 3_000);
   });
 
   it("clearSignSelection drops highlight and timer", () => {
     seekSign(2);
     clearSignSelection();
-    expect(galaxyTravel.moved).toBe(false);
-    expect(galaxyTravel.selectionHoldLeft).toBeNull();
+    assert.equal(galaxyTravel.moved, false);
+    assert.equal(galaxyTravel.selectionHoldLeft, null);
   });
 });
