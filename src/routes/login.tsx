@@ -89,16 +89,22 @@ function Login() {
   return (
     <main className="vault-page bg-bg px-5 text-fg">
       <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[max(2.5rem,var(--chrome-bottom))]">
-        <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">The Vault · {SITE_OWNER.name}</p>
+        <Link
+          to="/"
+          className="inline-flex min-h-11 items-center text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+        >
+          Back to the sky
+        </Link>
+
+        <p className="mt-8 text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">The Vault</p>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Keep the sky.</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-          Sign in to save your chart, and the charts of people who gave you permission. This house belongs to{" "}
-          {SITE_OWNER.name} ({SITE_OWNER.handle}).
+          Sign in to save your chart, and any chart someone has given you permission to keep.
         </p>
 
         {authEnabled ? (
           <div className="mt-8 space-y-3">
-            {GROK_PROVIDERS.filter((p) => p.idp === "google").map((p) => (
+            {GROK_PROVIDERS.map((p) => (
               <button
                 key={p.providerId}
                 type="button"
@@ -109,44 +115,43 @@ function Login() {
                 Continue with {p.label}
               </button>
             ))}
-            {GROK_PROVIDERS.filter((p) => p.idp !== "google").map((p) => (
-              <button
-                key={p.providerId}
-                type="button"
-                disabled={busy}
-                onClick={() => social(p.providerId)}
-                className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
-              >
-                Continue with {p.label}
-              </button>
-            ))}
-            <p className="pt-2 text-xs leading-relaxed text-fg-subtle">
-              Apple Sign-In is not offered. Use Google, or your iCloud / Apple email with a password below.
-            </p>
           </div>
         ) : (
-          <p className="mt-8 text-sm text-fg-subtle">Sign-in is disabled.</p>
+          <p className="mt-8 text-sm text-fg-subtle">Sign-in is unavailable right now.</p>
         )}
 
         <div className="mt-8 border-t border-border pt-6">
-          <div className="flex gap-2 text-xs tracking-[0.18em] uppercase">
+          <p className="mb-4 text-center text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase">
+            Or use email
+          </p>
+          <div className="flex gap-1" role="tablist" aria-label="Account">
             <button
               type="button"
-              className={cn("min-h-11 px-2", mode === "in" ? "text-fg" : "text-fg-subtle")}
+              role="tab"
+              aria-selected={mode === "in"}
+              className={cn(
+                "min-h-11 flex-1 border-b px-2 text-xs tracking-[0.18em] uppercase",
+                mode === "in" ? "border-fg text-fg" : "border-transparent text-fg-subtle",
+              )}
               onClick={() => setMode("in")}
             >
               Sign in
             </button>
             <button
               type="button"
-              className={cn("min-h-11 px-2", mode === "up" ? "text-fg" : "text-fg-subtle")}
+              role="tab"
+              aria-selected={mode === "up"}
+              className={cn(
+                "min-h-11 flex-1 border-b px-2 text-xs tracking-[0.18em] uppercase",
+                mode === "up" ? "border-fg text-fg" : "border-transparent text-fg-subtle",
+              )}
               onClick={() => setMode("up")}
             >
               Create account
             </button>
           </div>
           <form
-            className="mt-4 space-y-3"
+            className="mt-5 space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
               void emailAuth();
@@ -158,23 +163,25 @@ function Login() {
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
+                  className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-fg outline-none focus:border-accent"
                   autoComplete="name"
+                  autoCapitalize="words"
                 />
               </label>
             ) : null}
             <label className="block">
-              <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
-                {mode === "in" ? "Owner or email" : "Email"}
-              </span>
+              <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Email</span>
               <input
-                type={mode === "in" ? "text" : "email"}
+                type={mode === "up" ? "email" : "text"}
+                inputMode="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
+                className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-fg outline-none focus:border-accent"
                 autoComplete={mode === "in" ? "username" : "email"}
-                placeholder={mode === "in" ? "ADMIN" : "you@icloud.com"}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </label>
             <label className="block">
@@ -184,13 +191,13 @@ function Login() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
+                className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-fg outline-none focus:border-accent"
                 autoComplete={mode === "up" ? "new-password" : "current-password"}
                 minLength={mode === "up" ? 8 : 1}
               />
             </label>
             {mode === "up" ? (
-              <div className="space-y-2 pt-1 text-sm text-fg-muted">
+              <div className="space-y-2 pt-1 text-sm leading-relaxed text-fg-muted">
                 <label className="flex min-h-11 items-start gap-2">
                   <input type="checkbox" checked={ageOk} onChange={(e) => setAgeOk(e.target.checked)} className="mt-1" />
                   <span>I am {MIN_AGE} or older.</span>
@@ -218,24 +225,20 @@ function Login() {
               disabled={busy || !authEnabled}
               className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase disabled:opacity-50"
             >
-              {mode === "up" ? "Create account" : "Sign in with email"}
+              {mode === "up" ? "Create account" : "Sign in"}
             </button>
           </form>
         </div>
 
         <p className="mt-8 text-xs leading-relaxed text-fg-subtle">
-          Birth dates are personal data. We store them only on your account, never sell them, and delete them when you
-          ask.{" "}
-          <Link to="/privacy" className="underline">
+          Birth dates stay on your account. We do not sell them.
+          {" · "}
+          <Link to="/privacy" className="underline hover:text-fg">
             Privacy
           </Link>
           {" · "}
-          <Link to="/terms" className="underline">
+          <Link to="/terms" className="underline hover:text-fg">
             Terms
-          </Link>
-          {" · "}
-          <Link to="/" className="underline">
-            Back to the sky
           </Link>
         </p>
       </div>
