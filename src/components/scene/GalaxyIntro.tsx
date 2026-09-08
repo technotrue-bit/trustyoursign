@@ -41,7 +41,7 @@ import {
   stepSeek,
   stepZoom,
 } from "@/lib/galaxy/travel";
-import { getSignGalaxy } from "@/lib/galaxy/signGalaxy";
+import { enterHubSettle, getSignGalaxy } from "@/lib/galaxy/signGalaxy";
 import {
   bootIntro,
   introCam,
@@ -952,12 +952,22 @@ function TempleRig() {
         ? galaxyTravel.diveBlend * (2.4 + galaxyTravel.galaxyForm * 4.8)
         : 0;
     const diveTarget = Math.max(volumeDive, exploreDive);
-    diveAmount.current = lerpToward({
-      current: diveAmount.current,
-      target: diveTarget,
-      dt: d,
-      rate: exploring ? 1.35 : 2.2,
-    });
+    const snapSkipPose = galaxyTravel.enterSkip === "hold" || galaxyTravel.skipVeil > 0.5;
+    // During sign-enter (not BirthChat volume-only), track the curve tightly.
+    const diveRate =
+      exploring && galaxyTravel.exploreSignIndex != null
+        ? galaxyTravel.explorePhase === "inside"
+          ? 3.2
+          : 6.5
+        : 2.2;
+    diveAmount.current = snapSkipPose
+      ? diveTarget
+      : lerpToward({
+          current: diveAmount.current,
+          target: diveTarget,
+          dt: d,
+          rate: diveRate,
+        });
     if (diveAmount.current > 0.0005) _cam.z -= diveAmount.current;
 
     if (exploring && galaxyTravel.exploreSignIndex != null) {
@@ -976,17 +986,21 @@ function TempleRig() {
       _look.addScaledVector(_camRight, local.x);
       _look.addScaledVector(_camUp, local.y);
       _look.z += local.z * 0.15;
-      if (galaxyTravel.explorePhase === "inside") {
+      const settle =
+        galaxyTravel.explorePhase === "inside"
+          ? 1
+          : enterHubSettle(galaxyTravel.exploreProgress);
+      if (settle > 0.001) {
         // Gentle bias toward the active point — stay inside the form, don't dock on a star.
-        _cam.x += (_look.x - _cam.x) * 0.045;
-        _cam.y += (_look.y - _cam.y) * 0.035;
-        _look.lerp(_chest, 0.55);
+        _cam.x += (_look.x - _cam.x) * (0.045 * settle);
+        _cam.y += (_look.y - _cam.y) * (0.035 * settle);
+        _look.lerp(_chest, 0.55 * settle);
       }
     }
 
     if (!Number.isFinite(_cam.x) || !Number.isFinite(_look.x)) return;
     camera.up.copy(_up);
-    if (!booted.current || arriving) {
+    if (!booted.current || arriving || snapSkipPose) {
       camera.position.copy(_cam);
       camera.lookAt(_look);
       booted.current = true;
