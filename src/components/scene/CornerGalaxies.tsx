@@ -5,6 +5,7 @@ import { exploringSign, galaxyTravel } from "@/lib/galaxy/travel";
 import { introPlaying, introChrome } from "@/lib/galaxy/intro";
 import { stationFromT } from "@/lib/galaxy/temple";
 import { buildCornerGalaxies, makeCornerMaterial, paletteForSign } from "@/lib/galaxy/corners";
+import { insideHardGateHidesLeftovers } from "@/lib/galaxy/signGalaxy";
 
 function noopRaycast() {
   /* corners never steal picks */
@@ -68,7 +69,11 @@ export function CornerGalaxies() {
     mat.uniforms.uMix.value = e;
     mat.uniforms.uTime.value = clock.elapsedTime;
     mat.uniforms.uPixelRatio.value = gl.getPixelRatio();
-    const vis = (introPlaying() ? introChrome() : 1) * (exploringSign() ? galaxyTravel.worldFade : 1);
+    const gateOff = insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
+    const vis =
+      (introPlaying() ? introChrome() : 1) *
+      (exploringSign() ? galaxyTravel.worldFade : 1) *
+      (gateOff ? 0 : 1);
     const fade = mat.uniforms.uFade.value as number[];
     fade[0] = vis;
     fade[1] = vis;

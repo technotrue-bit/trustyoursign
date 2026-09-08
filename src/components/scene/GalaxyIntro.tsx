@@ -41,7 +41,7 @@ import {
   stepSeek,
   stepZoom,
 } from "@/lib/galaxy/travel";
-import { enterHubSettle, getSignGalaxy } from "@/lib/galaxy/signGalaxy";
+import { enterHubSettle, getSignGalaxy, insideHardGateHidesLeftovers } from "@/lib/galaxy/signGalaxy";
 import {
   bootIntro,
   introCam,
@@ -264,7 +264,12 @@ function SignDisk() {
     const chatting = state.claim !== null && state.session === null;
     const picked = chatting && state.claim?.signId === sign.id;
     const world = exploringSign() ? galaxyTravel.worldFade : 1;
-    const show = gather > 0.32 && intro > 0.4 && veil < 0.45 && world > 0.08;
+    const show =
+      gather > 0.32 &&
+      intro > 0.4 &&
+      veil < 0.45 &&
+      world > 0.08 &&
+      !insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
     g.visible = show;
     if (!show) {
       sim.mat.uniforms.uFade.value = 0;
