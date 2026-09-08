@@ -11,6 +11,7 @@ import {
   enterPlateFade,
   enterWorldFade,
   getSignGalaxy,
+  insideHardGateHidesLeftovers,
   pickMajorStarIndices,
 } from "./signGalaxy";
 
@@ -71,5 +72,15 @@ describe("signGalaxy", () => {
     assert.ok(Math.abs(enterGalaxyForm(1) - 1) < 0.02);
     assert.ok(enterDive(0.82) > 0.98);
     assert.ok(Math.abs(enterHubSettle(1) - 1) < 0.02);
+  });
+});
+
+describe("insideHardGateHidesLeftovers", () => {
+  it("hides leftovers only when inside", () => {
+    assert.equal(insideHardGateHidesLeftovers("idle"), false);
+    assert.equal(insideHardGateHidesLeftovers("fading"), false);
+    assert.equal(insideHardGateHidesLeftovers("diving"), false);
+    assert.equal(insideHardGateHidesLeftovers("inside"), true);
+    assert.equal(insideHardGateHidesLeftovers("exiting"), false);
   });
 });

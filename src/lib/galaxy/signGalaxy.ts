@@ -275,3 +275,8 @@ export function enterDive(progress: number) {
 export function enterHubSettle(progress: number) {
   return smooth01(Math.max(0, Math.min(1, (progress - 0.12) / (1 - 0.12))));
 }
+
+/** Corridor leftovers (disk, corners, station cloud, plate) hard-off after land. */
+export function insideHardGateHidesLeftovers(phase: ExplorePhase): boolean {
+  return phase === "inside";
+}
