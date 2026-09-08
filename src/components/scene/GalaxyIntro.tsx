@@ -949,7 +949,8 @@ function TempleRig() {
     const volumeDive = heldSignId && hasVolumeSign(heldSignId) ? 0.35 * PLATE_WIDE : 0;
     const exploreDive =
       exploring && galaxyTravel.exploreSignIndex != null
-        ? galaxyTravel.diveBlend * (2.4 + galaxyTravel.galaxyForm * 4.8)
+        ? // Stay in front of the plate while approaching the hub star — don't punch through into empty sky.
+          galaxyTravel.diveBlend * (0.65 + galaxyTravel.galaxyForm * 2.1)
         : 0;
     const diveTarget = Math.max(volumeDive, exploreDive);
     const snapSkipPose = galaxyTravel.enterSkip === "hold" || galaxyTravel.skipVeil > 0.5;
@@ -995,11 +996,10 @@ function TempleRig() {
           ? 1
           : Math.max(enterHubSettle(galaxyTravel.exploreProgress), dive);
       if (settle > 0.001) {
-        // Pull the camera toward the hub star on the figure — not a blank corridor center.
-        const pull = 0.08 + settle * 0.22;
+        // Ease toward the hub star on the figure while the plate is still filling the frame.
+        const pull = 0.025 + settle * 0.1;
         _cam.x += (_look.x - _cam.x) * pull;
         _cam.y += (_look.y - _cam.y) * (pull * 0.85);
-        // Keep a little depth reference late in the dive so the form still reads.
         if (galaxyTravel.explorePhase === "inside") {
           _look.lerp(_chest, 0.35);
         }
@@ -1024,7 +1024,7 @@ function TempleRig() {
         : arriving
           ? frame.fov - (1 - introCam()) * 4
           : exploring
-            ? frame.fov / (0.88 + galaxyTravel.galaxyForm * 0.35)
+            ? frame.fov / (0.94 + galaxyTravel.galaxyForm * 0.18)
             : frame.fov / (0.92 + (zoom - 1) * 0.18);
       if (arriving || Math.abs(camera.fov - fovWant) > 3) camera.fov = fovWant;
       else camera.fov += (fovWant - camera.fov) * k;

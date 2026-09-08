@@ -159,13 +159,14 @@ function assignPurposes(
   temple: TempleSign,
 ): SignTravelPoint[] {
   const catalog = purposeCatalog(temple);
-  // Hub = brightest among majors, preferring near-center.
+  // Hub = major star nearest the figure center (the glow the eye reads as the heart of the plate).
   let hubAt = 0;
-  let hubScore = -1;
+  let hubScore = Number.POSITIVE_INFINITY;
   for (let k = 0; k < starIndices.length; k++) {
     const g = stars[starIndices[k]!]!;
-    const score = g.mag * 1.2 + (1 - Math.min(1, Math.hypot(g.x, g.y) / (GALAXY_SPAN * 0.45))) * 0.8;
-    if (score > hubScore) {
+    const dist = Math.hypot(g.x, g.y) / (GALAXY_SPAN * 0.5);
+    const score = dist - g.mag * 0.15;
+    if (score < hubScore) {
       hubScore = score;
       hubAt = k;
     }
