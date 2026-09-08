@@ -271,6 +271,52 @@
   animation: none;
 }
 
+/* Sign-galaxy explore copy — lower stack, readable over dense starfield */
+.sign-galaxy-copy {
+  position: relative;
+  isolation: isolate;
+  padding: 0.85rem 1rem 1rem;
+}
+
+.sign-galaxy-copy::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+  inset: -0.5rem -1.25rem -0.75rem;
+  border-radius: 1.25rem;
+  background: radial-gradient(
+    ellipse 78% 70% at 50% 55%,
+    rgba(8, 7, 6, 0.72) 0%,
+    rgba(8, 7, 6, 0.42) 48%,
+    rgba(8, 7, 6, 0) 78%
+  );
+}
+
+.sign-galaxy-copy-kicker {
+  color: color-mix(in oklab, var(--color-fg-muted) 88%, #efe8dc);
+  text-shadow:
+    0 0 10px rgba(8, 7, 6, 0.9),
+    0 1px 3px rgba(8, 7, 6, 0.85),
+    0 0 18px rgba(8, 7, 6, 0.55);
+}
+
+.sign-galaxy-copy-title {
+  color: #f5efe3;
+  text-shadow:
+    0 0 12px rgba(8, 7, 6, 0.92),
+    0 1px 5px rgba(8, 7, 6, 0.85),
+    0 0 22px rgba(8, 7, 6, 0.5);
+}
+
+.sign-galaxy-copy-body {
+  color: color-mix(in oklab, #efe8dc 86%, var(--color-fg-muted));
+  text-shadow:
+    0 0 10px rgba(8, 7, 6, 0.9),
+    0 1px 4px rgba(8, 7, 6, 0.82),
+    0 0 16px rgba(8, 7, 6, 0.48);
+}
+
 .sign-claim {
   position: relative;
   isolation: isolate;
