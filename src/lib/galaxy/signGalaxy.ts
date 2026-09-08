@@ -230,25 +230,30 @@ export function clearSignGalaxyCache() {
   cache.clear();
 }
 
-/** Ease helpers for the enter choreography (single p clock; overlapping windows). */
+/**
+ * Ease helpers for the enter choreography (single p clock; overlapping windows).
+ * Plate stays readable while the camera dives into the hub star on the figure;
+ * galaxy bloom overlays the form instead of replacing an empty frame.
+ */
 export function enterWorldFade(progress: number) {
   return 1 - smooth01(Math.min(1, progress / 0.22));
 }
 
 export function enterPlateFade(progress: number) {
-  // Spec: plate opacity 0.00 → 0.28; dead before bloom.
-  return 1 - smooth01(Math.min(1, progress / 0.28));
+  // Keep the animal plate until the dive is deep into the hub star.
+  return 1 - smooth01(Math.max(0, Math.min(1, (progress - 0.42) / (0.78 - 0.42))));
 }
 
 export function enterGalaxyForm(progress: number) {
-  // Spec: bloom 0.28 → 0.92 — starts only after plate is already dead.
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.28) / (0.92 - 0.28))));
+  // Bloom on top of the still-visible figure, then take over as plate dies.
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.22) / (0.9 - 0.22))));
 }
 
 export function enterDive(progress: number) {
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.08) / (0.78 - 0.08))));
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.05) / (0.82 - 0.05))));
 }
 
+/** Look/approach bias toward the hub star — starts early so the dive reads as "into that star". */
 export function enterHubSettle(progress: number) {
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.75) / (1 - 0.75))));
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.12) / (1 - 0.12))));
 }

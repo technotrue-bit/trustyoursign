@@ -974,11 +974,15 @@ function TempleRig() {
       const sit = TEMPLE_STATIONS[galaxyTravel.exploreSignIndex]!;
       const gxy = getSignGalaxy(TEMPLE_SIGNS[galaxyTravel.exploreSignIndex]!.id);
       const form = galaxyTravel.galaxyForm;
+      const dive = galaxyTravel.diveBlend;
+      // During enter, always aim at the hub star (index 0). After land, follow the active point.
       const pi =
-        galaxyTravel.pointSeek != null
-          ? galaxyTravel.pointT
-          : galaxyTravel.pointIndex;
-      const local = pointLocalOffset(gxy, Math.round(pi), form);
+        galaxyTravel.explorePhase === "inside"
+          ? galaxyTravel.pointSeek != null
+            ? galaxyTravel.pointT
+            : galaxyTravel.pointIndex
+          : 0;
+      const local = pointLocalOffset(gxy, Math.round(pi), Math.max(form, dive * 0.85));
       // Billboard station: offset along camera right/up, then into look.
       _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
       _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
@@ -989,12 +993,16 @@ function TempleRig() {
       const settle =
         galaxyTravel.explorePhase === "inside"
           ? 1
-          : enterHubSettle(galaxyTravel.exploreProgress);
+          : Math.max(enterHubSettle(galaxyTravel.exploreProgress), dive);
       if (settle > 0.001) {
-        // Gentle bias toward the active point — stay inside the form, don't dock on a star.
-        _cam.x += (_look.x - _cam.x) * (0.045 * settle);
-        _cam.y += (_look.y - _cam.y) * (0.035 * settle);
-        _look.lerp(_chest, 0.55 * settle);
+        // Pull the camera toward the hub star on the figure — not a blank corridor center.
+        const pull = 0.08 + settle * 0.22;
+        _cam.x += (_look.x - _cam.x) * pull;
+        _cam.y += (_look.y - _cam.y) * (pull * 0.85);
+        // Keep a little depth reference late in the dive so the form still reads.
+        if (galaxyTravel.explorePhase === "inside") {
+          _look.lerp(_chest, 0.35);
+        }
       }
     }
 

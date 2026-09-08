@@ -1,14 +1,8 @@
-import { useEffect, useRef } from "react";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { insightToneLabel } from "@/lib/galaxy/signInsights";
 import { getSignGalaxy } from "@/lib/galaxy/signGalaxy";
 import { useGalaxy } from "@/lib/galaxy/store";
-import {
-  consumeClaimPrompt,
-  exitSignGalaxy,
-  seekGalaxyPoint,
-  skipEnterGalaxy,
-} from "@/lib/galaxy/travel";
+import { exitSignGalaxy, seekGalaxyPoint, skipEnterGalaxy } from "@/lib/galaxy/travel";
 import { useSessionStore } from "@/lib/chart/session";
 import { useSignExploreAccess } from "@/hooks/useSignExploreAccess";
 import { Gloss } from "./Gloss";
@@ -19,43 +13,9 @@ import { cn } from "@/lib/utils";
 export function SignGalaxyHud() {
   const explore = useGalaxy((s) => s.explore);
   const openClaim = useSessionStore((s) => s.openClaim);
-  const claim = useSessionStore((s) => s.claim);
-  const prompted = useRef(false);
 
   const sign = explore.signIndex != null ? (CONSTELLATIONS[explore.signIndex] ?? null) : null;
   const { unlocked, lockReason, signedIn } = useSignExploreAccess(sign?.id ?? null);
-
-  useEffect(() => {
-    prompted.current = false;
-  }, [explore.signIndex]);
-
-  useEffect(() => {
-    if (explore.phase !== "inside" || !sign) return;
-    if (explore.skipPhase !== "idle" || explore.skipVeil > 0.001) return;
-    if (unlocked) {
-      consumeClaimPrompt();
-      return;
-    }
-    if (claim) return;
-    // Only auto-open birth chart when they already have an account — guests
-    // land on the hub and are prompted to sign in / sign up first.
-    if (!signedIn) {
-      consumeClaimPrompt();
-      return;
-    }
-    if (!consumeClaimPrompt() && prompted.current) return;
-    prompted.current = true;
-    openClaim(sign.id);
-  }, [
-    explore.phase,
-    explore.skipPhase,
-    explore.skipVeil,
-    sign,
-    unlocked,
-    claim,
-    openClaim,
-    signedIn,
-  ]);
 
   if (explore.phase === "idle" || explore.signIndex == null || !sign) return null;
 

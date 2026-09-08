@@ -42,18 +42,19 @@ describe("signGalaxy", () => {
     assert.equal(new Set(majors).size, majors.length);
   });
 
-  it("enter windows: plate dead before bloom; dive and hub settle ranges", () => {
+  it("enter windows: plate stays while diving into hub star; bloom overlaps", () => {
     assert.ok(Math.abs(enterWorldFade(0) - 1) < 0.02);
     assert.ok(enterWorldFade(0.22) < 0.05);
     assert.ok(Math.abs(enterPlateFade(0) - 1) < 0.02);
-    // Hard guarantee at p = 0.30
-    assert.ok(enterPlateFade(0.3) < 0.05);
-    assert.ok(enterGalaxyForm(0.3) < 0.08);
-    assert.ok(enterGalaxyForm(0.28) < 0.02);
+    // Mid-dive: plate still readable; bloom and dive already underway toward hub.
+    assert.ok(enterPlateFade(0.35) > 0.85);
+    assert.ok(enterGalaxyForm(0.35) > 0.05);
+    assert.ok(enterDive(0.35) > 0.2);
+    assert.ok(enterHubSettle(0.35) > 0.1);
+    // Deep dive: plate nearly gone; form and dive complete.
+    assert.ok(enterPlateFade(0.78) < 0.05);
     assert.ok(Math.abs(enterGalaxyForm(1) - 1) < 0.02);
-    assert.ok(enterDive(0.08) < 0.02);
-    assert.ok(enterDive(0.78) > 0.98);
-    assert.ok(enterHubSettle(0.75) < 0.02);
+    assert.ok(enterDive(0.82) > 0.98);
     assert.ok(Math.abs(enterHubSettle(1) - 1) < 0.02);
   });
 });
