@@ -230,20 +230,25 @@ export function clearSignGalaxyCache() {
   cache.clear();
 }
 
-/** Ease helpers for the enter choreography. */
+/** Ease helpers for the enter choreography (single p clock; overlapping windows). */
 export function enterWorldFade(progress: number) {
   return 1 - smooth01(Math.min(1, progress / 0.22));
 }
 
 export function enterPlateFade(progress: number) {
-  // Plate must be gone early — no lingering 2D card while diving.
-  return 1 - smooth01(Math.max(0, (progress - 0.06) / 0.28));
+  // Spec: plate opacity 0.00 → 0.28; dead before bloom.
+  return 1 - smooth01(Math.min(1, progress / 0.28));
 }
 
 export function enterGalaxyForm(progress: number) {
-  return smooth01(Math.max(0, (progress - 0.18) / 0.55));
+  // Spec: bloom 0.28 → 0.92 — starts only after plate is already dead.
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.28) / (0.92 - 0.28))));
 }
 
 export function enterDive(progress: number) {
-  return smooth01(Math.max(0, (progress - 0.08) / 0.5));
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.08) / (0.78 - 0.08))));
+}
+
+export function enterHubSettle(progress: number) {
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.75) / (1 - 0.75))));
 }
