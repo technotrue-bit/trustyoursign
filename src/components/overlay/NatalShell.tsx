@@ -71,7 +71,7 @@ function Chrome() {
         <header className="pointer-events-none absolute top-0 right-0 left-0 z-20 flex items-start justify-between gap-4 p-4 pt-[var(--chrome-top)] pl-[max(4.75rem,calc(var(--safe-left)+3.5rem))] md:p-6 md:pt-[max(1.25rem,var(--safe-top))] md:pl-32">
           <div>
             <p className="font-display text-xl tracking-tight text-fg italic">{title}</p>
-            <p className="mt-0.5 text-xs tracking-[0.16em] text-fg-muted uppercase">{who}</p>
+            <p className="hidden mt-0.5 text-xs tracking-[0.16em] text-fg-muted uppercase md:block">{who}</p>
           </div>
           <p className="hidden max-w-56 text-right text-xs leading-relaxed text-fg-subtle md:block">
             {shelf ? (

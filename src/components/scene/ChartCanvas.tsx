@@ -209,6 +209,9 @@ function contextLost(el: HTMLCanvasElement | null): boolean {
   }
 }
 
+/** Apple / modest GPU land gap. Locked at 48ms — do not restore 160ms. */
+const SCENE_GATE_MS = 48;
+
 function SceneGate({ charted }: { charted: boolean }) {
   const { camera } = useThree();
   const [view, setView] = useState<"gap" | "galaxy" | "chart">(charted ? "chart" : "galaxy");
@@ -229,7 +232,7 @@ function SceneGate({ charted }: { charted: boolean }) {
     const t = window.setTimeout(() => {
       shown.current = charted;
       setView(charted ? "chart" : "galaxy");
-    }, 48);
+    }, SCENE_GATE_MS);
     return () => window.clearTimeout(t);
   }, [charted, camera]);
 
