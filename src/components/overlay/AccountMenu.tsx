@@ -33,7 +33,7 @@ export function AccountMenu() {
     return (
       <a
         href="/login"
-        className="pointer-events-auto inline-flex min-h-11 items-center px-3 text-[0.65rem] tracking-[0.2em] text-fg-muted uppercase hover:text-fg"
+        className="auth-sign-in pointer-events-auto inline-flex min-h-11 items-center px-3 text-[0.65rem] tracking-[0.2em] text-fg-muted uppercase hover:text-fg"
       >
         Sign in
       </a>

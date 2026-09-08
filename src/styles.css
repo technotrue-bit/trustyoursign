@@ -288,6 +288,31 @@
     box-shadow 0.2s ease-out;
 }
 
+/** Soft gold pill around the chrome Sign in link. */
+.auth-sign-in {
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, #c9a15b 38%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, #c9a15b 10%, transparent),
+    0 0 12px color-mix(in oklab, #c9a15b 16%, transparent);
+  transition:
+    color 0.15s ease-out,
+    border-color 0.2s ease-out,
+    box-shadow 0.2s ease-out;
+}
+
+.auth-sign-in:hover,
+.auth-sign-in:focus-visible {
+  border-color: color-mix(in oklab, #c9a15b 58%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, #c9a15b 18%, transparent),
+    0 0 16px color-mix(in oklab, #c9a15b 22%, transparent);
+}
+
+.auth-sign-in:focus-visible {
+  outline: none;
+}
+
 .sign-claim::before {
   content: "";
   pointer-events: none;
