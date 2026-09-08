@@ -236,7 +236,7 @@ export function clearSignSelection() {
 
 /**
  * Tick the post-select hold. Pauses while claim/vault is busy, exploring, or intro plays.
- * Safe to call from the shared auto clock.
+ * Safe to call from the shared auto clock and the sky/camera frames.
  */
 export function stepSelectionHold() {
   if (galaxyTravel.selectionHoldLeft == null) return;
@@ -547,7 +547,7 @@ export function starSpark(time: number, i: number, seed: number) {
   return breathe + flash * 0.2;
 }
 
-export type SeekOptions = { direct?: boolean };
+export type SeekOptions = { direct?: boolean; auto?: boolean };
 
 function clearDirectSeek() {
   galaxyTravel.seekDirect = false;
@@ -568,11 +568,14 @@ export function seekSign(index: number, opts?: SeekOptions) {
   const i = ((Math.round(index) % 12) + 12) % 12;
   const dest = stationT(i);
   const direct = opts?.direct ?? false;
+  const select = !opts?.auto;
   galaxyTravel.seek = dest;
   galaxyTravel.tTarget = dest;
   galaxyTravel.playUntil = null;
-  galaxyTravel.moved = true;
-  galaxyTravel.awaken = 1;
+  if (select) {
+    galaxyTravel.moved = true;
+    galaxyTravel.awaken = 1;
+  }
   if (direct) {
     galaxyTravel.seekDirect = true;
     galaxyTravel.seekTargetIndex = i;
@@ -588,8 +591,8 @@ export function seekSign(index: number, opts?: SeekOptions) {
   const prev = CONSTELLATIONS[(i + 11) % 12];
   if (prev) primeSignArt(prev.id);
   restIdle();
-  publishTravel(dest, true);
-  armSelectionHold();
+  publishTravel(dest, select ? true : undefined);
+  if (select) armSelectionHold();
   primeSignArt(currentConstellation().id);
   return i;
 }
@@ -938,6 +941,11 @@ export function stepAutoSign(
     restIdle();
     return false;
   }
+  // Don't hop while a clicked sign is still held — that was re-arming the 10s timer.
+  if (galaxyTravel.selectionHoldLeft != null) {
+    restIdle();
+    return false;
+  }
   const now = nowMs();
   if (!galaxyTravel.idleAt) galaxyTravel.idleAt = now;
   galaxyTravel.idle = (now - galaxyTravel.idleAt) / 1000;
@@ -945,7 +953,7 @@ export function stepAutoSign(
   restIdle();
   const i = stationFromT(galaxyTravel.t);
   if (i >= 11) return false;
-  seekSign(i + 1);
+  seekSign(i + 1, { auto: true });
   return true;
 }
 

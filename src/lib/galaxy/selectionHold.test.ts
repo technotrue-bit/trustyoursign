@@ -82,4 +82,10 @@ describe("selection hold", () => {
     assert.equal(galaxyTravel.moved, false);
     assert.equal(galaxyTravel.selectionHoldLeft, null);
   });
+
+  it("auto seek does not arm a selection hold", () => {
+    seekSign(3, { auto: true });
+    assert.equal(galaxyTravel.moved, false);
+    assert.equal(galaxyTravel.selectionHoldLeft, null);
+  });
 });

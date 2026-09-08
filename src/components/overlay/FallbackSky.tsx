@@ -4,7 +4,7 @@ import { lonToXZ } from "@/lib/chart/geometry";
 import { CONSTELLATIONS, constellationDust, nearestSign, pairFigures } from "@/lib/galaxy/constellations";
 import { preloadSignArt, signArtImage } from "@/lib/galaxy/signArt";
 import { getSignVolume } from "@/lib/galaxy/signVolume";
-import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, ensureAutoClock, ensureFlyInput, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepZoom } from "@/lib/galaxy/travel";
+import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, ensureAutoClock, ensureFlyInput, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepZoom } from "@/lib/galaxy/travel";
 import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
@@ -542,13 +542,11 @@ export function FallbackSky() {
       const sought = stepSeek(galaxyTravel.t, dt);
       galaxyTravel.t = clamp01(sought.t);
       if (sought.active) {
-        galaxyTravel.moved = true;
         galaxyTravel.tTarget = galaxyTravel.t;
       }
       const playing = stepPlayUntil(galaxyTravel.t);
       const traveling = sought.active || playing;
       galaxyTravel.traveling = traveling;
-      if (playing) galaxyTravel.moved = true;
       if (!Number.isFinite(vel)) vel = CRUISE;
       vel += galaxyTravel.steer;
       galaxyTravel.steer = 0;
@@ -583,6 +581,7 @@ export function FallbackSky() {
           1,
           galaxyTravel.awaken + dt * (galaxyTravel.moved ? 0.45 : 0.16),
         );
+        stepSelectionHold();
         publishTravel(galaxyTravel.t, galaxyTravel.moved);
       } else if (chatting) {
         vel *= Math.exp(-dt * 3.2);
