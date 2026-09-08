@@ -38,6 +38,7 @@ import {
   skipEnterGalaxy,
   stepBirth,
   stepExplore,
+  stepSelectionHold,
   stepSeek,
   stepZoom,
 } from "@/lib/galaxy/travel";
@@ -919,6 +920,8 @@ function TempleRig() {
     const chatting = state.claim !== null && state.session === null;
     const arriving = introPlaying();
     const exploring = exploringSign();
+    // Keep busy in sync so selection hold pauses during claim / intro.
+    galaxyTravel.busy = chatting || state.session !== null || arriving;
     const sought = exploring ? { active: false, t: current.current } : stepSeek(current.current, d);
     if (sought.active) {
       current.current = sought.t;
@@ -1069,6 +1072,7 @@ function TempleRig() {
     }
     galaxyTravel.t = t;
     if (galaxyTravel.moved) galaxyTravel.awaken = 1;
+    stepSelectionHold();
     if (
       Math.abs(t - lastPub.current) > 0.004 ||
       galaxyTravel.moved !== useGalaxy.getState().moved

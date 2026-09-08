@@ -57,6 +57,8 @@ export const SEEK_THROUGH = 0.34;
 const BIRTH_DT_CAP = 0.032;
 /** Strip click: fly straight to the sign without station-hopping. */
 const DIRECT_SEEK_SEC = 0.85;
+/** After a sign click/select, hold the highlight this long before clearing. */
+export const SELECTION_HOLD_MS = 10_000;
 /** First look starts on the ram, before the Aries station. */
 export const OPEN_T = 0;
 
@@ -71,6 +73,10 @@ export const galaxyTravel = {
   /** Damped camera follows this. Scroll and seek write here. Clamped 0–1. */
   tTarget: OPEN_T,
   moved: false,
+  /** ms left on the post-select hold; null when no countdown is armed. */
+  selectionHoldLeft: null as number | null,
+  /** performance.now() when selectionHoldLeft was last sampled. */
+  selectionHoldAt: 0,
   seek: null as number | null,
   /** Keep flying until this t so a jump plays animal → burst → glyph. */
   playUntil: null as number | null,
@@ -187,6 +193,8 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.t = OPEN_T;
   galaxyTravel.tTarget = OPEN_T;
   galaxyTravel.moved = false;
+  galaxyTravel.selectionHoldLeft = null;
+  galaxyTravel.selectionHoldAt = 0;
   galaxyTravel.seek = null;
   galaxyTravel.playUntil = null;
   galaxyTravel.awaken = replayBirth ? 0 : 1;
@@ -209,6 +217,44 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.seekElapsed = 0;
   resetExplore(false);
   restIdle();
+}
+
+/** Start / refresh the 10s post-select countdown (silent — no UI). */
+export function armSelectionHold() {
+  galaxyTravel.selectionHoldLeft = SELECTION_HOLD_MS;
+  galaxyTravel.selectionHoldAt = nowMs();
+}
+
+/** Drop the selected-sign highlight and cancel any hold timer. */
+export function clearSignSelection() {
+  galaxyTravel.selectionHoldLeft = null;
+  galaxyTravel.selectionHoldAt = 0;
+  if (!galaxyTravel.moved) return;
+  galaxyTravel.moved = false;
+  publishTravel(galaxyTravel.t, false);
+}
+
+/**
+ * Tick the post-select hold. Pauses while claim/vault is busy, exploring, or intro plays.
+ * Safe to call from the shared auto clock and the sky/camera frames.
+ */
+export function stepSelectionHold() {
+  if (galaxyTravel.selectionHoldLeft == null) return;
+  if (!galaxyTravel.moved) {
+    galaxyTravel.selectionHoldLeft = null;
+    return;
+  }
+  const now = nowMs();
+  if (galaxyTravel.busy || exploringSign() || introPlaying()) {
+    galaxyTravel.selectionHoldAt = now;
+    return;
+  }
+  const elapsed = now - (galaxyTravel.selectionHoldAt || now);
+  galaxyTravel.selectionHoldAt = now;
+  if (elapsed > 0) {
+    galaxyTravel.selectionHoldLeft = Math.max(0, galaxyTravel.selectionHoldLeft - elapsed);
+  }
+  if (galaxyTravel.selectionHoldLeft <= 0) clearSignSelection();
 }
 
 function publishExplore() {
@@ -501,7 +547,7 @@ export function starSpark(time: number, i: number, seed: number) {
   return breathe + flash * 0.2;
 }
 
-export type SeekOptions = { direct?: boolean };
+export type SeekOptions = { direct?: boolean; auto?: boolean };
 
 function clearDirectSeek() {
   galaxyTravel.seekDirect = false;
@@ -522,11 +568,14 @@ export function seekSign(index: number, opts?: SeekOptions) {
   const i = ((Math.round(index) % 12) + 12) % 12;
   const dest = stationT(i);
   const direct = opts?.direct ?? false;
+  const select = !opts?.auto;
   galaxyTravel.seek = dest;
   galaxyTravel.tTarget = dest;
   galaxyTravel.playUntil = null;
-  galaxyTravel.moved = true;
-  galaxyTravel.awaken = 1;
+  if (select) {
+    galaxyTravel.moved = true;
+    galaxyTravel.awaken = 1;
+  }
   if (direct) {
     galaxyTravel.seekDirect = true;
     galaxyTravel.seekTargetIndex = i;
@@ -542,7 +591,8 @@ export function seekSign(index: number, opts?: SeekOptions) {
   const prev = CONSTELLATIONS[(i + 11) % 12];
   if (prev) primeSignArt(prev.id);
   restIdle();
-  publishTravel(dest, true);
+  publishTravel(dest, select ? true : undefined);
+  if (select) armSelectionHold();
   primeSignArt(currentConstellation().id);
   return i;
 }
@@ -891,6 +941,11 @@ export function stepAutoSign(
     restIdle();
     return false;
   }
+  // Don't hop while a clicked sign is still held — that was re-arming the 10s timer.
+  if (galaxyTravel.selectionHoldLeft != null) {
+    restIdle();
+    return false;
+  }
   const now = nowMs();
   if (!galaxyTravel.idleAt) galaxyTravel.idleAt = now;
   galaxyTravel.idle = (now - galaxyTravel.idleAt) / 1000;
@@ -898,7 +953,7 @@ export function stepAutoSign(
   restIdle();
   const i = stationFromT(galaxyTravel.t);
   if (i >= 11) return false;
-  seekSign(i + 1);
+  seekSign(i + 1, { auto: true });
   return true;
 }
 
@@ -911,6 +966,7 @@ export function ensureAutoClock() {
     const dt = Math.min(0.1, (now - autoLast) / 1000);
     autoLast = now;
     if (!Number.isFinite(dt) || dt < 0) return;
+    stepSelectionHold();
     stepAutoSign(dt, {
       canAdvance: galaxyTravel.birth >= 1 && !galaxyTravel.busy && !introPlaying() && !exploringSign(),
       traveling: galaxyTravel.traveling || galaxyTravel.seek != null || galaxyTravel.playUntil != null,
