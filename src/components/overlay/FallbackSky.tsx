@@ -536,6 +536,7 @@ export function FallbackSky() {
       const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
       galaxyTravel.handsOn = hands;
       galaxyTravel.busy = chatting || entered || birthing;
+      galaxyTravel.claiming = chatting;
       if (w < 2 || h < 2) return;
       ctx.fillStyle = "#0c0b0a";
       ctx.fillRect(0, 0, w, h);

@@ -97,8 +97,10 @@ export const galaxyTravel = {
   handsOn: false,
   /** True while a seek is interpolating. */
   traveling: false,
-  /** Chat, vault, or still birthing — don't auto-walk. */
+  /** Chart / vault / still birthing — don't auto-walk. */
   busy: false,
+  /** BirthChat claim sheet is open (session still null). Pauses the 10s hold. */
+  claiming: false,
   /** −1 reverse, 0 none, +1 forward. Held while a finger or the wheel is down. */
   hold: 0,
   /** Impulse consumed once per frame by the camera. */
@@ -204,6 +206,7 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.handsOn = false;
   galaxyTravel.traveling = false;
   galaxyTravel.busy = false;
+  galaxyTravel.claiming = false;
   galaxyTravel.hold = 0;
   galaxyTravel.steer = 0;
   galaxyTravel.dragging = false;
@@ -235,7 +238,7 @@ export function clearSignSelection() {
 }
 
 /**
- * Tick the post-select hold. Pauses while claim/vault is busy, exploring, or intro plays.
+ * Tick the post-select hold. Pauses while claim is open, vault is busy, exploring, or intro plays.
  * Safe to call from the shared auto clock and the sky/camera frames.
  */
 export function stepSelectionHold() {
@@ -245,7 +248,7 @@ export function stepSelectionHold() {
     return;
   }
   const now = nowMs();
-  if (galaxyTravel.busy || exploringSign() || introPlaying()) {
+  if (galaxyTravel.busy || galaxyTravel.claiming || exploringSign() || introPlaying()) {
     galaxyTravel.selectionHoldAt = now;
     return;
   }

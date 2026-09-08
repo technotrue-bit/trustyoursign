@@ -922,6 +922,7 @@ function TempleRig() {
     const exploring = exploringSign();
     // Keep busy in sync so selection hold pauses during claim / intro.
     galaxyTravel.busy = chatting || state.session !== null || arriving;
+    galaxyTravel.claiming = chatting;
     const sought = exploring ? { active: false, t: current.current } : stepSeek(current.current, d);
     if (sought.active) {
       current.current = sought.t;
