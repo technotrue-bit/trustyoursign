@@ -138,7 +138,7 @@ export function GalaxyShell() {
       ) : null}
 
       <div
-        className="galaxy-chrome pointer-events-none absolute inset-x-0 bottom-[var(--chrome-bottom)] flex flex-col items-center gap-2 md:bottom-8 md:gap-3"
+        className="galaxy-chrome pointer-events-none absolute inset-x-0 bottom-[var(--chrome-bottom)] flex flex-col items-center gap-1.5 px-3 pb-[max(0.15rem,env(safe-area-inset-bottom,0px))] md:bottom-8 md:gap-3 md:px-0"
         style={{
           opacity: asking || exploring ? 0 : introChrome * worldFade,
           animation: "none",
@@ -147,9 +147,9 @@ export function GalaxyShell() {
       >
         <LegalFooter />
         <SignStrip />
-        <p className="px-4 text-center text-[0.7rem] tracking-wide text-fg-subtle md:text-xs">
+        <p className="px-2 text-center text-[0.65rem] tracking-wide text-fg-subtle md:px-4 md:text-xs">
           <span className="md:hidden">
-            Slide to fly. Tap the sign to enter its galaxy. Swipe the names to jump.
+            Slide to fly. Tap the sign to enter. Swipe names to jump.
           </span>
           <span className="hidden md:inline">
             Slide to fly. Click the selected sign to enter its galaxy.
@@ -163,7 +163,7 @@ export function GalaxyShell() {
             enterSignGalaxy(signIndex);
           }}
           className={cn(
-            "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase md:min-h-11 md:w-auto",
+            "pointer-events-auto hidden min-h-11 w-auto px-4 text-xs tracking-[0.22em] uppercase md:inline-flex md:items-center",
             moved
               ? "sign-claim text-fg hover:text-accent active:text-accent"
               : "text-fg-subtle/50 transition-colors duration-150",
@@ -176,8 +176,8 @@ export function GalaxyShell() {
           disabled={!moved}
           onClick={() => sign && openClaim(sign.id)}
           className={cn(
-            "pointer-events-auto min-h-10 px-3 text-[0.65rem] tracking-[0.18em] uppercase",
-            moved ? "text-fg-subtle hover:text-fg" : "text-fg-subtle/40",
+            "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase md:min-h-10 md:w-auto md:px-3 md:text-[0.65rem] md:tracking-[0.18em]",
+            moved ? "sign-claim text-fg hover:text-accent" : "text-fg-subtle/50",
           )}
         >
           This is my sign
