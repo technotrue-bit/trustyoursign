@@ -44,6 +44,13 @@ export type SignGalaxy = {
 export const GALAXY_SPAN = 22;
 /** Soft depth so the form reads as a volume, not a card. */
 export const GALAXY_DEPTH = 7.2;
+/**
+ * Travel nodes sit deeper than the silhouette stars — inside the sign's galaxy
+ * volume (the swirl you dive into), not stuck as stickers on the plate face.
+ * Silhouette z tops out near ~0.55 * GALAXY_DEPTH; keep the portal past that.
+ */
+export const NODE_DEPTH_NEAR = GALAXY_DEPTH * 0.72;
+export const NODE_DEPTH_FAR = GALAXY_DEPTH * 1.35;
 
 const cache = new Map<SignId, SignGalaxy>();
 
@@ -122,8 +129,8 @@ function purposeCatalog(temple: TempleSign): PointPurpose[] {
   const list: PointPurpose[] = [
     {
       kind: "hub",
-      title: "Your first star",
-      body: `Begin here. Fill out your birth chart to open the rest of ${temple.name}'s galaxy.`,
+      title: "Galaxy threshold",
+      body: `You are inside ${temple.name}'s galaxy. Fill out your birth chart to open the nodes deeper in.`,
     },
   ];
   for (const insight of insights) {
@@ -159,13 +166,14 @@ function assignPurposes(
   temple: TempleSign,
 ): SignTravelPoint[] {
   const catalog = purposeCatalog(temple);
-  // Hub = brightest among majors, preferring near-center.
+  // Hub / portal = nearest the figure center — the spiral glow you dive into.
   let hubAt = 0;
-  let hubScore = -1;
+  let hubScore = Number.POSITIVE_INFINITY;
   for (let k = 0; k < starIndices.length; k++) {
     const g = stars[starIndices[k]!]!;
-    const score = g.mag * 1.2 + (1 - Math.min(1, Math.hypot(g.x, g.y) / (GALAXY_SPAN * 0.45))) * 0.8;
-    if (score > hubScore) {
+    const dist = Math.hypot(g.x, g.y) / (GALAXY_SPAN * 0.5);
+    const score = dist - g.mag * 0.15;
+    if (score < hubScore) {
       hubScore = score;
       hubAt = k;
     }
@@ -175,6 +183,8 @@ function assignPurposes(
 
   const points: SignTravelPoint[] = [];
   let purposeCursor = 0;
+  let interiorSlot = 0;
+  const interiorCount = Math.max(1, starIndices.length - 1);
   for (const ord of order) {
     const starIndex = starIndices[ord]!;
     const g = stars[starIndex]!;
@@ -182,21 +192,28 @@ function assignPurposes(
     const purpose = isHub
       ? catalog[0]!
       : catalog[1 + (purposeCursor++ % Math.max(1, catalog.length - 1))]!;
+    // Interior depth: hub is the near portal; other nodes fan deeper into the galaxy.
+    const depthT = isHub ? 0 : (interiorSlot++ + 0.5) / interiorCount;
+    const z = isHub
+      ? NODE_DEPTH_NEAR
+      : NODE_DEPTH_NEAR + depthT * (NODE_DEPTH_FAR - NODE_DEPTH_NEAR);
     points.push({
       id: `${signId}-${starIndex}`,
       starIndex,
-      x: g.x,
-      y: g.y,
-      z: g.z,
+      // Keep XY from the animal layout so nodes sit *within* the silhouette,
+      // but push Z so they live inside the galaxy volume past the plate face.
+      x: isHub ? g.x * 0.35 : g.x,
+      y: isHub ? g.y * 0.35 : g.y,
+      z,
       mag: g.mag,
       purpose,
       isHub,
     });
   }
-  // Stable visual order: hub first, then by mag.
+  // Stable visual order: hub first, then by depth (near → far).
   points.sort((a, b) => {
     if (a.isHub !== b.isHub) return a.isHub ? -1 : 1;
-    return b.mag - a.mag;
+    return a.z - b.z;
   });
   return points;
 }
@@ -206,6 +223,7 @@ export function buildSignGalaxy(signId: SignId): SignGalaxy {
   const temple = TEMPLE_SIGNS.find((s) => s.id === signId) ?? TEMPLE_SIGNS[0]!;
   const figure = constellation.animal;
   const bounds = animalBounds(figure);
+  // Silhouette stars = the plate window / form. Travel points are separate and deeper.
   const stars = figure.stars.map((s) => liftAnimalStar(s, bounds));
   const majors = pickMajorStarIndices(figure);
   const points = assignPurposes(signId, majors, stars, temple);
@@ -230,25 +248,30 @@ export function clearSignGalaxyCache() {
   cache.clear();
 }
 
-/** Ease helpers for the enter choreography (single p clock; overlapping windows). */
+/**
+ * Ease helpers for the enter choreography (single p clock; overlapping windows).
+ * Plate stays readable while the camera dives into the hub star on the figure;
+ * galaxy bloom overlays the form instead of replacing an empty frame.
+ */
 export function enterWorldFade(progress: number) {
   return 1 - smooth01(Math.min(1, progress / 0.22));
 }
 
 export function enterPlateFade(progress: number) {
-  // Spec: plate opacity 0.00 → 0.28; dead before bloom.
-  return 1 - smooth01(Math.min(1, progress / 0.28));
+  // Keep the animal plate until the dive is deep into the hub star.
+  return 1 - smooth01(Math.max(0, Math.min(1, (progress - 0.42) / (0.78 - 0.42))));
 }
 
 export function enterGalaxyForm(progress: number) {
-  // Spec: bloom 0.28 → 0.92 — starts only after plate is already dead.
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.28) / (0.92 - 0.28))));
+  // Bloom on top of the still-visible figure, then take over as plate dies.
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.22) / (0.9 - 0.22))));
 }
 
 export function enterDive(progress: number) {
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.08) / (0.78 - 0.08))));
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.05) / (0.82 - 0.05))));
 }
 
+/** Look/approach bias toward the hub star — starts early so the dive reads as "into that star". */
 export function enterHubSettle(progress: number) {
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.75) / (1 - 0.75))));
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.12) / (1 - 0.12))));
 }

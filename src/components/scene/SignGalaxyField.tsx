@@ -50,7 +50,8 @@ export function SignGalaxyField({
     const exploring =
       galaxyTravel.exploreSignIndex === index && galaxyTravel.explorePhase !== "idle";
     const form = exploring ? galaxyTravel.galaxyForm : 0;
-    g.visible = form > 0.02;
+    // Keep the painted plate as the dive hero early; bloom the field as we settle into the hub.
+    g.visible = form > 0.12;
     if (!g.visible) return;
     const span = (PLATE_WIDE / GALAXY_SPAN) * (1.05 + form * 0.35);
     g.scale.setScalar(span);
@@ -60,17 +61,18 @@ export function SignGalaxyField({
       ?.material;
     const pointMat = (g.children[2] as { material?: { opacity?: number; color?: Color; size?: number } } | undefined)
       ?.material;
+    const fieldReveal = Math.max(0, (form - 0.18) / 0.82);
     if (lineMat) {
-      lineMat.opacity = Math.min(1, form * 0.85);
+      lineMat.opacity = Math.min(1, fieldReveal * 0.85);
       if (lineMat.color) lineMat.color.copy(accent);
     }
     if (starMat) {
-      starMat.opacity = Math.min(1, 0.35 + form * 0.9);
+      starMat.opacity = Math.min(1, fieldReveal * 0.95);
       if (starMat.color) starMat.color.copy(tint);
       if (typeof starMat.size === "number") starMat.size = 0.28 + form * 0.12;
     }
     if (pointMat) {
-      pointMat.opacity = Math.min(1, form * 1.05);
+      pointMat.opacity = Math.min(1, fieldReveal * 1.05);
       if (pointMat.color) pointMat.color.copy(accent);
       if (typeof pointMat.size === "number") pointMat.size = 0.38 + form * 0.12;
     }
@@ -174,10 +176,12 @@ function buildLineGeo(galaxy: SignGalaxy) {
   return g;
 }
 
-/** Station-local offset for the active travel point. */
+/** Station-local offset for the active travel point (nodes live inside the galaxy volume). */
 export function pointLocalOffset(galaxy: SignGalaxy, pointIndex: number, form: number) {
   const p = galaxy.points[pointIndex] ?? galaxy.points[0];
   if (!p) return new Vector3(0, 0, 0);
   const span = (PLATE_WIDE / GALAXY_SPAN) * (1.05 + form * 0.35);
-  return new Vector3(p.x * span, p.y * span + 0.05, p.z * span * 0.35 + 0.35);
+  // Stronger Z so the camera enters the portal and moves between interior nodes,
+  // not along the flat plate face.
+  return new Vector3(p.x * span, p.y * span + 0.05, p.z * span * 0.62 + 0.85 * form);
 }

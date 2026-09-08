@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { CONSTELLATIONS } from "./constellations";
 import {
+  NODE_DEPTH_NEAR,
   buildSignGalaxy,
+  clearSignGalaxyCache,
   enterDive,
   enterGalaxyForm,
   enterHubSettle,
@@ -14,6 +16,7 @@ import {
 
 describe("signGalaxy", () => {
   it("builds a galaxy for every sign from animal stars", () => {
+    clearSignGalaxyCache();
     for (const c of CONSTELLATIONS) {
       const g = buildSignGalaxy(c.id);
       assert.equal(g.stars.length, c.animal.stars.length);
@@ -25,14 +28,26 @@ describe("signGalaxy", () => {
     }
   });
 
-  it("places travel points on animal star indices", () => {
+  it("anchors travel points to animal majors but places them inside the galaxy volume", () => {
+    clearSignGalaxyCache();
     const g = getSignGalaxy("aries");
+    const hub = g.points.find((p) => p.isHub)!;
+    assert.ok(hub);
+    assert.ok(Math.abs(hub.z - NODE_DEPTH_NEAR) < 1e-6);
+    // Hub sits nearer the portal/center than its silhouette star.
+    const sil = g.stars[hub.starIndex]!;
+    assert.ok(Math.hypot(hub.x, hub.y) <= Math.hypot(sil.x, sil.y) + 1e-6);
     for (const p of g.points) {
       assert.ok(p.starIndex >= 0);
       assert.ok(p.starIndex < g.stars.length);
-      assert.equal(p.x, g.stars[p.starIndex]!.x);
-      assert.equal(p.y, g.stars[p.starIndex]!.y);
+      // Interior nodes are deeper than the shallow silhouette star they reference.
+      assert.ok(
+        p.z > g.stars[p.starIndex]!.z + 0.5,
+        `point ${p.id} z=${p.z} should be deeper than silhouette ${g.stars[p.starIndex]!.z}`,
+      );
     }
+    const nonHub = g.points.filter((p) => !p.isHub);
+    assert.ok(nonHub.every((p) => p.z > hub.z));
   });
 
   it("picks a spread of major stars", () => {
@@ -42,18 +57,19 @@ describe("signGalaxy", () => {
     assert.equal(new Set(majors).size, majors.length);
   });
 
-  it("enter windows: plate dead before bloom; dive and hub settle ranges", () => {
+  it("enter windows: plate stays while diving into hub star; bloom overlaps", () => {
     assert.ok(Math.abs(enterWorldFade(0) - 1) < 0.02);
     assert.ok(enterWorldFade(0.22) < 0.05);
     assert.ok(Math.abs(enterPlateFade(0) - 1) < 0.02);
-    // Hard guarantee at p = 0.30
-    assert.ok(enterPlateFade(0.3) < 0.05);
-    assert.ok(enterGalaxyForm(0.3) < 0.08);
-    assert.ok(enterGalaxyForm(0.28) < 0.02);
+    // Mid-dive: plate still readable; bloom and dive already underway toward hub.
+    assert.ok(enterPlateFade(0.35) > 0.85);
+    assert.ok(enterGalaxyForm(0.35) > 0.05);
+    assert.ok(enterDive(0.35) > 0.2);
+    assert.ok(enterHubSettle(0.35) > 0.1);
+    // Deep dive: plate nearly gone; form and dive complete.
+    assert.ok(enterPlateFade(0.78) < 0.05);
     assert.ok(Math.abs(enterGalaxyForm(1) - 1) < 0.02);
-    assert.ok(enterDive(0.08) < 0.02);
-    assert.ok(enterDive(0.78) > 0.98);
-    assert.ok(enterHubSettle(0.75) < 0.02);
+    assert.ok(enterDive(0.82) > 0.98);
     assert.ok(Math.abs(enterHubSettle(1) - 1) < 0.02);
   });
 });
