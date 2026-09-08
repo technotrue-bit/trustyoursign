@@ -31,6 +31,7 @@ export function SignGalaxyHud() {
 
   useEffect(() => {
     if (explore.phase !== "inside" || !sign) return;
+    if (explore.skipPhase !== "idle" || explore.skipVeil > 0.001) return;
     if (unlocked) {
       consumeClaimPrompt();
       return;
@@ -45,7 +46,16 @@ export function SignGalaxyHud() {
     if (!consumeClaimPrompt() && prompted.current) return;
     prompted.current = true;
     openClaim(sign.id);
-  }, [explore.phase, sign, unlocked, claim, openClaim, signedIn]);
+  }, [
+    explore.phase,
+    explore.skipPhase,
+    explore.skipVeil,
+    sign,
+    unlocked,
+    claim,
+    openClaim,
+    signedIn,
+  ]);
 
   if (explore.phase === "idle" || explore.signIndex == null || !sign) return null;
 

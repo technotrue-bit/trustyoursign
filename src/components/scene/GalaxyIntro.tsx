@@ -952,6 +952,7 @@ function TempleRig() {
         ? galaxyTravel.diveBlend * (2.4 + galaxyTravel.galaxyForm * 4.8)
         : 0;
     const diveTarget = Math.max(volumeDive, exploreDive);
+    const snapSkipPose = galaxyTravel.enterSkip === "hold" || galaxyTravel.skipVeil > 0.5;
     // During sign-enter (not BirthChat volume-only), track the curve tightly.
     const diveRate =
       exploring && galaxyTravel.exploreSignIndex != null
@@ -959,12 +960,14 @@ function TempleRig() {
           ? 3.2
           : 6.5
         : 2.2;
-    diveAmount.current = lerpToward({
-      current: diveAmount.current,
-      target: diveTarget,
-      dt: d,
-      rate: diveRate,
-    });
+    diveAmount.current = snapSkipPose
+      ? diveTarget
+      : lerpToward({
+          current: diveAmount.current,
+          target: diveTarget,
+          dt: d,
+          rate: diveRate,
+        });
     if (diveAmount.current > 0.0005) _cam.z -= diveAmount.current;
 
     if (exploring && galaxyTravel.exploreSignIndex != null) {
@@ -997,7 +1000,7 @@ function TempleRig() {
 
     if (!Number.isFinite(_cam.x) || !Number.isFinite(_look.x)) return;
     camera.up.copy(_up);
-    if (!booted.current || arriving) {
+    if (!booted.current || arriving || snapSkipPose) {
       camera.position.copy(_cam);
       camera.lookAt(_look);
       booted.current = true;

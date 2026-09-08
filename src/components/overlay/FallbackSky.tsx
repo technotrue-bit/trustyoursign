@@ -4,7 +4,7 @@ import { lonToXZ } from "@/lib/chart/geometry";
 import { CONSTELLATIONS, constellationDust, nearestSign, pairFigures } from "@/lib/galaxy/constellations";
 import { preloadSignArt, signArtImage } from "@/lib/galaxy/signArt";
 import { getSignVolume } from "@/lib/galaxy/signVolume";
-import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, ensureAutoClock, ensureFlyInput, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepPlayUntil, stepSeek, stepZoom } from "@/lib/galaxy/travel";
+import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, ensureAutoClock, ensureFlyInput, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepZoom } from "@/lib/galaxy/travel";
 import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
@@ -529,6 +529,7 @@ export function FallbackSky() {
       if (stepBirth(dt)) finishBirth();
       else if (galaxyTravel.birth >= 1) finishBirth();
       stepIntro(dt);
+      stepExplore(dt);
       const arriving = introPlaying();
       const birthing = arriving;
       const flying = !entered && !chatting && !birthing;

@@ -64,6 +64,7 @@ let reduceCache = false;
 let reduceAt = -1e9;
 let autoClock = 0;
 let autoLast = 0;
+let enterSkipWatchdog = 0;
 
 export const galaxyTravel = {
   t: OPEN_T,
@@ -239,6 +240,7 @@ function skipDurations() {
 }
 
 function clearEnterSkip() {
+  enterSkipWatchdog += 1;
   galaxyTravel.enterSkip = "idle";
   galaxyTravel.enterSkipElapsed = 0;
   galaxyTravel.skipVeil = 0;
@@ -304,6 +306,22 @@ export function skipEnterGalaxy() {
   galaxyTravel.enterSkip = "out";
   galaxyTravel.enterSkipElapsed = 0;
   noteControl();
+  publishExplore();
+  if (typeof window !== "undefined") {
+    const token = ++enterSkipWatchdog;
+    const d = skipDurations();
+    window.setTimeout(() => {
+      if (token === enterSkipWatchdog) recoverStalledEnterSkip();
+    }, (d.out + d.hold + d.in) * 1000 + 250);
+  }
+  return true;
+}
+
+/** Finish a Skip whose render clock stopped, leaving the hub unlocked and veil clear. */
+export function recoverStalledEnterSkip() {
+  if (galaxyTravel.enterSkip === "idle") return false;
+  if (galaxyTravel.explorePhase !== "inside") landInsideHub();
+  clearEnterSkip();
   publishExplore();
   return true;
 }

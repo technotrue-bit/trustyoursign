@@ -5,6 +5,7 @@ import {
   skipEnterGalaxy,
   stepExplore,
   galaxyTravel,
+  recoverStalledEnterSkip,
   resetExplore,
   resetTravel,
 } from "./travel.ts";
@@ -52,5 +53,16 @@ describe("enterSkip soft blackout", () => {
     stepExplore(0.2);
     assert.equal(galaxyTravel.enterSkip, "idle");
     assert.ok(galaxyTravel.skipVeil < 0.01);
+  });
+
+  it("stalled skip recovery lands inside and clears the veil lock", () => {
+    assert.equal(enterSignGalaxy(0), true);
+    assert.equal(skipEnterGalaxy(), true);
+    assert.equal(recoverStalledEnterSkip(), true);
+    assert.equal(galaxyTravel.explorePhase, "inside");
+    assert.equal(galaxyTravel.exploreProgress, 1);
+    assert.equal(galaxyTravel.enterSkip, "idle");
+    assert.equal(galaxyTravel.skipVeil, 0);
+    assert.equal(recoverStalledEnterSkip(), false);
   });
 });
