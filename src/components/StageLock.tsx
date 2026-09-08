@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { resolveAppHeight } from "@/lib/stage-height";
+import { shouldFreezeAppHeight } from "@/lib/ui/stageLockPolicy";
 
 const PATH_FIELD_ROOT = ".birth-chat";
 
@@ -22,10 +23,11 @@ export function StageLock() {
       const w = Math.round(vv?.width ?? window.innerWidth);
       const liveH = Math.round(vv?.height ?? window.innerHeight);
       const t = Math.round(vv?.offsetTop ?? 0);
+      const freeze = shouldFreezeAppHeight({ pathFieldFocused });
       const resolved = resolveAppHeight({
         vvHeight: liveH,
         innerHeight: window.innerHeight,
-        pathFieldFocused,
+        pathFieldFocused: freeze,
         frozenHeight,
       });
       frozenHeight = resolved.nextFrozen;
