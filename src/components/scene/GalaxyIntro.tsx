@@ -976,13 +976,15 @@ function TempleRig() {
       const gxy = getSignGalaxy(TEMPLE_SIGNS[galaxyTravel.exploreSignIndex]!.id);
       const form = galaxyTravel.galaxyForm;
       const dive = galaxyTravel.diveBlend;
-      // During enter, always aim at the hub star (index 0). After land, follow the active point.
-      const pi =
-        galaxyTravel.explorePhase === "inside"
-          ? galaxyTravel.pointSeek != null
-            ? galaxyTravel.pointT
-            : galaxyTravel.pointIndex
-          : 0;
+      // Enter aims at the hub portal; inside and exit keep the active travel node
+      // so leaving a deep node doesn't snap the look back to hub.
+      const entering =
+        galaxyTravel.explorePhase === "fading" || galaxyTravel.explorePhase === "diving";
+      const pi = entering
+        ? 0
+        : galaxyTravel.pointSeek != null
+          ? galaxyTravel.pointT
+          : galaxyTravel.pointIndex;
       const local = pointLocalOffset(gxy, Math.round(pi), Math.max(form, dive * 0.85));
       // Billboard station: offset along camera right/up, then into look.
       _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
