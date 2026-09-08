@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { CONSTELLATIONS } from "./constellations";
 import {
+  NODE_DEPTH_NEAR,
   buildSignGalaxy,
+  clearSignGalaxyCache,
   enterDive,
   enterGalaxyForm,
   enterHubSettle,
@@ -14,6 +16,7 @@ import {
 
 describe("signGalaxy", () => {
   it("builds a galaxy for every sign from animal stars", () => {
+    clearSignGalaxyCache();
     for (const c of CONSTELLATIONS) {
       const g = buildSignGalaxy(c.id);
       assert.equal(g.stars.length, c.animal.stars.length);
@@ -25,14 +28,26 @@ describe("signGalaxy", () => {
     }
   });
 
-  it("places travel points on animal star indices", () => {
+  it("anchors travel points to animal majors but places them inside the galaxy volume", () => {
+    clearSignGalaxyCache();
     const g = getSignGalaxy("aries");
+    const hub = g.points.find((p) => p.isHub)!;
+    assert.ok(hub);
+    assert.ok(Math.abs(hub.z - NODE_DEPTH_NEAR) < 1e-6);
+    // Hub sits nearer the portal/center than its silhouette star.
+    const sil = g.stars[hub.starIndex]!;
+    assert.ok(Math.hypot(hub.x, hub.y) <= Math.hypot(sil.x, sil.y) + 1e-6);
     for (const p of g.points) {
       assert.ok(p.starIndex >= 0);
       assert.ok(p.starIndex < g.stars.length);
-      assert.equal(p.x, g.stars[p.starIndex]!.x);
-      assert.equal(p.y, g.stars[p.starIndex]!.y);
+      // Interior nodes are deeper than the shallow silhouette star they reference.
+      assert.ok(
+        p.z > g.stars[p.starIndex]!.z + 0.5,
+        `point ${p.id} z=${p.z} should be deeper than silhouette ${g.stars[p.starIndex]!.z}`,
+      );
     }
+    const nonHub = g.points.filter((p) => !p.isHub);
+    assert.ok(nonHub.every((p) => p.z > hub.z));
   });
 
   it("picks a spread of major stars", () => {

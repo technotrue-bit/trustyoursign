@@ -176,10 +176,12 @@ function buildLineGeo(galaxy: SignGalaxy) {
   return g;
 }
 
-/** Station-local offset for the active travel point. */
+/** Station-local offset for the active travel point (nodes live inside the galaxy volume). */
 export function pointLocalOffset(galaxy: SignGalaxy, pointIndex: number, form: number) {
   const p = galaxy.points[pointIndex] ?? galaxy.points[0];
   if (!p) return new Vector3(0, 0, 0);
   const span = (PLATE_WIDE / GALAXY_SPAN) * (1.05 + form * 0.35);
-  return new Vector3(p.x * span, p.y * span + 0.05, p.z * span * 0.35 + 0.35);
+  // Stronger Z so the camera enters the portal and moves between interior nodes,
+  // not along the flat plate face.
+  return new Vector3(p.x * span, p.y * span + 0.05, p.z * span * 0.62 + 0.85 * form);
 }
