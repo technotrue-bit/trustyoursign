@@ -56,7 +56,7 @@ attribute vec3 corePos;
 attribute vec3 nebulaPos;
 attribute vec3 signPos;
 attribute float aKind;
-attribute vec3 color;
+attribute vec3 aColor;
 attribute float aSize;
 attribute float aTwinkle;
 varying vec3 vColor;
@@ -84,7 +84,7 @@ void main() {
     p = mix(cloud, halo, a);
   }
 
-  vColor = color;
+  vColor = aColor;
   float ember = 1.0 - smoothstep(0.0, 0.22, b);
   float gas = expand * (1.0 - a * 0.48);
   float formed = a * (aKind > 0.5 ? 1.0 : 0.18);
@@ -231,7 +231,7 @@ export function buildBirthNebula() {
   geo.setAttribute("corePos", new BufferAttribute(core, 3));
   geo.setAttribute("nebulaPos", new BufferAttribute(neb, 3));
   geo.setAttribute("signPos", new BufferAttribute(sign, 3));
-  geo.setAttribute("color", new BufferAttribute(col, 3));
+  geo.setAttribute("aColor", new BufferAttribute(col, 3));
   geo.setAttribute("aSize", new BufferAttribute(sz, 1));
   geo.setAttribute("aTwinkle", new BufferAttribute(tw, 1));
   geo.setAttribute("aKind", new BufferAttribute(kind, 1));

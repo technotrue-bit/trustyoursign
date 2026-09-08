@@ -1,11 +1,31 @@
 /** Shared mutable travel. Written every frame by the camera. Not React state. */
 import { CONSTELLATIONS, nearestSign, signStation, signedDelta, wrap12 } from "./constellations";
 import { primeSignArt } from "./signArt";
+import {
+  enterDive,
+  enterGalaxyForm,
+  enterPlateFade,
+  enterWorldFade,
+  getSignGalaxy,
+  type ExplorePhase,
+} from "./signGalaxy";
 import { useGalaxy, currentConstellation } from "./store";
 import { clamp01, stationFromT, stationT } from "./temple";
 import { introPlaying, skipIntro, introCanSkip } from "./intro";
 
 export { signedDelta, wrap12 };
+export type { ExplorePhase };
+export type EnterSkipPhase = "idle" | "out" | "hold" | "in";
+
+/** Seconds for the full enter morph (fade → dive → galaxy form). */
+const ENTER_SEC = 4.5;
+const EXIT_SEC = 1.55;
+const SKIP_OUT = 0.42;
+const SKIP_HOLD = 0.2;
+const SKIP_IN = 0.48;
+const SKIP_OUT_RM = 0.18;
+const SKIP_HOLD_RM = 0.1;
+const SKIP_IN_RM = 0.22;
 
 export const BIRTH_SECONDS = 3.85;
 /** Idle drift toward you. Keep this low — the sky should feel patient. */
@@ -44,6 +64,7 @@ let reduceCache = false;
 let reduceAt = -1e9;
 let autoClock = 0;
 let autoLast = 0;
+let enterSkipWatchdog = 0;
 
 export const galaxyTravel = {
   t: OPEN_T,
@@ -90,6 +111,25 @@ export const galaxyTravel = {
   seekTargetIndex: null as number | null,
   seekStartT: null as number | null,
   seekElapsed: 0,
+  /** Per-sign galaxy explore — nested inside a corridor station. */
+  explorePhase: "idle" as ExplorePhase,
+  exploreSignIndex: null as number | null,
+  exploreProgress: 0,
+  enterSkip: "idle" as EnterSkipPhase,
+  enterSkipElapsed: 0,
+  skipVeil: 0,
+  worldFade: 1,
+  plateFade: 1,
+  galaxyForm: 0,
+  diveBlend: 0,
+  pointIndex: 0,
+  pointSeek: null as number | null,
+  pointT: 0,
+  pointTTarget: 0,
+  /** Non-hub stars seekable after full chart + profile for this sign. */
+  starsUnlocked: false,
+  /** Pulse once when enter lands on hub — UI may open birth claim. */
+  claimPrompt: false,
 };
 
 export function prefersReducedMotion() {
@@ -167,7 +207,278 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.seekTargetIndex = null;
   galaxyTravel.seekStartT = null;
   galaxyTravel.seekElapsed = 0;
+  resetExplore(false);
   restIdle();
+}
+
+function publishExplore() {
+  useGalaxy.getState().setExplore({
+    phase: galaxyTravel.explorePhase,
+    signIndex: galaxyTravel.exploreSignIndex,
+    progress: galaxyTravel.exploreProgress,
+    skipPhase: galaxyTravel.enterSkip,
+    skipVeil: galaxyTravel.skipVeil,
+    worldFade: galaxyTravel.worldFade,
+    plateFade: galaxyTravel.plateFade,
+    galaxyForm: galaxyTravel.galaxyForm,
+    pointIndex: galaxyTravel.pointIndex,
+  });
+}
+
+function applyEnterCurves(p: number) {
+  galaxyTravel.exploreProgress = clamp01(p);
+  galaxyTravel.worldFade = enterWorldFade(p);
+  galaxyTravel.plateFade = enterPlateFade(p);
+  galaxyTravel.galaxyForm = enterGalaxyForm(p);
+  galaxyTravel.diveBlend = enterDive(p);
+}
+
+function skipDurations() {
+  return prefersReducedMotion()
+    ? { out: SKIP_OUT_RM, hold: SKIP_HOLD_RM, in: SKIP_IN_RM }
+    : { out: SKIP_OUT, hold: SKIP_HOLD, in: SKIP_IN };
+}
+
+function clearEnterSkip() {
+  enterSkipWatchdog += 1;
+  galaxyTravel.enterSkip = "idle";
+  galaxyTravel.enterSkipElapsed = 0;
+  galaxyTravel.skipVeil = 0;
+}
+
+export function resetExplore(publish = true) {
+  galaxyTravel.explorePhase = "idle";
+  galaxyTravel.exploreSignIndex = null;
+  galaxyTravel.exploreProgress = 0;
+  clearEnterSkip();
+  galaxyTravel.worldFade = 1;
+  galaxyTravel.plateFade = 1;
+  galaxyTravel.galaxyForm = 0;
+  galaxyTravel.diveBlend = 0;
+  galaxyTravel.pointIndex = 0;
+  galaxyTravel.pointSeek = null;
+  galaxyTravel.pointT = 0;
+  galaxyTravel.pointTTarget = 0;
+  galaxyTravel.starsUnlocked = false;
+  galaxyTravel.claimPrompt = false;
+  if (publish) publishExplore();
+}
+
+/** True while a sign galaxy is entering, active, or exiting. */
+export function exploringSign() {
+  return galaxyTravel.explorePhase !== "idle";
+}
+
+export function insideSignGalaxy() {
+  return galaxyTravel.explorePhase === "inside";
+}
+
+/** True while the enter dive is playing — screen should stay locked. */
+export function enterAnimating() {
+  if (galaxyTravel.enterSkip !== "idle") return true;
+  const p = galaxyTravel.explorePhase;
+  return p === "fading" || p === "diving";
+}
+
+function landInsideHub() {
+  applyEnterCurves(1);
+  galaxyTravel.explorePhase = "inside";
+  galaxyTravel.exploreProgress = 1;
+  galaxyTravel.pointIndex = 0;
+  galaxyTravel.pointSeek = null;
+  galaxyTravel.pointT = 0;
+  galaxyTravel.pointTTarget = 0;
+  galaxyTravel.claimPrompt = true;
+  galaxyTravel.hold = 0;
+  galaxyTravel.steer = 0;
+  publishExplore();
+}
+
+/**
+ * Skip the enter dive and land on the first star (hub), same destination
+ * as letting the animation finish.
+ */
+export function skipEnterGalaxy() {
+  if (galaxyTravel.enterSkip !== "idle") return false;
+  if (!(galaxyTravel.explorePhase === "fading" || galaxyTravel.explorePhase === "diving")) {
+    return false;
+  }
+  galaxyTravel.enterSkip = "out";
+  galaxyTravel.enterSkipElapsed = 0;
+  noteControl();
+  publishExplore();
+  if (typeof window !== "undefined") {
+    const token = ++enterSkipWatchdog;
+    const d = skipDurations();
+    window.setTimeout(() => {
+      if (token === enterSkipWatchdog) recoverStalledEnterSkip();
+    }, (d.out + d.hold + d.in) * 1000 + 250);
+  }
+  return true;
+}
+
+/** Finish a Skip whose render clock stopped, leaving the hub unlocked and veil clear. */
+export function recoverStalledEnterSkip() {
+  if (galaxyTravel.enterSkip === "idle") return false;
+  if (galaxyTravel.explorePhase !== "inside") landInsideHub();
+  clearEnterSkip();
+  publishExplore();
+  return true;
+}
+
+/**
+ * Begin the selected-sign dive: fade the world, approach the animal form,
+ * dissolve the plate, and bloom stars into a per-sign galaxy.
+ */
+export function enterSignGalaxy(index?: number) {
+  if (introPlaying()) return false;
+  if (galaxyTravel.birth < 1) return false;
+  if (exploringSign()) return false;
+  const i =
+    index != null
+      ? ((Math.round(index) % 12) + 12) % 12
+      : galaxyTravel.seekDirect && galaxyTravel.seekTargetIndex != null
+        ? galaxyTravel.seekTargetIndex
+        : stationFromT(galaxyTravel.t);
+  const sign = CONSTELLATIONS[i];
+  if (!sign) return false;
+  seekSign(i, { direct: true });
+  galaxyTravel.explorePhase = "fading";
+  galaxyTravel.exploreSignIndex = i;
+  galaxyTravel.exploreProgress = 0;
+  galaxyTravel.pointIndex = 0;
+  galaxyTravel.pointSeek = null;
+  galaxyTravel.pointT = 0;
+  galaxyTravel.pointTTarget = 0;
+  galaxyTravel.hold = 0;
+  galaxyTravel.steer = 0;
+  galaxyTravel.zoomTarget = 1.35;
+  galaxyTravel.starsUnlocked = false;
+  galaxyTravel.claimPrompt = false;
+  applyEnterCurves(0);
+  primeSignArt(sign.id);
+  getSignGalaxy(sign.id);
+  noteControl();
+  publishExplore();
+  return true;
+}
+
+/** Leave the sign galaxy and restore the corridor. */
+export function exitSignGalaxy() {
+  if (!exploringSign()) return false;
+  // Keep the enter dive whole — only Skip can jump to the hub mid-animation.
+  if (enterAnimating()) return false;
+  if (galaxyTravel.explorePhase === "exiting") return true;
+  galaxyTravel.explorePhase = "exiting";
+  galaxyTravel.pointSeek = null;
+  galaxyTravel.zoomTarget = 1;
+  noteControl();
+  publishExplore();
+  return true;
+}
+
+export function setExploreStarsUnlocked(unlocked: boolean) {
+  galaxyTravel.starsUnlocked = Boolean(unlocked);
+}
+
+export function consumeClaimPrompt() {
+  if (!galaxyTravel.claimPrompt) return false;
+  galaxyTravel.claimPrompt = false;
+  return true;
+}
+
+export function seekGalaxyPoint(pointIndex: number) {
+  if (!insideSignGalaxy() || galaxyTravel.exploreSignIndex == null) return false;
+  const galaxy = getSignGalaxy(CONSTELLATIONS[galaxyTravel.exploreSignIndex]!.id);
+  if (galaxy.points.length === 0) return false;
+  const i = ((Math.round(pointIndex) % galaxy.points.length) + galaxy.points.length) % galaxy.points.length;
+  const point = galaxy.points[i]!;
+  if (!point.isHub && !galaxyTravel.starsUnlocked) return false;
+  galaxyTravel.pointSeek = i;
+  galaxyTravel.pointTTarget = i;
+  galaxyTravel.pointIndex = i;
+  noteControl();
+  publishExplore();
+  return true;
+}
+
+function stepEnterSkip(dt: number) {
+  const d = skipDurations();
+  galaxyTravel.enterSkipElapsed += dt;
+  const phase = galaxyTravel.enterSkip;
+  if (phase === "out") {
+    const u = Math.min(1, galaxyTravel.enterSkipElapsed / d.out);
+    galaxyTravel.skipVeil = smooth01(u);
+    if (u >= 1) {
+      galaxyTravel.enterSkip = "hold";
+      galaxyTravel.enterSkipElapsed = 0;
+      galaxyTravel.skipVeil = 1;
+      landInsideHub();
+    }
+    publishExplore();
+    return;
+  }
+  if (phase === "hold") {
+    galaxyTravel.skipVeil = 1;
+    if (galaxyTravel.enterSkipElapsed >= d.hold) {
+      galaxyTravel.enterSkip = "in";
+      galaxyTravel.enterSkipElapsed = 0;
+    }
+    publishExplore();
+    return;
+  }
+  if (phase === "in") {
+    const u = Math.min(1, galaxyTravel.enterSkipElapsed / d.in);
+    galaxyTravel.skipVeil = 1 - smooth01(u);
+    if (u >= 1) clearEnterSkip();
+    publishExplore();
+  }
+}
+
+export function stepExplore(dt: number) {
+  if (galaxyTravel.enterSkip !== "idle") {
+    stepEnterSkip(dt);
+    return;
+  }
+  const phase = galaxyTravel.explorePhase;
+  if (phase === "idle") return;
+
+  if (phase === "exiting") {
+    const p = galaxyTravel.exploreProgress - dt / (prefersReducedMotion() ? 0.35 : EXIT_SEC);
+    if (p <= 0.001) {
+      resetExplore(true);
+      return;
+    }
+    applyEnterCurves(p);
+    publishExplore();
+    return;
+  }
+
+  if (phase === "inside") {
+    if (galaxyTravel.pointSeek != null) {
+      const k = 1 - Math.exp(-dt * 2.4);
+      galaxyTravel.pointT += (galaxyTravel.pointTTarget - galaxyTravel.pointT) * k;
+      if (Math.abs(galaxyTravel.pointT - galaxyTravel.pointTTarget) < 0.02) {
+        galaxyTravel.pointT = galaxyTravel.pointTTarget;
+        galaxyTravel.pointIndex = galaxyTravel.pointSeek;
+        galaxyTravel.pointSeek = null;
+        publishExplore();
+      }
+    }
+    return;
+  }
+
+  // fading → diving → inside
+  const rate = prefersReducedMotion() ? 0.7 : ENTER_SEC;
+  const next = Math.min(1, galaxyTravel.exploreProgress + dt / rate);
+  applyEnterCurves(next);
+  if (next < 0.28) galaxyTravel.explorePhase = "fading";
+  else if (next < 0.98) galaxyTravel.explorePhase = "diving";
+  else {
+    landInsideHub();
+    return;
+  }
+  publishExplore();
 }
 
 /** Seed light of the opening — slow ease into the first glow. */
@@ -201,6 +512,13 @@ function clearDirectSeek() {
 
 /** Jump the flight path to a sign. Arrive as the animal and hold until they fly or rest. */
 export function seekSign(index: number, opts?: SeekOptions) {
+  if (enterAnimating()) return galaxyTravel.exploreSignIndex ?? 0;
+  if (exploringSign() && galaxyTravel.explorePhase !== "fading") {
+    // Strip / external seek leaves an open galaxy first.
+    if (galaxyTravel.exploreSignIndex !== ((Math.round(index) % 12) + 12) % 12) {
+      resetExplore(true);
+    }
+  }
   const i = ((Math.round(index) % 12) + 12) % 12;
   const dest = stationT(i);
   const direct = opts?.direct ?? false;
@@ -243,7 +561,7 @@ export function noteControl() {
 }
 
 function flyLocked() {
-  return galaxyTravel.birth >= 1 && galaxyTravel.busy;
+  return (galaxyTravel.birth >= 1 && galaxyTravel.busy) || exploringSign();
 }
 
 function flyIgnore(target: EventTarget | null) {
@@ -594,7 +912,7 @@ export function ensureAutoClock() {
     autoLast = now;
     if (!Number.isFinite(dt) || dt < 0) return;
     stepAutoSign(dt, {
-      canAdvance: galaxyTravel.birth >= 1 && !galaxyTravel.busy && !introPlaying(),
+      canAdvance: galaxyTravel.birth >= 1 && !galaxyTravel.busy && !introPlaying() && !exploringSign(),
       traveling: galaxyTravel.traveling || galaxyTravel.seek != null || galaxyTravel.playUntil != null,
       handsOn: galaxyTravel.handsOn,
     });

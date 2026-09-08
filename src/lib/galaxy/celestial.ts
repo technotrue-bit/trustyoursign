@@ -103,13 +103,13 @@ export function makeHazeSprite() {
 const VERT = /* glsl */ `
 uniform float uTime;
 uniform float uOpacity;
-attribute vec3 color;
+attribute vec3 aColor;
 attribute float aSize;
 attribute float aTwinkle;
 varying vec3 vColor;
 varying float vAlpha;
 void main() {
-  vColor = color;
+  vColor = aColor;
   float tw = aTwinkle > 0.01 ? 0.82 + 0.18 * sin(uTime * 0.4 + aTwinkle) : 1.0;
   vAlpha = uOpacity * tw;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -177,7 +177,7 @@ function fill(
     w++;
   }
   geo.setAttribute("position", new BufferAttribute(pos, 3));
-  geo.setAttribute("color", new BufferAttribute(col, 3));
+  geo.setAttribute("aColor", new BufferAttribute(col, 3));
   geo.setAttribute("aSize", new BufferAttribute(sz, 1));
   geo.setAttribute("aTwinkle", new BufferAttribute(tw, 1));
   geo.setDrawRange(0, w);
