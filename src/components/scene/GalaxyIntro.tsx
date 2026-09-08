@@ -41,7 +41,7 @@ import {
   stepSeek,
   stepZoom,
 } from "@/lib/galaxy/travel";
-import { enterHubSettle, getSignGalaxy } from "@/lib/galaxy/signGalaxy";
+import { enterHubSettle, getSignGalaxy, insideHardGateHidesLeftovers } from "@/lib/galaxy/signGalaxy";
 import {
   bootIntro,
   introCam,
@@ -264,7 +264,12 @@ function SignDisk() {
     const chatting = state.claim !== null && state.session === null;
     const picked = chatting && state.claim?.signId === sign.id;
     const world = exploringSign() ? galaxyTravel.worldFade : 1;
-    const show = gather > 0.32 && intro > 0.4 && veil < 0.45 && world > 0.08;
+    const show =
+      gather > 0.32 &&
+      intro > 0.4 &&
+      veil < 0.45 &&
+      world > 0.08 &&
+      !insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
     g.visible = show;
     if (!show) {
       sim.mat.uniforms.uFade.value = 0;
@@ -596,86 +601,104 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         ? Math.max(0, (arrive - 0.12) / 0.62)
         : smooth(Math.max(0, (gather - 0.52) / 0.48));
 
-    if (art.current && artTex && !useVolume) {
-      const mat = art.current.material as MeshBasicMaterial;
-      const plateOn = Boolean(artTex && (artReady(artTex) || ready));
-      const bornIn = plateReveal;
-      // Plate opacity via tested helper — fully opaque during BirthChat, no plateMorphFade.
-      const plateOp =
-        computePlateOpacity({
-          plateOn,
-          held,
-          focused,
-          fade,
-          bornIn,
-          morphLevel: morphLevel.current,
-        }) * (exploringHere ? galaxyTravel.plateFade : 1);
-      art.current.visible = plateOp > 0.04;
-      art.current.scale.set(wide, wide / aspect, 1);
-      mat.opacity = plateOp;
-      mat.map = artTex;
-      mat.depthTest = false;
-      mat.alphaTest = 0.04;
-      if (plateOn && !shown.current) {
-        artTex.needsUpdate = true;
-        mat.needsUpdate = true;
-        shown.current = true;
+    const landedHere =
+      exploringHere && insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
+
+    if (landedHere) {
+      mesh.visible = false;
+      if (art.current) {
+        art.current.visible = false;
+        (art.current.material as MeshBasicMaterial).opacity = 0;
       }
-    }
-    if (shellWrap.current) {
-      const shellOp = exploringHere ? galaxyTravel.plateFade : 1;
-      shellWrap.current.visible = shellOp > 0.04;
-      if (shellWrap.current.visible) {
-        shellWrap.current.traverse((obj) => {
-          const mat = (obj as Mesh).material as { opacity?: number; transparent?: boolean } | undefined;
-          if (mat && typeof mat.opacity === "number") {
-            mat.transparent = true;
-            mat.opacity = 0.94 * shellOp;
-          }
-        });
+      if (shellWrap.current) shellWrap.current.visible = false;
+    } else {
+      if (art.current && artTex && !useVolume) {
+        const mat = art.current.material as MeshBasicMaterial;
+        const plateOn = Boolean(artTex && (artReady(artTex) || ready));
+        const bornIn = plateReveal;
+        // Plate opacity via tested helper — fully opaque during BirthChat, no plateMorphFade.
+        const plateOp =
+          computePlateOpacity({
+            plateOn,
+            held,
+            focused,
+            fade,
+            bornIn,
+            morphLevel: morphLevel.current,
+          }) * (exploringHere ? galaxyTravel.plateFade : 1);
+        art.current.visible = plateOp > 0.04;
+        art.current.scale.set(wide, wide / aspect, 1);
+        mat.opacity = plateOp;
+        mat.map = artTex;
+        mat.depthTest = false;
+        mat.alphaTest = 0.04;
+        if (plateOn && !shown.current) {
+          artTex.needsUpdate = true;
+          mat.needsUpdate = true;
+          shown.current = true;
+        }
       }
+      if (shellWrap.current) {
+        const shellOp = exploringHere ? galaxyTravel.plateFade : 1;
+        shellWrap.current.visible = shellOp > 0.04;
+        if (shellWrap.current.visible) {
+          shellWrap.current.traverse((obj) => {
+            const mat = (obj as Mesh).material as { opacity?: number; transparent?: boolean } | undefined;
+            if (mat && typeof mat.opacity === "number") {
+              mat.transparent = true;
+              mat.opacity = 0.94 * shellOp;
+            }
+          });
+        }
+      }
+
+      if (!focused && !incoming && !held && !exploringHere) {
+        mesh.visible = false;
+        return;
+      }
+      if (introPlaying() && index === 0 && introAries() < 0.1) {
+        mesh.visible = false;
+        return;
+      }
+      mesh.visible = true;
+      const morphTarget = picked ? 1 : 0;
+      // Faster in (star formation feels snappy), slower out (dissolve back gracefully)
+      const morphRate = prefersReducedMotion() ? 20 : picked ? 1.8 : 1.2;
+      morphLevel.current += (morphTarget - morphLevel.current) * Math.min(1, dt * morphRate);
+      const ml = morphLevel.current;
+      const u = coreMat.uniforms;
+      u.uTime.value = clock.elapsedTime;
+      u.uGather.value = gather;
+      u.uWide.value = wide;
+      u.uTall.value = wide / aspect;
+      u.uMorph.value = ml;
+      // Group slide handles X positioning; per-star bias causes double-shift
+      u.uGlyphBiasX.value = 0;
+      // Swirl dampens as morph settles; halo/spiral fade so glyph reads clean
+      u.uSwirl.value = prefersReducedMotion() ? 0 : 1 - ml * 0.9;
+      u.uFade.value = fade;
+      u.uHover.value = galaxyTravel.ptrOn && focused ? 1.12 : 1;
+      u.uPxScale.value = SMALL ? 0.9 : 1;
+      u.uBaseSize.value = SMALL ? 2.6 : 2.05;
+      // Boost opacity when forming glyph so stars are crisp and visible
+      const formBoost = exploringHere ? 0.35 + galaxyTravel.galaxyForm * 0.85 : 1;
+      u.uOpacity.value = (0.62 + fade * 0.32) * (1 + ml * 0.55) * formBoost;
+      // Dissolving plate: keep animal gather high; swirl eases as galaxy forms.
+      if (exploringHere) {
+        u.uGather.value = Math.max(gather, 0.72 + galaxyTravel.galaxyForm * 0.28);
+        u.uSwirl.value = prefersReducedMotion()
+          ? 0
+          : Math.max(0, (1 - ml * 0.9) * (1 - galaxyTravel.galaxyForm * 0.85));
+        u.uMorph.value = ml * (1 - galaxyTravel.galaxyForm);
+      }
+      (u.uTint.value as Color).copy(tint);
     }
 
-    if (!focused && !incoming && !held && !exploringHere) {
-      mesh.visible = false;
-      return;
+    if (landedHere) {
+      const u = coreMat.uniforms;
+      u.uOpacity.value = 0;
+      u.uFade.value = 0;
     }
-    if (introPlaying() && index === 0 && introAries() < 0.1) {
-      mesh.visible = false;
-      return;
-    }
-    mesh.visible = true;
-    const morphTarget = picked ? 1 : 0;
-    // Faster in (star formation feels snappy), slower out (dissolve back gracefully)
-    const morphRate = prefersReducedMotion() ? 20 : picked ? 1.8 : 1.2;
-    morphLevel.current += (morphTarget - morphLevel.current) * Math.min(1, dt * morphRate);
-    const ml = morphLevel.current;
-    const u = coreMat.uniforms;
-    u.uTime.value = clock.elapsedTime;
-    u.uGather.value = gather;
-    u.uWide.value = wide;
-    u.uTall.value = wide / aspect;
-    u.uMorph.value = ml;
-    // Group slide handles X positioning; per-star bias causes double-shift
-    u.uGlyphBiasX.value = 0;
-    // Swirl dampens as morph settles; halo/spiral fade so glyph reads clean
-    u.uSwirl.value = prefersReducedMotion() ? 0 : 1 - ml * 0.9;
-    u.uFade.value = fade;
-    u.uHover.value = galaxyTravel.ptrOn && focused ? 1.12 : 1;
-    u.uPxScale.value = SMALL ? 0.9 : 1;
-    u.uBaseSize.value = SMALL ? 2.6 : 2.05;
-    // Boost opacity when forming glyph so stars are crisp and visible
-    const formBoost = exploringHere ? 0.35 + galaxyTravel.galaxyForm * 0.85 : 1;
-    u.uOpacity.value = (0.62 + fade * 0.32) * (1 + ml * 0.55) * formBoost;
-    // Dissolving plate: keep animal gather high; swirl eases as galaxy forms.
-    if (exploringHere) {
-      u.uGather.value = Math.max(gather, 0.72 + galaxyTravel.galaxyForm * 0.28);
-      u.uSwirl.value = prefersReducedMotion()
-        ? 0
-        : Math.max(0, (1 - ml * 0.9) * (1 - galaxyTravel.galaxyForm * 0.85));
-      u.uMorph.value = ml * (1 - galaxyTravel.galaxyForm);
-    }
-    (u.uTint.value as Color).copy(tint);
   });
 
   return (

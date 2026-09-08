@@ -76,11 +76,11 @@ export function SignGalaxyHud() {
         aria-hidden={!inside}
         inert={!inside}
         className={cn(
-          "absolute inset-0 flex flex-col justify-between px-4 pt-[max(1.25rem,var(--safe-top))] pb-[max(1.25rem,var(--safe-bottom))] transition-opacity duration-[350ms]",
+          "absolute inset-0 flex flex-col px-4 pt-[max(1.25rem,var(--safe-top))] pb-[max(1.25rem,var(--safe-bottom))] transition-opacity duration-[350ms]",
           inside ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       >
-        <div className="relative flex items-start justify-between gap-3">
+        <div className="relative flex shrink-0 items-start justify-between gap-3">
           <button
             type="button"
             onClick={() => exitSignGalaxy()}
@@ -101,10 +101,17 @@ export function SignGalaxyHud() {
           ) : null}
         </div>
 
-        <div className="mx-auto w-full max-w-md text-center">
+        <div className="min-h-0 flex-1" aria-hidden />
+
+        <div
+          className={cn(
+            "sign-galaxy-lower flex shrink-0 flex-col items-center gap-4 transition-[transform,opacity] duration-500 ease-out",
+            inside ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0",
+          )}
+        >
           {inside && point ? (
-            <>
-              <p className="text-[0.65rem] tracking-[0.28em] text-fg-subtle uppercase">
+            <div className="sign-galaxy-copy mx-auto w-full max-w-md text-center">
+              <p className="sign-galaxy-copy-kicker text-[0.65rem] tracking-[0.28em] uppercase">
                 {point.isHub
                   ? hubTone
                   : lockedPoint
@@ -113,70 +120,70 @@ export function SignGalaxyHud() {
                       ? "Star"
                       : insightToneLabel(point.purpose.kind)}
               </p>
-              <h3 className="font-display mt-1 text-xl leading-snug font-medium tracking-tight text-fg italic md:text-2xl">
+              <h3 className="sign-galaxy-copy-title font-display mt-1 text-xl leading-snug font-medium tracking-tight italic md:text-2xl">
                 {point.isHub ? hubTitle : lockedPoint ? "Still sealed" : point.purpose.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-fg-muted md:text-base">
+              <p className="sign-galaxy-copy-body mt-2 text-sm leading-relaxed md:text-base">
                 <Gloss card={false}>
                   {point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}
                 </Gloss>
               </p>
-            </>
-          ) : null}
-        </div>
-
-        <div className="flex flex-col items-center gap-3">
-          {inside ? (
-            <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-2">
-              {galaxy.points.map((p, i) => {
-                const locked = !p.isHub && !unlocked;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    disabled={locked}
-                    onClick={() => {
-                      if (locked) return;
-                      seekGalaxyPoint(i);
-                    }}
-                    className={cn(
-                      "min-h-10 min-w-10 rounded-sm px-2 text-[0.65rem] tracking-[0.14em] uppercase",
-                      i === explore.pointIndex
-                        ? "bg-fg/10 text-fg"
-                        : locked
-                          ? "text-fg-subtle/35"
-                          : "text-fg-subtle hover:text-fg",
-                    )}
-                    aria-label={locked ? `${p.purpose.title} (locked)` : p.purpose.title}
-                  >
-                    {p.isHub ? "●" : locked ? "◌" : "○"}
-                  </button>
-                );
-              })}
             </div>
           ) : null}
-          {inside && point?.isHub && lockReason === "auth" ? (
-            <a
-              href="/login"
-              className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
-            >
-              Sign in / Sign up
-            </a>
-          ) : null}
-          {inside && point?.isHub && lockReason === "chart" ? (
-            <button
-              type="button"
-              onClick={() => openClaim(sign.id)}
-              className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent"
-            >
-              Begin birth chart
-            </button>
-          ) : null}
-          {inside && unlocked ? (
-            <p className="max-w-sm px-2 text-center text-[0.7rem] tracking-wide text-fg-subtle">
-              Your galaxy is open. Each star holds insight, spice, horror, and warning.
-            </p>
-          ) : null}
+
+          <div className="flex flex-col items-center gap-3">
+            {inside ? (
+              <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-2">
+                {galaxy.points.map((p, i) => {
+                  const locked = !p.isHub && !unlocked;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={locked}
+                      onClick={() => {
+                        if (locked) return;
+                        seekGalaxyPoint(i);
+                      }}
+                      className={cn(
+                        "min-h-10 min-w-10 rounded-sm px-2 text-[0.65rem] tracking-[0.14em] uppercase",
+                        i === explore.pointIndex
+                          ? "bg-fg/10 text-fg"
+                          : locked
+                            ? "text-fg-subtle/35"
+                            : "text-fg-subtle hover:text-fg",
+                      )}
+                      aria-label={locked ? `${p.purpose.title} (locked)` : p.purpose.title}
+                    >
+                      {p.isHub ? "●" : locked ? "◌" : "○"}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            {inside && point?.isHub && lockReason === "auth" ? (
+              <a
+                href="/login"
+                className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
+              >
+                Sign in / Sign up
+              </a>
+            ) : null}
+            {inside && point?.isHub && lockReason === "chart" ? (
+              <button
+                type="button"
+                onClick={() => openClaim(sign.id)}
+                className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent"
+              >
+                Begin birth chart
+              </button>
+            ) : null}
+            {inside && unlocked ? (
+              <p className="sign-galaxy-copy-body max-w-sm px-2 text-center text-[0.7rem] tracking-wide">
+                Your galaxy is open. Each star holds insight, spice, horror, and warning.
+              </p>
+            ) : null}
+          </div>
         </div>
       </div>
 
