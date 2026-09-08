@@ -121,3 +121,7 @@ export function skipTourState(state: VaultDomainState): VaultDomainState {
   if (!state.session) return state;
   return { ...state, session: { ...state.session, tourBeat: null } };
 }
+
+export const openSession = openSessionState;
+export const setClaim = openClaimState;
+export const clearClaim = clearClaimState;
