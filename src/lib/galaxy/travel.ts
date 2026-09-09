@@ -641,9 +641,13 @@ export function applyFlyDelta(dy: number, dx = 0, touch = false) {
     return;
   }
   const feel = touch ? 1.7 : 1;
-  galaxyTravel.steer += (dy / 420 - dx / 720) * feel;
-  galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + (dy * feel) / 2200 - (dx * feel) / 3800);
-  if (Math.abs(dy) > 2) galaxyTravel.hold = dy > 0 ? 1 : -1;
+  // Match L/R drag to U/D: same feel coeff, and sustain hold on the dominant axis
+  // (hold used to ignore dx, so horizontal fly felt one-shot while vertical cruised).
+  galaxyTravel.steer += (dy / 420 - dx / 420) * feel;
+  galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + (dy * feel) / 2200 - (dx * feel) / 2200);
+  const useX = Math.abs(dx) > Math.abs(dy);
+  const axis = useX ? -dx : dy;
+  if (Math.abs(axis) > 2) galaxyTravel.hold = axis > 0 ? 1 : -1;
   galaxyTravel.moved = true;
   galaxyTravel.awaken = 1;
   noteControl();
@@ -656,7 +660,7 @@ export function applyWheel(deltaY: number, deltaX = 0, deltaMode = 0) {
   }
   if (flyLocked()) return;
   const scale = deltaMode === 1 ? 16 : deltaMode === 2 ? 120 : 1;
-  const impulse = (deltaY * scale + deltaX * scale * 0.45) / 900;
+  const impulse = (deltaY * scale + deltaX * scale) / 900;
   if (galaxyTravel.birth < 1) {
     skipBirth();
     return;

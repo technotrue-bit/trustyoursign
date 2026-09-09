@@ -3,8 +3,9 @@ import { CALENDAR_SIGN_INDICES, CONSTELLATIONS } from "@/lib/galaxy/constellatio
 import { useGalaxy } from "@/lib/galaxy/store";
 import { noteControl, seekSign } from "@/lib/galaxy/travel";
 
-function jumpTo(index: number, direct = false) {
-  return seekSign(index, direct ? { direct: true } : undefined);
+/** Strip jumps always use direct seek so left/right feel the same short lerp. */
+function jumpTo(index: number) {
+  return seekSign(index, { direct: true });
 }
 
 function nearestFromScroll(scroller: HTMLElement) {
@@ -125,7 +126,7 @@ export function SignStrip() {
                 onClick={() => {
                   fromStrip.current = true;
                   noteControl();
-                  jumpTo(i, true);
+                  jumpTo(i);
                   centerItem(i, true);
                 }}
                 className="sign-strip-btn"
