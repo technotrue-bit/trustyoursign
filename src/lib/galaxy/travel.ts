@@ -468,7 +468,9 @@ export function seekGalaxyPoint(pointIndex: number) {
   if (galaxy.points.length === 0) return false;
   const i = ((Math.round(pointIndex) % galaxy.points.length) + galaxy.points.length) % galaxy.points.length;
   const point = galaxy.points[i]!;
-  if (!point.isHub && !galaxyTravel.starsUnlocked) return false;
+  if (!point) return false;
+  // Every sign galaxy can travel its form while locked. Lore stays sealed in the HUD
+  // until starsUnlocked (sign-in + timed chart). Do not gate movement on unlock.
   galaxyTravel.pointSeek = i;
   galaxyTravel.pointTTarget = i;
   galaxyTravel.pointIndex = i;

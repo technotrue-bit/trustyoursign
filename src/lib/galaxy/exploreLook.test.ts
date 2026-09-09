@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
+import { CONSTELLATIONS } from "./constellations.ts";
+import { getSignGalaxy } from "./signGalaxy.ts";
 import { skipIntro, templeIntro } from "./intro.ts";
 import {
   EXPLORE_LOOK_MAX_X,
@@ -67,11 +69,31 @@ describe("explore look inside a locked galaxy", () => {
     assert.equal(galaxyTravel.tTarget, t0);
   });
 
-  it("sealed stars stay unseekable while looking", () => {
+  it("locked galaxies still let you travel between stars; lore stays sealed", () => {
     galaxyTravel.starsUnlocked = false;
     applyExploreLook(10, 40, true);
-    assert.equal(seekGalaxyPoint(1), false);
-    assert.equal(galaxyTravel.pointIndex, 0);
+    assert.equal(seekGalaxyPoint(1), true);
+    assert.equal(galaxyTravel.pointIndex, 1);
+    assert.equal(galaxyTravel.starsUnlocked, false);
+  });
+
+  it("every sign galaxy can look and move while locked", () => {
+    for (let i = 0; i < CONSTELLATIONS.length; i++) {
+      landInside(i);
+      galaxyTravel.starsUnlocked = false;
+      const t0 = galaxyTravel.tTarget;
+      const name = CONSTELLATIONS[i]!.name;
+      assert.equal(applyExploreLook(0, 80, true), true, `${name}: look`);
+      assert.equal(galaxyTravel.tTarget, t0, `${name}: corridor t must not cruise`);
+      assert.ok(galaxyTravel.exploreLookX < -0.3, `${name}: look X ${galaxyTravel.exploreLookX}`);
+      const galaxy = getSignGalaxy(CONSTELLATIONS[i]!.id);
+      assert.ok(galaxy.points.length >= 3, `${name}: travel points`);
+      assert.equal(seekGalaxyPoint(1), true, `${name}: seek star 1`);
+      assert.equal(galaxyTravel.pointIndex, 1, `${name}: landed on star 1`);
+      assert.equal(galaxyTravel.starsUnlocked, false, `${name}: lore stays sealed`);
+      assert.equal(seekGalaxyPoint(0), true, `${name}: return to hub`);
+      assert.equal(galaxyTravel.pointIndex, 0, `${name}: hub`);
+    }
   });
 
   it("A looks left and D looks right", () => {

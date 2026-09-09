@@ -477,9 +477,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const pick = () => {
     if (enterAnimating()) return;
     if (exploringSign()) {
-      if (galaxyTravel.exploreSignIndex === index && galaxyTravel.explorePhase === "inside") {
-        useSessionStore.getState().openClaim(sign.id);
-      }
+      // Inside: look / star travel stay live. Claim is the HUD CTA — a hub
+      // tap must not open BirthChat (that sets busy and freezes look).
       return;
     }
     enterSignGalaxy(index);
