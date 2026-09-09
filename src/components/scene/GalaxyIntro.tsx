@@ -57,7 +57,7 @@ import {
   uBirth,
 } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
-import { fillMorphCloud, makeSparkMaterial } from "@/lib/galaxy/starRender";
+import { fillMorphCloud, makeSparkMaterial, setCloudDrawRange } from "@/lib/galaxy/starRender";
 import {
   computeBirthChatSlide,
   lerpToward,
@@ -576,9 +576,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     g.visible = show;
     if (!show) {
       mesh.visible = false;
-      if (starGeo.getAttribute("position")) starGeo.setDrawRange(0, 0);
+      setCloudDrawRange(starGeo, false);
       return;
     }
+    if (hydrated.current) setCloudDrawRange(starGeo, true);
 
     const sit = TEMPLE_STATIONS[index]!;
     const cam = camera as PerspectiveCamera;
