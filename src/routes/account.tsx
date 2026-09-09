@@ -63,7 +63,7 @@ function Account() {
 
   return (
     <main className="vault-page bg-bg px-5 py-10 text-fg">
-      <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[max(2rem,var(--chrome-bottom))]">
+      <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[var(--page-chrome-bottom)]">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">

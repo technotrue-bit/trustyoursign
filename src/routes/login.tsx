@@ -96,7 +96,7 @@ function Login() {
 
   return (
     <main className="vault-page bg-bg px-5 text-fg">
-      <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[max(2.5rem,var(--chrome-bottom))]">
+      <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[var(--page-chrome-bottom)]">
         <Link
           to="/"
           className="inline-flex min-h-11 items-center text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
