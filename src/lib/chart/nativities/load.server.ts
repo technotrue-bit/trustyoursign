@@ -1,5 +1,4 @@
-import { OWNER_USER_ID, SITE_OWNER, isSiteOwner } from "@/lib/owner";
-import { getSql } from "@/lib/db";
+import { assertSiteOwner } from "@/lib/owner";
 import type { ResearchChartId } from "../types";
 import type { Nativity } from "../schema";
 import { SAIGE } from "./saige";
@@ -20,14 +19,4 @@ export function listResearchLibrary() {
   }));
 }
 
-export async function assertResearchOwner(userId: string) {
-  if (userId === OWNER_USER_ID) return;
-  const sql = await getSql();
-  const rows = await sql<{ email: string | null; name: string | null }>`
-    select email, name from "user" where id = ${userId} limit 1
-  `;
-  const row = rows[0];
-  if (isSiteOwner({ displayName: row?.name, primaryEmail: row?.email })) return;
-  if (row?.email?.toLowerCase() === SITE_OWNER.email) return;
-  throw new Error("Not found");
-}
+export const assertResearchOwner = assertSiteOwner;

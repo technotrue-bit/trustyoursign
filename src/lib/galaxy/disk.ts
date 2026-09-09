@@ -75,6 +75,8 @@ export type DiskSim = {
   from: SignId;
   to: SignId;
   mix: number;
+  /** Small-GPU: skip force integration every other frame when idle. */
+  skipTick: number;
 };
 
 export function createDiskSim(): DiskSim {
@@ -131,7 +133,7 @@ export function createDiskSim(): DiskSim {
       }
     `,
   });
-  return { n, pos, vel, col, geo, mat, from: "aries", to: "aries", mix: 1 };
+  return { n, pos, vel, col, geo, mat, from: "aries", to: "aries", mix: 1, skipTick: 0 };
 }
 
 function seedDisk(pos: Float32Array, vel: Float32Array, size: Float32Array, n: number, p: Preset) {
@@ -193,6 +195,18 @@ export function stepDisk(
   const step = Math.min(0.033, Math.max(0.001, dt));
   const stir = ptrOn ? 1 : 0;
   const chest = volumeChest(sign);
+  // Cache volume sample key once — sampleVolumeAlpha still looks up by sign id,
+  // but we avoid thrashing when small-GPU skips a force frame.
+  const sampleSign = sign;
+
+  if (SMALL && !ptrOn && dt < 0.022) {
+    sim.skipTick = (sim.skipTick + 1) & 1;
+    if (sim.skipTick === 1 && !freeze) {
+      paintDisk(col, pos, n, pFrom, pTo, sim.mix);
+      sim.geo.attributes.aColor!.needsUpdate = true;
+      return;
+    }
+  }
 
   if (!freeze) {
     for (let i = 0; i < n; i++) {
@@ -231,7 +245,7 @@ export function stepDisk(
       }
       const u = x / (pTo.r * 1.35) * 0.5 + 0.5 + chest.x;
       const v = y / (pTo.r * 1.15) * 0.5 + 0.5 + chest.y * 0.2;
-      const alpha = sampleVolumeAlpha(sign, u, v);
+      const alpha = sampleVolumeAlpha(sampleSign, u, v);
       if (alpha < 0.08) {
         ax += -x * 2.4 * tight;
         ay += (chest.y * 0.4 - y) * 2.1;

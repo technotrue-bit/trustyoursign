@@ -41,3 +41,18 @@ export function isSiteOwner(
   if (!c) return false;
   return c.includes(compact(SITE_OWNER.name)) || c.includes(compact(SITE_OWNER.handle));
 }
+
+/** Server-side owner gate: known owner id, or matching user row. Throws "Not found". */
+export async function assertSiteOwner(userId: string) {
+  if (userId === OWNER_USER_ID) return;
+  // Dynamic import keeps @/lib/db out of client bundles that only need isSiteOwner.
+  const { getSql } = await import("@/lib/db");
+  const sql = await getSql();
+  const rows = await sql<{ email: string | null; name: string | null }>`
+    select email, name from "user" where id = ${userId} limit 1
+  `;
+  const row = rows[0];
+  if (isSiteOwner({ displayName: row?.name, primaryEmail: row?.email })) return;
+  if (row?.email?.toLowerCase() === SITE_OWNER.email) return;
+  throw new Error("Not found");
+}

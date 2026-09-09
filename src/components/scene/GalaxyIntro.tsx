@@ -25,6 +25,7 @@ import {
   HOLD_FLY,
   aimedIndex,
   ensureAutoClock,
+  stopAutoClock,
   ensureFlyInput,
   enterAnimating,
   enterSignGalaxy,
@@ -66,7 +67,8 @@ import { createDiskSim, disposeDisk, stepDisk } from "@/lib/galaxy/disk";
 import {
   loadSignArt,
   preloadSignArt,
-  preloadSignArtRest,
+  preloadSignArtNear,
+  releaseSignArt,
   hydrateSignArt,
   artReady,
   artAspect,
@@ -113,6 +115,7 @@ const _cam = new Vector3();
 const _look = new Vector3();
 const _chest = new Vector3();
 const _fog = new Color();
+const _bg = new Color();
 const _accent = new Color();
 const _up = new Vector3(0, 1, 0);
 const _sitCam = new Vector3();
@@ -182,9 +185,11 @@ export function GalaxyIntro() {
     const restT = window.setTimeout(
       () => {
         setRest(true);
-        preloadSignArtRest();
+        preloadSignArtNear(0);
         primeSignVolumes();
-        for (const c of CONSTELLATIONS) primeSignArt(c.id);
+        primeSignArt("aries");
+        primeSignArt("taurus");
+        primeSignArt("gemini");
       },
       SMALL ? 700 : 480,
     );
@@ -489,14 +494,27 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     return () => {
       coreMat.dispose();
       starGeo.dispose();
+      releaseSignArt(artTex);
     };
-  }, [coreMat, starGeo]);
+  }, [coreMat, starGeo, artTex]);
 
   useEffect(() => {
     if (artTex) return;
     const id = window.setTimeout(() => setArtTex(loadSignArt(sign.id)), 420 + index * 85);
     return () => window.clearTimeout(id);
   }, [artTex, index, sign.id]);
+
+  const shellMats = useRef<{ opacity?: number; transparent?: boolean }[]>([]);
+  useEffect(() => {
+    const wrap = shellWrap.current;
+    if (!wrap) return;
+    const mats: { opacity?: number; transparent?: boolean }[] = [];
+    wrap.traverse((obj) => {
+      const mat = (obj as Mesh).material as { opacity?: number; transparent?: boolean } | undefined;
+      if (mat && typeof mat.opacity === "number") mats.push(mat);
+    });
+    shellMats.current = mats;
+  });
 
   useFrame(({ clock, camera }, dt) => {
     const g = group.current;
@@ -517,6 +535,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const dist = Math.abs(t - dest);
     const incoming = index === Math.min(11, stationFromT(t) + 1);
     const focused = held || index === aimedIndex() || index === stationFromT(t);
+    if (focused || incoming) preloadSignArtNear(index);
     const ready = plateReady(sign.id);
     if (!artTex && (focused || incoming || ready) && !wantArt.current) {
       wantArt.current = true;
@@ -545,7 +564,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const show =
       held || exploringHere || dist < 0.078 || (direct && index === aimedIndex());
     g.visible = show;
-    if (!show) return;
+    if (!show) {
+      mesh.visible = false;
+      if (starGeo.getAttribute("position")) starGeo.setDrawRange(0, 0);
+      return;
+    }
 
     const sit = TEMPLE_STATIONS[index]!;
     const cam = camera as PerspectiveCamera;
@@ -643,13 +666,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         const shellOp = exploringHere ? galaxyTravel.plateFade : 1;
         shellWrap.current.visible = shellOp > 0.04;
         if (shellWrap.current.visible) {
-          shellWrap.current.traverse((obj) => {
-            const mat = (obj as Mesh).material as { opacity?: number; transparent?: boolean } | undefined;
-            if (mat && typeof mat.opacity === "number") {
-              mat.transparent = true;
-              mat.opacity = 0.94 * shellOp;
-            }
-          });
+          for (const mat of shellMats.current) {
+            mat.transparent = true;
+            mat.opacity = 0.94 * shellOp;
+          }
         }
       }
 
@@ -849,6 +869,7 @@ function TempleRig() {
   useEffect(() => {
     ensureAutoClock();
     ensureFlyInput();
+    return () => stopAutoClock();
   }, []);
 
   useEffect(() => {
@@ -1063,7 +1084,8 @@ function TempleRig() {
       lerpFog(t, _fog);
       const fogMul = exploring ? 0.55 + galaxyTravel.worldFade * 0.45 : 1;
       scene.fog.color.copy(_fog).multiplyScalar(fogMul);
-      scene.background = _fog.clone().multiplyScalar(0.35 * fogMul);
+      _bg.copy(_fog).multiplyScalar(0.35 * fogMul);
+      scene.background = _bg;
       if (exploring) {
         scene.fog.density = 0.01 * (0.35 + galaxyTravel.worldFade * 0.65);
       } else {

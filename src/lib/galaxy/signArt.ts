@@ -1,5 +1,6 @@
 import { CanvasTexture, ClampToEdgeWrapping, LinearFilter, SRGBColorSpace } from "three";
 import type { SignId } from "@/lib/chart/types";
+import { isSmallGpu } from "@/lib/gpu";
 
 export const SIGN_ART: Record<SignId, string> = {
   aries: "/signs/aries.png",
@@ -16,8 +17,15 @@ export const SIGN_ART: Record<SignId, string> = {
   pisces: "/signs/pisces.png",
 };
 
-const W = 1024;
-const H = 576;
+export function getSignArtUrl(id: SignId): string {
+  return SIGN_ART[id];
+}
+
+function canvasSize(): { w: number; h: number } {
+  if (typeof window !== "undefined" && isSmallGpu()) return { w: 512, h: 288 };
+  return { w: 1024, h: 576 };
+}
+
 const images = new Map<string, HTMLImageElement>();
 /** Every canvas for a URL — independent, never shared across meshes. */
 const texturesByUrl = new Map<string, Set<CanvasTexture>>();
@@ -36,9 +44,10 @@ function style(tex: CanvasTexture) {
 }
 
 function blankCanvas() {
+  const { w, h } = canvasSize();
   const c = document.createElement("canvas");
-  c.width = W;
-  c.height = H;
+  c.width = w;
+  c.height = h;
   return c;
 }
 
@@ -49,6 +58,13 @@ function register(url: string, tex: CanvasTexture) {
     texturesByUrl.set(url, set);
   }
   set.add(tex);
+}
+
+function unregister(url: string, tex: CanvasTexture) {
+  const set = texturesByUrl.get(url);
+  if (!set) return;
+  set.delete(tex);
+  if (set.size === 0) texturesByUrl.delete(url);
 }
 
 function rasterAll(id: SignId) {
@@ -85,6 +101,7 @@ function raster(id: SignId, tex: CanvasTexture) {
   if (!img || !img.complete || (img.naturalWidth ?? 0) < 2) return false;
   const canvas = tex.image as HTMLCanvasElement;
   if (!canvas || typeof canvas.getContext !== "function") return false;
+  const { w: W, h: H } = canvasSize();
   if (canvas.width !== W) canvas.width = W;
   if (canvas.height !== H) canvas.height = H;
   const ctx = canvas.getContext("2d", { alpha: true });
@@ -124,7 +141,7 @@ export function hydrateSignArt(id: SignId, tex: CanvasTexture) {
   return raster(id, tex);
 }
 
-/** Fresh canvas per call. Do not share / dispose these textures. */
+/** Fresh canvas per call. Release with `releaseSignArt` when the mesh unmounts. */
 export function loadSignArt(id: SignId): CanvasTexture {
   const tex = new CanvasTexture(blankCanvas());
   style(tex);
@@ -132,6 +149,23 @@ export function loadSignArt(id: SignId): CanvasTexture {
   ensureImage(id);
   hydrateSignArt(id, tex);
   return tex;
+}
+
+/** Drop a plate texture from the registry and free GPU/canvas memory. Safe to call twice. */
+export function releaseSignArt(tex: CanvasTexture | null | undefined) {
+  if (!tex) return;
+  for (const [url, set] of texturesByUrl) {
+    if (!set.has(tex)) continue;
+    set.delete(tex);
+    if (set.size === 0) texturesByUrl.delete(url);
+    break;
+  }
+  const canvas = tex.image as HTMLCanvasElement | undefined;
+  if (canvas && typeof canvas.width === "number") {
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+  tex.dispose();
 }
 
 /** Warm the PNG only — does not allocate a canvas. */
@@ -146,12 +180,23 @@ export function preloadSignArt() {
   ensureImage("taurus");
 }
 
+/** Prefetch plate PNGs for aimed station ±1 (and Aries/Taurus keep warm). */
+export function preloadSignArtNear(index: number) {
+  if (typeof window === "undefined") return;
+  const ids = Object.keys(SIGN_ART) as SignId[];
+  const n = ids.length;
+  const i = ((index % n) + n) % n;
+  for (const j of [i - 1, i, i + 1]) {
+    if (j < 0 || j >= n) continue;
+    ensureImage(ids[j]!);
+  }
+}
+
+/** @deprecated Prefer preloadSignArtNear — kept for callers that still warm the rest lazily. */
 export function preloadSignArtRest() {
   if (typeof window === "undefined") return;
-  (Object.keys(SIGN_ART) as SignId[]).forEach((id) => {
-    if (id === "aries" || id === "taurus") return;
-    ensureImage(id);
-  });
+  preloadSignArtNear(0);
+  preloadSignArtNear(1);
 }
 
 export function artReady(tex: CanvasTexture) {

@@ -89,16 +89,42 @@ export function AskPanel() {
         : (nat?.suggested ?? []);
   const notesRef = useRef(notes);
   notesRef.current = notes;
+  const saveAskTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const trimSkyForAsk = (natal: NonNullable<typeof skyNatal>) => ({
+    tone: natal.tone,
+    when: natal.when,
+    place: natal.place,
+    bodies: natal.bodies.map((b) => ({
+      id: b.id,
+      name: b.name,
+      lon: b.lon,
+      signId: b.signId,
+      signName: b.signName,
+      degInSign: b.degInSign,
+      house: b.house,
+      note: b.note,
+    })),
+  });
 
   const persist = (nextThread: ThreadTurn[], nextNotes: FieldNote[]) => {
     saveThread(askId, nextThread);
     saveNotes(askId, nextNotes);
     if (signedIn && askId) {
-      void saveAsk({ data: { chartKey: askId, thread: nextThread, notes: nextNotes } }).catch(() => {
-        /* keep the local copy if the account write fails */
-      });
+      if (saveAskTimer.current) clearTimeout(saveAskTimer.current);
+      saveAskTimer.current = setTimeout(() => {
+        void saveAsk({ data: { chartKey: askId, thread: nextThread, notes: nextNotes } }).catch(() => {
+          /* keep the local copy if the account write fails */
+        });
+      }, 400);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (saveAskTimer.current) clearTimeout(saveAskTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!savedId) return;
@@ -162,7 +188,13 @@ export function AskPanel() {
       if (nat && visitor) {
         if (signedIn && skyNatal) {
           const result = await askTheSky({
-            data: { natal: skyNatal, question: q, history: thread, focus: about?.focus },
+            data: {
+              natal: trimSkyForAsk(skyNatal),
+              question: q,
+              history: thread,
+              focus: about?.focus,
+              notes: notesRef.current.map((n) => n.text),
+            },
           });
           text = result.text;
         } else if (!signedIn && guestAsks >= 2) {
@@ -175,7 +207,13 @@ export function AskPanel() {
       } else if (sky && shelf) {
         if (signedIn) {
           const result = await askTheSky({
-            data: { natal: sky, question: q, history: thread, focus: about?.focus },
+            data: {
+              natal: trimSkyForAsk(sky),
+              question: q,
+              history: thread,
+              focus: about?.focus,
+              notes: notesRef.current.map((n) => n.text),
+            },
           });
           text = result.text;
         } else {
