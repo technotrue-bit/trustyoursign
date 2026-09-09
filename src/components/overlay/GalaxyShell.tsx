@@ -20,13 +20,14 @@ export function GalaxyShell() {
   const introVeil = useGalaxy((s) => s.introVeil);
   const introSkip = useGalaxy((s) => s.introSkip);
   const introDone = useGalaxy((s) => s.introDone);
-  const explore = useGalaxy((s) => s.explore);
+  const explorePhase = useGalaxy((s) => s.explore.phase);
+  const exploreWorldFade = useGalaxy((s) => s.explore.worldFade);
   const asking = introVeil > 0.04;
   const titleAnimating = !introDone && introTitle > 0.08;
   const openClaim = useSessionStore((s) => s.openClaim);
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
-  const exploring = explore.phase !== "idle";
-  const worldFade = exploring ? explore.worldFade : 1;
+  const exploring = explorePhase !== "idle";
+  const worldFade = exploring ? exploreWorldFade : 1;
 
   if (!born) {
     return (

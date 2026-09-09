@@ -18,6 +18,7 @@ type Props = {
 
 type Entry = { tex: CanvasTexture; mat: SpriteMaterial; aspect: number };
 
+const LABEL_CACHE_MAX = 64;
 const cache = new Map<string, Entry>();
 
 function asText(node: ReactNode): string {
@@ -27,10 +28,20 @@ function asText(node: ReactNode): string {
   return "";
 }
 
+function disposeEntry(entry: Entry) {
+  entry.tex.dispose();
+  entry.mat.dispose();
+}
+
 function getLabel(text: string, color: string): Entry {
   const key = `${text}\0${color}`;
   const hit = cache.get(key);
-  if (hit) return hit;
+  if (hit) {
+    // LRU: re-insert to move to end
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit;
+  }
   const pad = 12;
   const fontPx = 64;
   const canvas = document.createElement("canvas");
@@ -57,6 +68,13 @@ function getLabel(text: string, color: string): Entry {
     fog: false,
   });
   const entry = { tex, mat, aspect: canvas.width / canvas.height };
+  while (cache.size >= LABEL_CACHE_MAX) {
+    const oldest = cache.keys().next().value;
+    if (oldest == null) break;
+    const evicted = cache.get(oldest);
+    cache.delete(oldest);
+    if (evicted) disposeEntry(evicted);
+  }
   cache.set(key, entry);
   return entry;
 }

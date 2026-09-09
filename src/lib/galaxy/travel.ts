@@ -961,8 +961,19 @@ export function stepAutoSign(
 export function ensureAutoClock() {
   if (typeof window === "undefined" || autoClock) return;
   autoLast = nowMs();
+  const onVis = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      autoLast = nowMs();
+    }
+  };
+  document.addEventListener("visibilitychange", onVis);
+  (ensureAutoClock as { _onVis?: () => void })._onVis = onVis;
   const tick = (now: number) => {
     autoClock = requestAnimationFrame(tick);
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      autoLast = now;
+      return;
+    }
     const dt = Math.min(0.1, (now - autoLast) / 1000);
     autoLast = now;
     if (!Number.isFinite(dt) || dt < 0) return;
@@ -974,6 +985,20 @@ export function ensureAutoClock() {
     });
   };
   autoClock = requestAnimationFrame(tick);
+}
+
+/** Cancel the auto-sign rAF and drop the visibility listener. */
+export function stopAutoClock() {
+  if (typeof window === "undefined") return;
+  if (autoClock) {
+    cancelAnimationFrame(autoClock);
+    autoClock = 0;
+  }
+  const onVis = (ensureAutoClock as { _onVis?: () => void })._onVis;
+  if (onVis) {
+    document.removeEventListener("visibilitychange", onVis);
+    (ensureAutoClock as { _onVis?: () => void })._onVis = undefined;
+  }
 }
 
 /** t-distance from the camera to this sign's gate. Positive = still ahead. */
