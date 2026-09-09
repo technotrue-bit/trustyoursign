@@ -1,4 +1,7 @@
+import { createRequire } from "node:module";
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+
+const nodeRequire = createRequire(import.meta.url);
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
@@ -46,6 +49,8 @@ export interface Sql {
  */
 const globalRef = globalThis as typeof globalThis & {
   __pgSqlPromise__?: Promise<Sql>;
+  __neonPool__?: import("pg").Pool;
+  __neonTypesConfigured__?: boolean;
   __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
   __pgliteMigrateChain__?: Promise<void>;
 };
@@ -66,6 +71,27 @@ const OID_INT8 = 20;
 const OID_DATE = 1082;
 const OID_INTERVAL = 1186;
 const identity = (v: string) => v;
+
+/**
+ * One shared Neon `pg.Pool` for the process (modest max). Used by `getSql()` and
+ * Better Auth so they do not open competing pools against the same DATABASE_URL.
+ * Throws when DATABASE_URL is unset (PGLite path). Sync so auth can bind at boot.
+ */
+export function getNeonPool(): import("pg").Pool {
+  if (!databaseUrl) {
+    throw new Error("getNeonPool() requires DATABASE_URL");
+  }
+  if (globalRef.__neonPool__) return globalRef.__neonPool__;
+  const { Pool, types } = nodeRequire("pg") as typeof import("pg");
+  if (!globalRef.__neonTypesConfigured__) {
+    types.setTypeParser(OID_INT8, Number);
+    types.setTypeParser(OID_DATE, identity);
+    types.setTypeParser(OID_INTERVAL, identity);
+    globalRef.__neonTypesConfigured__ = true;
+  }
+  globalRef.__neonPool__ = new Pool({ connectionString: databaseUrl, max: 4 });
+  return globalRef.__neonPool__;
+}
 
 type Run = <T>(text: string, params: unknown[]) => Promise<T[]>;
 
@@ -88,12 +114,8 @@ function toSql(run: Run): Sql {
 function createNeonSql(): Promise<Sql> {
   globalRef.__pgSqlPromise__ ??= (async () => {
     // Regular Postgres driver: node-postgres (`pg`) — works directly with Neon's
-    // pooled endpoint. One pool per process; warm serverless instances reuse it.
-    const { Pool, types } = await import("pg");
-    types.setTypeParser(OID_INT8, Number);
-    types.setTypeParser(OID_DATE, identity);
-    types.setTypeParser(OID_INTERVAL, identity);
-    const pool = new Pool({ connectionString: databaseUrl });
+    // pooled endpoint. One shared pool per process (see getNeonPool).
+    const pool = getNeonPool();
     return toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];

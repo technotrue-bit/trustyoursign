@@ -3,24 +3,10 @@ import { getSql } from "@/lib/db";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal";
 import type { SignId } from "@/lib/chart/types";
+import { parseSignId } from "@/lib/chart/sign-canon";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { FieldNote, ThreadTurn } from "@/lib/field-notes";
 import { asChartKey } from "@/lib/charts-saved";
-
-const SIGNS: SignId[] = [
-  "aries",
-  "taurus",
-  "gemini",
-  "cancer",
-  "leo",
-  "virgo",
-  "libra",
-  "scorpio",
-  "sagittarius",
-  "capricorn",
-  "aquarius",
-  "pisces",
-];
 
 export type SavedChart = {
   id: string;
@@ -39,9 +25,26 @@ export type SavedChart = {
   createdAt: string;
 };
 
+/** Slim row for library / explore unlock — no natal_json payload. */
+export type ChartSummary = {
+  id: string;
+  label: string;
+  relation: "self" | "other";
+  personName: string | null;
+  signId: SignId;
+  birthMonth: number;
+  birthDay: number;
+  birthYear: number;
+  birthHour: number | null;
+  birthMinute: number | null;
+  birthPlace: string | null;
+  tone: "vault" | "warm";
+  hasTimedNatal: boolean;
+  createdAt: string;
+};
+
 function asSign(id: string): SignId {
-  if ((SIGNS as string[]).includes(id)) return id as SignId;
-  throw new Error("Unknown sign");
+  return parseSignId(id);
 }
 
 function asRelation(r: string): "self" | "other" {
@@ -229,6 +232,60 @@ export const listCharts = createServerFn({ method: "GET" })
     return rows.map(mapRow);
   });
 
+type ChartSummaryRow = {
+  id: string;
+  label: string;
+  relation: string;
+  person_name: string | null;
+  sign_id: string;
+  birth_month: number;
+  birth_day: number;
+  birth_year: number;
+  birth_hour: number | null;
+  birth_minute: number | null;
+  birth_place: string | null;
+  tone: string | null;
+  has_natal: boolean;
+  created_at: string;
+};
+
+function mapSummaryRow(row: ChartSummaryRow): ChartSummary {
+  const hasCoords =
+    row.birth_hour != null && row.birth_minute != null && Boolean(row.birth_place);
+  return {
+    id: row.id,
+    label: row.label,
+    relation: asRelation(row.relation),
+    personName: row.person_name,
+    signId: asSign(row.sign_id),
+    birthMonth: Number(row.birth_month),
+    birthDay: Number(row.birth_day),
+    birthYear: Number(row.birth_year),
+    birthHour: row.birth_hour == null ? null : Number(row.birth_hour),
+    birthMinute: row.birth_minute == null ? null : Number(row.birth_minute),
+    birthPlace: row.birth_place ? String(row.birth_place) : null,
+    tone: row.tone === "warm" ? "warm" : "vault",
+    hasTimedNatal: Boolean(hasCoords && row.has_natal),
+    createdAt: String(row.created_at),
+  };
+}
+
+/** Library / explore unlock — chart fields without natal_json payload. */
+export const listChartSummaries = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    const rows = await sql<ChartSummaryRow>`
+      select id, label, relation, person_name, sign_id, birth_month, birth_day, birth_year,
+             birth_hour, birth_minute, birth_place, tone, created_at,
+             (natal_json is not null) as has_natal
+      from charts
+      where user_id = ${context.userId}
+      order by created_at desc
+    `;
+    return rows.map(mapSummaryRow);
+  });
+
 export const upsertChart = createServerFn({ method: "POST" })
   .validator((input: ChartWriteInput & { id?: string }) => {
     const id = input.id?.trim() || undefined;
@@ -260,6 +317,7 @@ export const deleteAllMyData = createServerFn({ method: "POST" })
     const sql = await getSql();
     await sql`delete from charts where user_id = ${context.userId}`;
     await sql`delete from chart_ask where user_id = ${context.userId}`;
+    await sql`delete from sky_pass where user_id = ${context.userId}`;
     await sql`delete from legal_acceptances where user_id = ${context.userId}`;
     return { ok: true };
   });
