@@ -12,7 +12,14 @@ import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
 import { primeOwner } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
+type LoginSearch = {
+  create?: boolean;
+};
+
 export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>): LoginSearch => ({
+    create: search.create === true || search.create === "1" || search.create === "true" ? true : undefined,
+  }),
   beforeLoad: async () => {
     await primeOwner();
   },
@@ -20,7 +27,8 @@ export const Route = createFileRoute("/login")({
 });
 
 function Login() {
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const { create } = Route.useSearch();
+  const signingUp = Boolean(create);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,11 +50,11 @@ function Login() {
 
   const emailAuth = async () => {
     setError(null);
-    if (mode === "up" && (!ageOk || !legalOk)) {
+    if (signingUp && (!ageOk || !legalOk)) {
       setError(`Confirm you are ${MIN_AGE} or older and accept the terms.`);
       return;
     }
-    if (mode === "up" && password.length < 8) {
+    if (signingUp && password.length < 8) {
       setError("Password needs at least 8 characters.");
       return;
     }
@@ -56,7 +64,7 @@ function Login() {
       const owner = isOwnerLogin(ident);
       const addr = owner ? SITE_OWNER.email : ident;
       const captchaHeaders = turnstileCaptchaHeaders();
-      if (mode === "up") {
+      if (signingUp) {
         const { error: err } = await authClient.signUp.email({
           email: email.trim(),
           password,
@@ -78,7 +86,7 @@ function Login() {
         });
         if (err) throw new Error(err.message ?? "Could not sign in");
       }
-      window.location.href = mode === "up" ? "/account" : isOwnerLogin(email.trim()) ? "/admin" : "/account";
+      window.location.href = signingUp ? "/account" : isOwnerLogin(email.trim()) ? "/admin" : "/account";
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not continue");
@@ -99,8 +107,39 @@ function Login() {
         <p className="mt-8 text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">The Vault</p>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Keep the sky.</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-          Sign in to save your chart, and any chart someone has given you permission to keep.
+          {signingUp
+            ? "Create an account to save your chart, and any chart someone has given you permission to keep."
+            : "Sign in to save your chart, and any chart someone has given you permission to keep."}
         </p>
+
+        <div className="relative z-10 mt-8 grid grid-cols-2 gap-1 rounded-lg bg-bg-subtle p-2">
+          <Link
+            to="/login"
+            search={{}}
+            replace
+            resetScroll={false}
+            aria-current={!signingUp ? "page" : undefined}
+            className={cn(
+              "flex min-h-12 items-center justify-center rounded-md px-3 text-center text-xs tracking-[0.18em] uppercase",
+              !signingUp ? "bg-accent text-accent-fg" : "text-fg-muted hover:text-fg",
+            )}
+          >
+            Sign in
+          </Link>
+          <Link
+            to="/login"
+            search={{ create: true }}
+            replace
+            resetScroll={false}
+            aria-current={signingUp ? "page" : undefined}
+            className={cn(
+              "flex min-h-12 items-center justify-center rounded-md px-3 text-center text-xs tracking-[0.18em] uppercase",
+              signingUp ? "bg-accent text-accent-fg" : "text-fg-muted hover:text-fg",
+            )}
+          >
+            Create account
+          </Link>
+        </div>
 
         {authEnabled ? (
           <div className="mt-8 space-y-3">
@@ -124,40 +163,14 @@ function Login() {
           <p className="mb-4 text-center text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase">
             Or use email
           </p>
-          <div className="flex gap-1" role="tablist" aria-label="Account">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "in"}
-              className={cn(
-                "min-h-11 flex-1 border-b px-2 text-xs tracking-[0.18em] uppercase",
-                mode === "in" ? "border-fg text-fg" : "border-transparent text-fg-subtle",
-              )}
-              onClick={() => setMode("in")}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "up"}
-              className={cn(
-                "min-h-11 flex-1 border-b px-2 text-xs tracking-[0.18em] uppercase",
-                mode === "up" ? "border-fg text-fg" : "border-transparent text-fg-subtle",
-              )}
-              onClick={() => setMode("up")}
-            >
-              Create account
-            </button>
-          </div>
           <form
-            className="mt-5 space-y-3"
+            className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
               void emailAuth();
             }}
           >
-            {mode === "up" ? (
+            {signingUp ? (
               <label className="block">
                 <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Name</span>
                 <input
@@ -172,13 +185,13 @@ function Login() {
             <label className="block">
               <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Email</span>
               <input
-                type={mode === "up" ? "email" : "text"}
+                type={signingUp ? "email" : "text"}
                 inputMode="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-fg outline-none focus:border-accent"
-                autoComplete={mode === "in" ? "username" : "email"}
+                autoComplete={signingUp ? "email" : "username"}
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
@@ -192,11 +205,11 @@ function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-fg outline-none focus:border-accent"
-                autoComplete={mode === "up" ? "new-password" : "current-password"}
-                minLength={mode === "up" ? 8 : 1}
+                autoComplete={signingUp ? "new-password" : "current-password"}
+                minLength={signingUp ? 8 : 1}
               />
             </label>
-            {mode === "up" ? (
+            {signingUp ? (
               <div className="space-y-2 pt-1 text-sm leading-relaxed text-fg-muted">
                 <label className="flex min-h-11 items-start gap-2">
                   <input type="checkbox" checked={ageOk} onChange={(e) => setAgeOk(e.target.checked)} className="mt-1" />
@@ -225,7 +238,7 @@ function Login() {
               disabled={busy || !authEnabled}
               className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase disabled:opacity-50"
             >
-              {mode === "up" ? "Create account" : "Sign in"}
+              {signingUp ? "Create account" : "Sign in"}
             </button>
           </form>
         </div>
