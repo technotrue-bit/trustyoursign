@@ -131,7 +131,7 @@ export function SignGalaxyHud() {
               </p>
               {point.isHub && !unlocked ? (
                 <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
-                  Drag to look around
+                  Drag to look around. Tap a star to move.
                 </p>
               ) : null}
             </div>
@@ -141,27 +141,23 @@ export function SignGalaxyHud() {
             {inside ? (
               <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-2">
                 {galaxy.points.map((p, i) => {
-                  const locked = !p.isHub && !unlocked;
+                  const sealed = !p.isHub && !unlocked;
                   return (
                     <button
                       key={p.id}
                       type="button"
-                      disabled={locked}
-                      onClick={() => {
-                        if (locked) return;
-                        seekGalaxyPoint(i);
-                      }}
+                      onClick={() => seekGalaxyPoint(i)}
                       className={cn(
                         "min-h-10 min-w-10 rounded-sm px-2 text-[0.65rem] tracking-[0.14em] uppercase",
                         i === explore.pointIndex
                           ? "bg-fg/10 text-fg"
-                          : locked
-                            ? "text-fg-subtle/35"
+                          : sealed
+                            ? "text-fg-subtle/55 hover:text-fg-muted"
                             : "text-fg-subtle hover:text-fg",
                       )}
-                      aria-label={locked ? `${p.purpose.title} (locked)` : p.purpose.title}
+                      aria-label={sealed ? `${p.purpose.title} (sealed)` : p.purpose.title}
                     >
-                      {p.isHub ? "●" : locked ? "◌" : "○"}
+                      {p.isHub ? "●" : sealed ? "◌" : "○"}
                     </button>
                   );
                 })}

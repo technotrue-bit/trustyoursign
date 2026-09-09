@@ -698,6 +698,7 @@ export function FallbackSky() {
       const state = useSessionStore.getState();
       if (state.session || state.claim) return;
       if (galaxyTravel.birth < 1) return;
+      if (exploringSign()) return;
       if (Math.hypot(dx, dy) > 10 || galaxyTravel.hold !== 0 || pinchQuiet()) return;
       const r = canvas.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) return;
