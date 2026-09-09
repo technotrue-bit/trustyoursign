@@ -930,6 +930,13 @@ function TempleRig() {
         }
         return;
       }
+      if (exploringSign()) {
+        if (e.key === "Escape") {
+          exitSignGalaxy();
+          noteControl();
+        }
+        return;
+      }
       if (e.key === "ArrowDown" || e.key === "s" || e.key === "S" || e.key === "ArrowRight") {
         galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + 0.045);
         galaxyTravel.hold = 1;
@@ -947,10 +954,7 @@ function TempleRig() {
       } else if (e.key === "Enter" && galaxyTravel.birth < 1) {
         skipBirth();
         useGalaxy.getState().markBorn();
-      } else if (e.key === "Escape" && exploringSign()) {
-        exitSignGalaxy();
-        noteControl();
-      } else if (e.key === "Enter" && !exploringSign() && galaxyTravel.birth >= 1 && !introPlaying()) {
+      } else if (e.key === "Enter" && galaxyTravel.birth >= 1 && !introPlaying()) {
         enterSignGalaxy();
       }
     };
@@ -1089,6 +1093,23 @@ function TempleRig() {
         _cam.y += (_look.y - _cam.y) * (pull * 0.85);
         if (galaxyTravel.explorePhase === "inside") {
           _look.lerp(_chest, 0.35);
+          const lx = galaxyTravel.exploreLookX;
+          const ly = galaxyTravel.exploreLookY;
+          if (lx !== 0 || ly !== 0) {
+            _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+            _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+            // Negative lookX is look-left / grab-right so A and a right-drag agree.
+            _look.addScaledVector(_camRight, -lx);
+            _look.addScaledVector(_camUp, ly);
+            _cam.addScaledVector(_camRight, -lx * 0.72);
+            _cam.addScaledVector(_camUp, ly * 0.68);
+          }
+          if (!galaxyTravel.dragging && galaxyTravel.ptrOn) {
+            _look.x += galaxyTravel.ptrX * 0.35;
+            _look.y += -galaxyTravel.ptrY * 0.2;
+            _cam.x += galaxyTravel.ptrX * 0.12;
+            _cam.y += galaxyTravel.ptrY * 0.08;
+          }
         }
       }
     }

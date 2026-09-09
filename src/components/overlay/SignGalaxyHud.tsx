@@ -42,10 +42,11 @@ export function SignGalaxyHud() {
       : point?.purpose.body;
 
   return (
-    <div data-no-fly className="pointer-events-none absolute inset-0 z-40">
+    <div className="pointer-events-none absolute inset-0 z-40">
       {/* Lock the screen for the whole enter dive — only Skip is live. */}
       {entering ? (
         <div
+          data-no-fly
           className="pointer-events-auto absolute inset-0 z-[55]"
           aria-hidden
           onPointerDown={(e) => e.preventDefault()}
@@ -128,6 +129,11 @@ export function SignGalaxyHud() {
                   {point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}
                 </Gloss>
               </p>
+              {point.isHub && !unlocked ? (
+                <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
+                  Drag to look around
+                </p>
+              ) : null}
             </div>
           ) : null}
 
