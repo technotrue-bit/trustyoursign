@@ -1,7 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CALENDAR_SIGN_INDICES, CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { noteControl, seekSign } from "@/lib/galaxy/travel";
+
+/** px/ms — above this, the belt soft-glows while rushing between signs. */
+const RUSH_SPEED = 0.85;
+/** How fast rush intensity falls once motion slows (units / second). */
+const RUSH_DECAY = 3.2;
 
 /** Strip jumps always use direct seek so left/right feel the same short lerp. */
 function jumpTo(index: number) {
@@ -24,17 +29,79 @@ function nearestFromScroll(scroller: HTMLElement) {
   return best;
 }
 
+function userStripMotion(hands: boolean, wheelUntil: number) {
+  return hands || performance.now() <= wheelUntil;
+}
+
 /** Horizontal snap-strip of the twelve. Swipe to jump the sky faster than cruise. */
 export function SignStrip() {
   const signIndex = useGalaxy((s) => s.signIndex);
   const moved = useGalaxy((s) => s.moved);
   const scrollerRef = useRef<HTMLUListElement>(null);
+  const beltRef = useRef<HTMLDivElement>(null);
   const fromStrip = useRef(false);
   const programmatic = useRef(false);
   const hands = useRef(false);
   const wheelUntil = useRef(0);
   const settle = useRef(0);
   const mounted = useRef(false);
+  const lastScroll = useRef({ left: 0, at: 0 });
+  const rushRef = useRef(0);
+  const rushRaf = useRef(0);
+  const [rushing, setRushing] = useState(false);
+
+  const paintRush = (next: number) => {
+    const clamped = Math.min(1, Math.max(0, next));
+    rushRef.current = clamped;
+    const belt = beltRef.current;
+    if (belt) belt.style.setProperty("--belt-rush", clamped.toFixed(3));
+    setRushing(clamped > 0.04);
+  };
+
+  const stopRushDecay = () => {
+    if (rushRaf.current) {
+      cancelAnimationFrame(rushRaf.current);
+      rushRaf.current = 0;
+    }
+  };
+
+  const startRushDecay = () => {
+    stopRushDecay();
+    let prev = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - prev) / 1000);
+      prev = now;
+      const next = rushRef.current - RUSH_DECAY * dt;
+      if (next <= 0.01) {
+        paintRush(0);
+        rushRaf.current = 0;
+        return;
+      }
+      paintRush(next);
+      rushRaf.current = requestAnimationFrame(tick);
+    };
+    rushRaf.current = requestAnimationFrame(tick);
+  };
+
+  const noteRushFromScroll = (el: HTMLElement) => {
+    if (programmatic.current) return;
+    if (!userStripMotion(hands.current, wheelUntil.current)) return;
+    const now = performance.now();
+    const left = el.scrollLeft;
+    const prev = lastScroll.current;
+    const dt = now - prev.at;
+    if (prev.at > 0 && dt > 0 && dt < 120) {
+      const speed = Math.abs(left - prev.left) / dt;
+      if (speed >= RUSH_SPEED) {
+        stopRushDecay();
+        // Map speed into a soft 0.55–1 band so slow-fast still glows gently.
+        const intensity = Math.min(1, 0.55 + (speed - RUSH_SPEED) / 1.8);
+        paintRush(Math.max(rushRef.current, intensity));
+        startRushDecay();
+      }
+    }
+    lastScroll.current = { left, at: now };
+  };
 
   const centerItem = (index: number, smooth: boolean) => {
     const scroller = scrollerRef.current;
@@ -49,6 +116,7 @@ export function SignStrip() {
       () => {
         programmatic.current = false;
         fromStrip.current = false;
+        lastScroll.current = { left: scroller.scrollLeft, at: performance.now() };
       },
       smooth ? 720 : 40,
     );
@@ -57,6 +125,7 @@ export function SignStrip() {
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
+    lastScroll.current = { left: el.scrollLeft, at: performance.now() };
     centerItem(useGalaxy.getState().signIndex, false);
     const onWheel = (e: WheelEvent) => {
       hands.current = true;
@@ -67,6 +136,7 @@ export function SignStrip() {
         el.scrollLeft += e.deltaY;
       }
       e.stopPropagation();
+      noteRushFromScroll(el);
     };
     const onUp = () => {
       hands.current = false;
@@ -78,6 +148,8 @@ export function SignStrip() {
       el.removeEventListener("wheel", onWheel);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      stopRushDecay();
+      window.clearTimeout(settle.current);
     };
   }, []);
 
@@ -89,10 +161,11 @@ export function SignStrip() {
   }, [signIndex, moved]);
 
   const onScroll = () => {
-    if (programmatic.current) return;
-    if (!hands.current && performance.now() > wheelUntil.current) return;
     const el = scrollerRef.current;
     if (!el) return;
+    noteRushFromScroll(el);
+    if (programmatic.current) return;
+    if (!userStripMotion(hands.current, wheelUntil.current)) return;
     fromStrip.current = true;
     const next = nearestFromScroll(el);
     if (next !== useGalaxy.getState().signIndex || !useGalaxy.getState().moved) {
@@ -101,7 +174,11 @@ export function SignStrip() {
   };
 
   return (
-    <div className="sign-strip-belt pointer-events-auto">
+    <div
+      ref={beltRef}
+      className={`sign-strip-belt pointer-events-auto${rushing ? " sign-strip-belt--rush" : ""}`}
+      style={{ ["--belt-rush" as string]: "0" }}
+    >
       <ul
         ref={scrollerRef}
         className="sign-strip"
