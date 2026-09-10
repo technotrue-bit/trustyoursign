@@ -1,8 +1,20 @@
-import { createRequire } from "node:module";
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 import { AppRls } from "./db-rls";
 
-const nodeRequire = createRequire(import.meta.url);
+type NodeModule = { createRequire: (url: string) => (id: string) => unknown };
+
+function nodeRequire(id: string): unknown {
+  const proc = (globalThis as { process?: { getBuiltinModule?: (m: string) => NodeModule } }).process;
+  const load = proc?.getBuiltinModule;
+  if (typeof load !== "function") {
+    throw new Error(`server-only module requested in the browser: ${id}`);
+  }
+  const createRequire = load("node:module")?.createRequire;
+  if (typeof createRequire !== "function") {
+    throw new Error(`createRequire unavailable for ${id}`);
+  }
+  return createRequire(import.meta.url)(id);
+}
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";

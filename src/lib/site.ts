@@ -90,8 +90,11 @@ class OwnerAccount {
   }
 }
 
-// Server module init only — not exposed as createServerFn.
-void OwnerAccount.bootstrap();
+// Server module init only — not exposed as createServerFn. Skip in the browser:
+// this file is imported from OwnerBind as RPC stubs.
+if (typeof document === "undefined") {
+  void OwnerAccount.bootstrap();
+}
 
 function previewDeskOpen() {
   if (process.env.VERCEL) return false;
