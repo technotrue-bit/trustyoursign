@@ -1,48 +1,97 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getSql } from "@/lib/db";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { AppRls } from "@/lib/db-rls";
 import { isSiteOwner, SITE_OWNER, OWNER_USER_ID } from "./owner";
 
-/** Owner desk login. Kept server-side only. */
-const OWNER_PASSWORD = "True";
+/**
+ * Owner desk credentials — env only. The legacy hardcoded value `True` is
+ * treated as compromised and rejected even if someone sets it in env.
+ */
+class OwnerPassword {
+  static readonly COMPROMISED = "True";
 
-async function ensureOwnerAccount() {
-  const sql = await getSql();
-  const { hashPassword } = await import("better-auth/crypto");
-  const hash = await hashPassword(OWNER_PASSWORD);
-  const id = OWNER_USER_ID;
-  const email = SITE_OWNER.email;
-  const name = SITE_OWNER.name;
-  await sql`
-    insert into "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
-    values (${id}, ${name}, ${email}, true, now(), now())
-    on conflict ("email") do update set "name" = excluded."name", "updatedAt" = now()
-  `;
-  const acc = await sql<{ id: string }>`
-    select "id" from "account" where "userId" = ${id} and "providerId" = 'credential'
-  `;
-  if (acc.length === 0) {
-    await sql`
-      insert into "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
-      values (${`${id}-cred`}, ${id}, 'credential', ${id}, ${hash}, now(), now())
-    `;
-  } else {
-    await sql`
-      update "account" set "password" = ${hash}, "updatedAt" = now()
-      where "userId" = ${id} and "providerId" = 'credential'
-    `;
+  static read(): string | undefined {
+    const value = process.env.OWNER_PASSWORD?.trim();
+    if (!value) return undefined;
+    if (value === OwnerPassword.COMPROMISED) return undefined;
+    return value;
   }
-  await sql`
-    update site_state
-    set owner_user_id = ${id}, owner_name = ${name}, owner_handle = ${SITE_OWNER.handle}
-    where id = 'vault'
-  `;
+
+  static isProd(): boolean {
+    return Boolean(process.env.VERCEL) || process.env.NODE_ENV === "production";
+  }
+
+  /** Fail closed when production (or Vercel) has no usable OWNER_PASSWORD. */
+  static require(): string {
+    const password = OwnerPassword.read();
+    if (password) return password;
+    throw new Error(
+      OwnerPassword.isProd()
+        ? "OWNER_PASSWORD must be set to a strong secret in deployment env (legacy value rejected)"
+        : "OWNER_PASSWORD is not configured",
+    );
+  }
 }
 
-export const primeOwner = createServerFn({ method: "GET" }).handler(async () => {
-  await ensureOwnerAccount();
-  return { ok: true };
-});
+/**
+ * Owner account bootstrap. Never overwrites an existing credential hash from
+ * public HTTP. Seed insert-only when password env is present.
+ */
+class OwnerAccount {
+  static async ensure(opts?: { seedCredential?: boolean }) {
+    const sql = await getSql();
+    const id = OWNER_USER_ID;
+    const email = SITE_OWNER.email;
+    const name = SITE_OWNER.name;
+
+    await sql`
+      insert into "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
+      values (${id}, ${name}, ${email}, true, now(), now())
+      on conflict ("email") do update set "name" = excluded."name", "updatedAt" = now()
+    `;
+
+    if (opts?.seedCredential) {
+      const password = OwnerPassword.read();
+      if (password) {
+        const { hashPassword } = await import("better-auth/crypto");
+        const hash = await hashPassword(password);
+        const acc = await sql<{ id: string }>`
+          select "id" from "account" where "userId" = ${id} and "providerId" = 'credential'
+        `;
+        if (acc.length === 0) {
+          await sql`
+            insert into "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
+            values (${`${id}-cred`}, ${id}, 'credential', ${id}, ${hash}, now(), now())
+          `;
+        }
+        // Existing credential: never reset from here (closes public hash-reset).
+      } else if (OwnerPassword.isProd()) {
+        throw new Error("OWNER_PASSWORD must be set to seed the owner credential in production");
+      }
+    }
+
+    await sql`
+      update site_state
+      set owner_user_id = ${id}, owner_name = ${name}, owner_handle = ${SITE_OWNER.handle}
+      where id = 'vault'
+    `;
+  }
+
+  /** Cold-start seed: server-only, not an HTTP server fn. */
+  static bootstrap() {
+    return AppRls.bypass(async () => {
+      try {
+        await OwnerAccount.ensure({ seedCredential: true });
+      } catch {
+        // Preview without OWNER_PASSWORD stays inert; production login simply fails closed.
+      }
+    });
+  }
+}
+
+// Server module init only — not exposed as createServerFn.
+void OwnerAccount.bootstrap();
 
 function previewDeskOpen() {
   if (process.env.VERCEL) return false;
@@ -50,16 +99,25 @@ function previewDeskOpen() {
   return true;
 }
 
-/** Live-preview only: mint a bearer for the owner so the desk stays open. Never on Vercel. */
+/**
+ * Live-preview only: mint a bearer for the owner so the desk stays open.
+ * Requires OWNER_PASSWORD in env. Never on Vercel. Not a public password reset.
+ */
 export const bindOwnerPreview = createServerFn({ method: "POST" }).handler(async () => {
   if (!previewDeskOpen()) return { token: null as string | null, owner: false as const };
-  await ensureOwnerAccount();
+  const password = OwnerPassword.read();
+  if (!password) return { token: null as string | null, owner: false as const };
+
+  await AppRls.bypass(async () => {
+    await OwnerAccount.ensure({ seedCredential: true });
+  });
+
   const { auth } = await import("@/lib/auth/server");
   try {
     const result = await auth.api.signInEmail({
       body: {
         email: SITE_OWNER.email,
-        password: OWNER_PASSWORD,
+        password,
         rememberMe: true,
       },
     });
@@ -74,7 +132,11 @@ export const bindOwnerPreview = createServerFn({ method: "POST" }).handler(async
 export const claimSite = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    await ensureOwnerAccount();
+    // Sync site_state pointer only — never touch credential hashes here.
+    await AppRls.bypass(async () => {
+      await OwnerAccount.ensure({ seedCredential: false });
+    });
+
     if (context.userId === OWNER_USER_ID) {
       return { owner: true as const, ...SITE_OWNER };
     }

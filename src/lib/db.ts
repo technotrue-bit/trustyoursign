@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+import { AppRls } from "./db-rls";
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -111,14 +112,51 @@ function toSql(run: Run): Sql {
   return sql;
 }
 
+
+/** Apply request-scoped RLS GUCs on a connected client (SET LOCAL). */
+async function applyRlsGucs(query: (text: string, params?: unknown[]) => Promise<unknown>) {
+  const ctx = AppRls.current();
+  if (!ctx) return;
+  if (ctx.bypass) {
+    await query("select set_config('app.rls_bypass', '1', true)");
+    return;
+  }
+  if (ctx.userId) {
+    await query("select set_config('app.user_id', $1, true)", [ctx.userId]);
+  }
+  if (ctx.isOwner) {
+    await query("select set_config('app.is_owner', '1', true)");
+  }
+}
+
 function createNeonSql(): Promise<Sql> {
   globalRef.__pgSqlPromise__ ??= (async () => {
     // Regular Postgres driver: node-postgres (`pg`) — works directly with Neon's
     // pooled endpoint. One shared pool per process (see getNeonPool).
     const pool = getNeonPool();
     return toSql(async <T>(text: string, params: unknown[]) => {
-      const res = await pool.query(text, params);
-      return res.rows as T[];
+      const ctx = AppRls.current();
+      if (!ctx) {
+        const res = await pool.query(text, params);
+        return res.rows as T[];
+      }
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await applyRlsGucs((sql, p) => client.query(sql, p as unknown[] | undefined));
+        const res = await client.query(text, params);
+        await client.query("COMMIT");
+        return res.rows as T[];
+      } catch (err) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          /* keep original */
+        }
+        throw err;
+      } finally {
+        client.release();
+      }
     });
   })().catch((err) => {
     globalRef.__pgSqlPromise__ = undefined;
@@ -184,8 +222,26 @@ async function createPgliteSql(): Promise<Sql> {
   await pass;
 
   return toSql(async <T>(text: string, params: unknown[]) => {
-    const result = await pg.query<T>(text, params);
-    return result.rows;
+    const ctx = AppRls.current();
+    if (!ctx) {
+      const result = await pg.query<T>(text, params);
+      return result.rows;
+    }
+    // SET LOCAL requires a transaction boundary on PGLite as well.
+    await pg.query("BEGIN");
+    try {
+      await applyRlsGucs((sql, p) => pg.query(sql, p as unknown[] | undefined));
+      const result = await pg.query<T>(text, params);
+      await pg.query("COMMIT");
+      return result.rows;
+    } catch (err) {
+      try {
+        await pg.query("ROLLBACK");
+      } catch {
+        /* keep original */
+      }
+      throw err;
+    }
   });
 }
 
