@@ -1,4 +1,4 @@
-import { assertSiteOwner } from "@/lib/owner";
+import { assertSiteOwner } from "@/lib/owner.server";
 import type { ResearchChartId } from "../types";
 import type { Nativity } from "../schema";
 import { SAIGE } from "./saige";

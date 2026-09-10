@@ -34,7 +34,7 @@ import { bearer, genericOAuth, captcha } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
-import { ensureDbReady, getNeonPool, getPglite } from "../db";
+import { ensureDbReady, getNeonPool, getPglite } from "../db.server";
 import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";

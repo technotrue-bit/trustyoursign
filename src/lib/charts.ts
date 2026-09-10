@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getSql } from "@/lib/db";
+import type { Sql } from "@/lib/db";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal";
 import type { SignId } from "@/lib/chart/types";
@@ -164,7 +164,7 @@ function normalizeChartWrite(input: ChartWriteInput): NormalizedChartWrite {
 }
 
 async function persistChart(
-  sql: Awaited<ReturnType<typeof getSql>>,
+  sql: Sql,
   userId: string,
   data: NormalizedChartWrite & { id?: string },
 ): Promise<SavedChart> {
@@ -221,6 +221,7 @@ async function persistChart(
 export const listCharts = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     const rows = await sql<ChartRow>`
       select id, label, relation, person_name, sign_id, birth_month, birth_day, birth_year,
@@ -274,6 +275,7 @@ function mapSummaryRow(row: ChartSummaryRow): ChartSummary {
 export const listChartSummaries = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     const rows = await sql<ChartSummaryRow>`
       select id, label, relation, person_name, sign_id, birth_month, birth_day, birth_year,
@@ -294,6 +296,7 @@ export const upsertChart = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     return persistChart(sql, context.userId, data);
   });
@@ -306,6 +309,7 @@ export const deleteChart = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data: id }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     await sql`delete from charts where id = ${id} and user_id = ${context.userId}`;
     return { ok: true };
@@ -314,6 +318,7 @@ export const deleteChart = createServerFn({ method: "POST" })
 export const deleteAllMyData = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     await sql`delete from charts where user_id = ${context.userId}`;
     await sql`delete from chart_ask where user_id = ${context.userId}`;
@@ -325,6 +330,7 @@ export const deleteAllMyData = createServerFn({ method: "POST" })
 export const acceptLegal = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     await sql`
       insert into legal_acceptances (user_id, terms_version, privacy_version)
@@ -355,6 +361,7 @@ export const loadAsk = createServerFn({ method: "GET" })
   .validator((chartKey: string) => asChartKey(chartKey))
   .middleware([authMiddleware])
   .handler(async ({ context, data: chartKey }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     const rows = await sql<{ thread_json: string; notes_json: string }>`
       select thread_json, notes_json from chart_ask
@@ -381,6 +388,7 @@ export const saveAsk = createServerFn({ method: "POST" })
   }))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     const threadJson = JSON.stringify(data.thread);
     const notesJson = JSON.stringify(data.notes);
