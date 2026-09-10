@@ -64,6 +64,7 @@ import {
   computePlateOpacity,
 } from "@/lib/galaxy/birthchat-slide";
 import { createDiskSim, disposeDisk, stepDisk } from "@/lib/galaxy/disk";
+import { galaxyLayerName } from "@/lib/galaxy/layers";
 import {
   loadSignArt,
   preloadSignArt,
@@ -330,8 +331,10 @@ function SignDisk() {
     sim.mat.uniforms.uPixelRatio.value = Math.min(2, gl.getPixelRatio());
   });
   return (
-    <group ref={group} visible={false} frustumCulled={false}>
+    <group ref={group} visible={false} frustumCulled={false} name={galaxyLayerName("sign-disk")}>
       <points
+        key={galaxyLayerName("sign-disk")}
+        name={galaxyLayerName("sign-disk")}
         geometry={sim.geo}
         material={sim.mat}
         frustumCulled={false}
@@ -375,7 +378,14 @@ function Dust() {
     if (!Array.isArray(mat) && "opacity" in mat) mat.opacity = 0.35 * vis;
   });
   return (
-    <points ref={points} geometry={geo} frustumCulled={false} raycast={noopRaycast}>
+    <points
+      ref={points}
+      key={galaxyLayerName("dust-field")}
+      name={galaxyLayerName("dust-field")}
+      geometry={geo}
+      frustumCulled={false}
+      raycast={noopRaycast}
+    >
       <pointsMaterial
         map={tex}
         color="#e8d8c0"
@@ -722,8 +732,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     }
   });
 
+  const stationName = `${galaxyLayerName("station-cloud")}-${sign.id}`;
   return (
-    <group ref={group} frustumCulled={false}>
+    <group ref={group} frustumCulled={false} name={stationName}>
       <mesh
         onClick={(e) => {
           e.stopPropagation();
@@ -764,6 +775,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       ) : null}
       <points
         ref={cores}
+        key={stationName}
+        name={stationName}
         geometry={starGeo}
         material={coreMat}
         frustumCulled={false}
