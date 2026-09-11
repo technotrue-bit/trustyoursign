@@ -4,7 +4,7 @@ export const SITE_OWNER = {
   name: "Devin Norris",
   handle: "ItsMeTrueG",
   login: "ADMIN",
-  email: "admin@thevault.app",
+  email: "technotrue@icloud.com",
   role: "Owner",
 } as const;
 

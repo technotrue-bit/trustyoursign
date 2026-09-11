@@ -28,22 +28,44 @@ class OwnerAccount {
     await sql`
       insert into "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
       values (${id}, ${name}, ${email}, true, now(), now())
-      on conflict ("email") do update set "name" = excluded."name", "updatedAt" = now()
+      on conflict ("id") do update
+        set "name" = excluded."name",
+            "email" = excluded."email",
+            "emailVerified" = true,
+            "updatedAt" = now()
     `;
 
     if (opts?.seedCredential) {
       const password = OwnerPassword.read();
       if (password) {
-        const { hashPassword } = await import("better-auth/crypto");
-        const hash = await hashPassword(password);
-        const acc = await sql<{ id: string }>`
-          select "id" from "account" where "userId" = ${id} and "providerId" = 'credential'
+        const { hashPassword, verifyPassword } = await import("better-auth/crypto");
+        const acc = await sql<{ id: string; password: string | null }>`
+          select "id", "password" from "account"
+          where "userId" = ${id} and "providerId" = 'credential' limit 1
         `;
-        if (acc.length === 0) {
+        const existing = acc[0];
+        if (!existing) {
+          const hash = await hashPassword(password);
           await sql`
             insert into "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
             values (${`${id}-cred`}, ${id}, 'credential', ${id}, ${hash}, now(), now())
           `;
+        } else {
+          // The env var is the source of truth: if OWNER_PASSWORD has changed
+          // since the hash was written, rotate it. Without this the original
+          // (possibly leaked) password keeps working and a rotation silently
+          // does nothing — the hash used to be written once and never updated.
+          const matches = existing.password
+            ? await verifyPassword({ hash: existing.password, password })
+            : false;
+          if (!matches) {
+            const hash = await hashPassword(password);
+            await sql`
+              update "account" set "password" = ${hash}, "updatedAt" = now()
+              where "id" = ${existing.id}
+            `;
+            console.warn("[owner] OWNER_PASSWORD changed — rotated the owner credential hash");
+          }
         }
       } else if (OwnerPassword.isProd()) {
         throw new Error("OWNER_PASSWORD must be set to seed the owner credential in production");
@@ -63,8 +85,19 @@ class OwnerAccount {
     return AppRls.bypass(async () => {
       try {
         await OwnerAccount.ensure({ seedCredential: true });
-      } catch {
-        // Preview without OWNER_PASSWORD stays inert; production login simply fails closed.
+      } catch (err) {
+        // Expected in the live preview when OWNER_PASSWORD is unset — owner
+        // sign-in stays inert there. But when a password IS configured (or we
+        // are deployed), a failure means owner sign-in is broken — most likely
+        // the target owner email already belongs to another account — and must
+        // reach the host logs rather than vanish.
+        if (OwnerPassword.read() || OwnerPassword.isProd()) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(
+            "[owner] bootstrap FAILED — owner sign-in will not work until this is fixed:",
+            message,
+          );
+        }
       }
     });
   }
