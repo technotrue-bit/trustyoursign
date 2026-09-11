@@ -1,6 +1,7 @@
 import { getSql } from "@/lib/db.server";
 import { AppRls } from "@/lib/db-rls.server";
-import { isSiteOwner, SITE_OWNER, OWNER_USER_ID } from "./owner";
+import { assertSiteOwner } from "./owner.server";
+import { SITE_OWNER, OWNER_USER_ID } from "./owner";
 
 class OwnerPassword {
   static readonly COMPROMISED = "True";
@@ -51,7 +52,9 @@ class OwnerAccount {
 
     await sql`
       update site_state
-      set owner_user_id = ${id}, owner_name = ${name}, owner_handle = ${SITE_OWNER.handle}
+      set owner_user_id = coalesce(owner_user_id, ${id}),
+          owner_name = ${name},
+          owner_handle = ${SITE_OWNER.handle}
       where id = 'vault'
     `;
   }
@@ -106,38 +109,13 @@ export async function claimSiteImpl(context: { userId: string; bearerToken?: str
     await OwnerAccount.ensure({ seedCredential: false });
   });
 
-  if (context.userId === OWNER_USER_ID) {
+  // One authorization path for the whole app: the same immutable-identity check
+  // the owner-only server functions use. `bearerToken` is retained for call-site
+  // compatibility — identity now comes from the user row, never a session name.
+  try {
+    await assertSiteOwner(context.userId);
     return { owner: true as const, ...SITE_OWNER };
-  }
-  const token = context.bearerToken;
-  const { getSessionUser } = await import("@/lib/auth/verify.server");
-  const { getRequest } = await import("@tanstack/react-start/server");
-  const { auth } = await import("@/lib/auth/server");
-  const request = getRequest();
-  let name: string | null = null;
-  let email: string | null = null;
-  if (request) {
-    let headers = request.headers;
-    if (token) {
-      headers = new Headers(request.headers);
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-    const session = await auth.api.getSession({ headers });
-    name = session?.user?.name ?? null;
-    email = session?.user?.email ?? null;
-  }
-  const verified = await getSessionUser(token);
-  email = verified?.email ?? email;
-  const ok = isSiteOwner({ displayName: name, primaryEmail: email });
-  if (!ok) return { owner: false as const, ...SITE_OWNER };
-
-  const sql = await getSql();
-  const rows = await sql<{ owner_user_id: string | null }>`
-    select owner_user_id from site_state where id = 'vault'
-  `;
-  const current = rows[0]?.owner_user_id ?? null;
-  if (current && current !== context.userId && current !== OWNER_USER_ID) {
+  } catch {
     return { owner: false as const, ...SITE_OWNER };
   }
-  return { owner: true as const, ...SITE_OWNER };
 }
