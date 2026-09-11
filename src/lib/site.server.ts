@@ -9,7 +9,13 @@ class OwnerPassword {
   static read(): string | undefined {
     const value = process.env.OWNER_PASSWORD?.trim();
     if (!value) return undefined;
-    if (value === OwnerPassword.COMPROMISED) return undefined;
+    if (value === OwnerPassword.COMPROMISED) {
+      console.error(
+        "[owner] OWNER_PASSWORD is the compromised legacy value \"True\" — ignoring it. " +
+          "Set a new password in the host environment, or owner sign-in stays off.",
+      );
+      return undefined;
+    }
     return value;
   }
 
@@ -25,15 +31,28 @@ class OwnerAccount {
     const email = SITE_OWNER.email;
     const name = SITE_OWNER.name;
 
-    await sql`
-      insert into "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
-      values (${id}, ${name}, ${email}, true, now(), now())
-      on conflict ("id") do update
-        set "name" = excluded."name",
-            "email" = excluded."email",
-            "emailVerified" = true,
-            "updatedAt" = now()
-    `;
+    // Point the canonical owner row at the configured address. Best-effort on
+    // purpose: if another account already holds that email, the unique
+    // constraint rejects this — and that must NOT stop the credential below
+    // from seeding or rotating, since owner sign-in by identity still works.
+    try {
+      await sql`
+        insert into "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
+        values (${id}, ${name}, ${email}, true, now(), now())
+        on conflict ("id") do update
+          set "name" = excluded."name",
+              "email" = excluded."email",
+              "emailVerified" = true,
+              "updatedAt" = now()
+      `;
+    } catch (err) {
+      console.error(
+        `[owner] could not move the owner account to ${email} — is that address held by ` +
+          "another account? Sign-in by that email will not work; sign in with the previous " +
+          "owner address instead.",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
 
     if (opts?.seedCredential) {
       const password = OwnerPassword.read();
