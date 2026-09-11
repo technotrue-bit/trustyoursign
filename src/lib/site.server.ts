@@ -1,6 +1,7 @@
 import { getSql } from "@/lib/db.server";
 import { AppRls } from "@/lib/db-rls.server";
-import { isSiteOwner, SITE_OWNER, OWNER_USER_ID } from "./owner";
+import { assertSiteOwner } from "./owner.server";
+import { SITE_OWNER, OWNER_USER_ID } from "./owner";
 
 class OwnerPassword {
   static readonly COMPROMISED = "True";
@@ -8,7 +9,13 @@ class OwnerPassword {
   static read(): string | undefined {
     const value = process.env.OWNER_PASSWORD?.trim();
     if (!value) return undefined;
-    if (value === OwnerPassword.COMPROMISED) return undefined;
+    if (value === OwnerPassword.COMPROMISED) {
+      console.error(
+        "[owner] OWNER_PASSWORD is the compromised legacy value \"True\" — ignoring it. " +
+          "Set a new password in the host environment, or owner sign-in stays off.",
+      );
+      return undefined;
+    }
     return value;
   }
 
@@ -24,25 +31,60 @@ class OwnerAccount {
     const email = SITE_OWNER.email;
     const name = SITE_OWNER.name;
 
-    await sql`
-      insert into "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
-      values (${id}, ${name}, ${email}, true, now(), now())
-      on conflict ("email") do update set "name" = excluded."name", "updatedAt" = now()
-    `;
+    // Point the canonical owner row at the configured address. Best-effort on
+    // purpose: if another account already holds that email, the unique
+    // constraint rejects this — and that must NOT stop the credential below
+    // from seeding or rotating, since owner sign-in by identity still works.
+    try {
+      await sql`
+        insert into "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
+        values (${id}, ${name}, ${email}, true, now(), now())
+        on conflict ("id") do update
+          set "name" = excluded."name",
+              "email" = excluded."email",
+              "emailVerified" = true,
+              "updatedAt" = now()
+      `;
+    } catch (err) {
+      console.error(
+        `[owner] could not move the owner account to ${email} — is that address held by ` +
+          "another account? Sign-in by that email will not work; sign in with the previous " +
+          "owner address instead.",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
 
     if (opts?.seedCredential) {
       const password = OwnerPassword.read();
       if (password) {
-        const { hashPassword } = await import("better-auth/crypto");
-        const hash = await hashPassword(password);
-        const acc = await sql<{ id: string }>`
-          select "id" from "account" where "userId" = ${id} and "providerId" = 'credential'
+        const { hashPassword, verifyPassword } = await import("better-auth/crypto");
+        const acc = await sql<{ id: string; password: string | null }>`
+          select "id", "password" from "account"
+          where "userId" = ${id} and "providerId" = 'credential' limit 1
         `;
-        if (acc.length === 0) {
+        const existing = acc[0];
+        if (!existing) {
+          const hash = await hashPassword(password);
           await sql`
             insert into "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
             values (${`${id}-cred`}, ${id}, 'credential', ${id}, ${hash}, now(), now())
           `;
+        } else {
+          // The env var is the source of truth: if OWNER_PASSWORD has changed
+          // since the hash was written, rotate it. Without this the original
+          // (possibly leaked) password keeps working and a rotation silently
+          // does nothing — the hash used to be written once and never updated.
+          const matches = existing.password
+            ? await verifyPassword({ hash: existing.password, password })
+            : false;
+          if (!matches) {
+            const hash = await hashPassword(password);
+            await sql`
+              update "account" set "password" = ${hash}, "updatedAt" = now()
+              where "id" = ${existing.id}
+            `;
+            console.warn("[owner] OWNER_PASSWORD changed — rotated the owner credential hash");
+          }
         }
       } else if (OwnerPassword.isProd()) {
         throw new Error("OWNER_PASSWORD must be set to seed the owner credential in production");
@@ -51,7 +93,9 @@ class OwnerAccount {
 
     await sql`
       update site_state
-      set owner_user_id = ${id}, owner_name = ${name}, owner_handle = ${SITE_OWNER.handle}
+      set owner_user_id = coalesce(owner_user_id, ${id}),
+          owner_name = ${name},
+          owner_handle = ${SITE_OWNER.handle}
       where id = 'vault'
     `;
   }
@@ -60,8 +104,19 @@ class OwnerAccount {
     return AppRls.bypass(async () => {
       try {
         await OwnerAccount.ensure({ seedCredential: true });
-      } catch {
-        // Preview without OWNER_PASSWORD stays inert; production login simply fails closed.
+      } catch (err) {
+        // Expected in the live preview when OWNER_PASSWORD is unset — owner
+        // sign-in stays inert there. But when a password IS configured (or we
+        // are deployed), a failure means owner sign-in is broken — most likely
+        // the target owner email already belongs to another account — and must
+        // reach the host logs rather than vanish.
+        if (OwnerPassword.read() || OwnerPassword.isProd()) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(
+            "[owner] bootstrap FAILED — owner sign-in will not work until this is fixed:",
+            message,
+          );
+        }
       }
     });
   }
@@ -106,38 +161,13 @@ export async function claimSiteImpl(context: { userId: string; bearerToken?: str
     await OwnerAccount.ensure({ seedCredential: false });
   });
 
-  if (context.userId === OWNER_USER_ID) {
+  // One authorization path for the whole app: the same immutable-identity check
+  // the owner-only server functions use. `bearerToken` is retained for call-site
+  // compatibility — identity now comes from the user row, never a session name.
+  try {
+    await assertSiteOwner(context.userId);
     return { owner: true as const, ...SITE_OWNER };
-  }
-  const token = context.bearerToken;
-  const { getSessionUser } = await import("@/lib/auth/verify.server");
-  const { getRequest } = await import("@tanstack/react-start/server");
-  const { auth } = await import("@/lib/auth/server");
-  const request = getRequest();
-  let name: string | null = null;
-  let email: string | null = null;
-  if (request) {
-    let headers = request.headers;
-    if (token) {
-      headers = new Headers(request.headers);
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-    const session = await auth.api.getSession({ headers });
-    name = session?.user?.name ?? null;
-    email = session?.user?.email ?? null;
-  }
-  const verified = await getSessionUser(token);
-  email = verified?.email ?? email;
-  const ok = isSiteOwner({ displayName: name, primaryEmail: email });
-  if (!ok) return { owner: false as const, ...SITE_OWNER };
-
-  const sql = await getSql();
-  const rows = await sql<{ owner_user_id: string | null }>`
-    select owner_user_id from site_state where id = 'vault'
-  `;
-  const current = rows[0]?.owner_user_id ?? null;
-  if (current && current !== context.userId && current !== OWNER_USER_ID) {
+  } catch {
     return { owner: false as const, ...SITE_OWNER };
   }
-  return { owner: true as const, ...SITE_OWNER };
 }
