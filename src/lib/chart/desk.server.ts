@@ -1,5 +1,5 @@
-import { getSql } from "@/lib/db";
-import { assertSiteOwner } from "@/lib/owner";
+import { getSql } from "@/lib/db.server";
+import { assertSiteOwner } from "@/lib/owner.server";
 
 export type Effort = "low" | "medium" | "high" | "xhigh";
 

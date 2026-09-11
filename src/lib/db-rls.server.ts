@@ -10,6 +10,9 @@ export type RlsContext = {
 /**
  * Request-scoped Postgres RLS GUC context for `getSql()` queries.
  * Policies in migrations/0007_rls.sql read `app.user_id` / `app.is_owner` / `app.rls_bypass`.
+ *
+ * `.server.ts` suffix is required — a static `node:async_hooks` import in a dual
+ * module ships to the browser and kills the galaxy (`AsyncLocalStorage is not a constructor`).
  */
 export class AppRls {
   static #als = new AsyncLocalStorage<RlsContext>();

@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
 import { formatBirth, formatClock } from "./sun";
 import {
   computeNatalCast,
@@ -157,6 +156,7 @@ export const computeVisitorNatal = createServerFn({ method: "POST" })
 export const getSkyPass = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     const rows = await sql<{ last_deep_at: string | null; entitlement: string }>`
       select last_deep_at, entitlement from sky_pass where user_id = ${context.userId}
@@ -179,6 +179,7 @@ export const saveChartTone = createServerFn({ method: "POST" })
   }))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     // charts.tone is authoritative; keep natal_json.tone in sync when natal exists.
     await sql`
@@ -199,6 +200,7 @@ export const persistNatal = createServerFn({ method: "POST" })
   .validator((input: { chartId?: string; natal: SkyNatal }) => input)
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     if (data.chartId) {
       // Tone column is authoritative; force natal_json.tone from the column after write.
@@ -240,6 +242,7 @@ export const sitWithTheSky = createServerFn({ method: "POST" })
   .validator((input: { natal: SkyNatal }) => ({ natal: input.natal, tone: asTone(input.natal.tone) }))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     const rows = await sql<{ last_deep_at: string | null; entitlement: string }>`
       select last_deep_at, entitlement from sky_pass where user_id = ${context.userId}
@@ -358,6 +361,7 @@ export const grantSkyPass = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const desk = await import("./desk.server");
     await desk.assertOwner(context.userId);
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     await sql`
       insert into sky_pass (user_id, entitlement, updated_at)
