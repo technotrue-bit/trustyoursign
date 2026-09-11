@@ -38,6 +38,7 @@ import { ensureDbReady, getNeonPool, getPglite } from "../db.server";
 import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
+import { extraTrustedOrigins } from "./trusted-origins";
 import { pgliteDialect } from "./pglite-dialect";
 import {
   GROK_ISSUER_DEFAULT,
@@ -113,16 +114,22 @@ const baseURL = explicitBaseURL ?? {
 };
 
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
-// Missing entries here surface as FORBIDDEN "Invalid origin".
-const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
-  : [
-      // Host wildcards (matched against Origin's host)
-      ...previewAllowedHosts,
-      // Full-origin wildcards (matched against Origin)
-      ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-      ...LOCAL_DEV_ORIGINS,
-    ];
+// Missing entries here surface as FORBIDDEN "Invalid origin" — which rejects the
+// request BEFORE any credential is read, so the host you are browsing must be
+// listed. The canonical origin plus this project's own Vercel deployment hosts
+// (see ./trusted-origins) and any `AUTH_TRUSTED_ORIGINS` extras.
+const trustedOrigins: string[] = [
+  ...(explicitBaseURL
+    ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
+    : [
+        // Host wildcards (matched against Origin's host)
+        ...previewAllowedHosts,
+        // Full-origin wildcards (matched against Origin)
+        ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
+        ...LOCAL_DEV_ORIGINS,
+      ]),
+  ...extraTrustedOrigins(process.env),
+];
 
 const databaseUrl = env("DATABASE_URL");
 
