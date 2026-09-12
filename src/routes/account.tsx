@@ -164,17 +164,17 @@ function Account() {
           >
             Delete my data
           </button>
-          <p className="mt-6 text-xs text-fg-subtle">
+          <p className="mt-6 text-xs text-fg-muted">
             You must be {MIN_AGE}+.{" "}
-            <Link to="/privacy" className="underline">
+            <Link to="/privacy" className="text-fg underline">
               Privacy
             </Link>
             {" · "}
-            <Link to="/terms" className="underline">
+            <Link to="/terms" className="text-fg underline">
               Terms
             </Link>
             {" · "}
-            <Link to="/" className="underline">
+            <Link to="/" className="text-fg underline">
               Back to the sky
             </Link>
           </p>
@@ -275,10 +275,10 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
     >
       <p className="font-display text-xl text-fg italic">Save a chart</p>
       <div className="flex gap-2 text-xs tracking-[0.16em] uppercase">
-        <button type="button" className={cn("min-h-11", relation === "self" ? "text-fg" : "text-fg-subtle")} onClick={() => setRelation("self")}>
+        <button type="button" className={cn("min-h-11", relation === "self" ? "text-fg" : "text-fg-muted")} onClick={() => setRelation("self")}>
           Mine
         </button>
-        <button type="button" className={cn("min-h-11", relation === "other" ? "text-fg" : "text-fg-subtle")} onClick={() => setRelation("other")}>
+        <button type="button" className={cn("min-h-11", relation === "other" ? "text-fg" : "text-fg-muted")} onClick={() => setRelation("other")}>
           Someone else
         </button>
       </div>

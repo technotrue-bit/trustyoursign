@@ -283,7 +283,7 @@ function Login() {
           <div className="flex gap-2 text-xs tracking-[0.18em] uppercase">
             <button
               type="button"
-              className={cn("min-h-11 px-2", mode === "in" ? "text-fg" : "text-fg-subtle")}
+              className={cn("min-h-11 px-2", mode === "in" ? "text-fg" : "text-fg-muted")}
               onClick={() => {
                 setMode("in");
                 setOtpStage("idle");
@@ -295,7 +295,7 @@ function Login() {
             </button>
             <button
               type="button"
-              className={cn("min-h-11 px-2", mode === "up" ? "text-fg" : "text-fg-subtle")}
+              className={cn("min-h-11 px-2", mode === "up" ? "text-fg" : "text-fg-muted")}
               onClick={() => {
                 setMode("up");
                 setOtpStage("idle");
@@ -493,18 +493,18 @@ function Login() {
           </form>
         </div>
 
-        <p className="mt-8 text-xs leading-relaxed text-fg-subtle">
+        <p className="mt-8 text-xs leading-relaxed text-fg-muted">
           Birth dates are personal data. We store them only on your account, never sell them, and delete them when you
           ask.{" "}
-          <Link to="/privacy" className="underline">
+          <Link to="/privacy" className="text-fg underline">
             Privacy
           </Link>
           {" · "}
-          <Link to="/terms" className="underline">
+          <Link to="/terms" className="text-fg underline">
             Terms
           </Link>
           {" · "}
-          <Link to="/" className="underline">
+          <Link to="/" className="text-fg underline">
             Back to the sky
           </Link>
         </p>

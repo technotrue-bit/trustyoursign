@@ -87,22 +87,22 @@ export function GalaxyShell() {
             }}
           >
             <div className="relative mx-auto grid min-h-14 place-items-center md:min-h-44">
-              <h1
-                className={cn(
-                  "galaxy-title col-start-1 row-start-1 font-display leading-[1.08] font-medium tracking-tight text-fg italic",
-                  titleAnimating ? "sign-soft" : "intro-hold",
-                  "transition-[opacity,filter] duration-500 ease-out",
-                  moved ? "pointer-events-none opacity-0 blur-sm" : "opacity-100",
-                )}
-                aria-hidden={moved}
-              >
-                <span className="word">what&rsquo;s</span>
-                <span className="word">your</span>
-                <span className="word pointer-events-auto">
-                  <Gloss card={false}>sign</Gloss>
-                </span>
-                <span className="word">?</span>
-              </h1>
+              {/* Unmount when moved — do not leave Gloss buttons under aria-hidden. */}
+              {!moved ? (
+                <h1
+                  className={cn(
+                    "galaxy-title col-start-1 row-start-1 font-display leading-[1.08] font-medium tracking-tight text-fg italic",
+                    titleAnimating ? "sign-soft" : "intro-hold",
+                  )}
+                >
+                  <span className="word">what&rsquo;s</span>
+                  <span className="word">your</span>
+                  <span className="word pointer-events-auto">
+                    <Gloss card={false}>sign</Gloss>
+                  </span>
+                  <span className="word">?</span>
+                </h1>
+              ) : null}
               {moved && sign ? (
                 <div key={sign.id} className="sign-swap pointer-events-auto col-start-1 row-start-1">
                   <button
@@ -140,10 +140,12 @@ export function GalaxyShell() {
 
       <div
         className="galaxy-chrome pointer-events-none absolute inset-x-0 bottom-[var(--chrome-bottom)] flex flex-col items-center gap-2 md:bottom-8 md:gap-3"
+        // Leave the tab order while claim/dive chrome owns the screen.
+        inert={asking || exploring ? true : undefined}
         style={{
           opacity: asking || exploring ? 0 : introChrome * worldFade,
           animation: "none",
-          pointerEvents: exploring ? "none" : undefined,
+          pointerEvents: asking || exploring ? "none" : undefined,
         }}
       >
         <LegalFooter />
