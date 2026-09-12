@@ -6,7 +6,7 @@ import { isSiteOwner } from "@/lib/owner";
 import { cn } from "@/lib/utils";
 
 export function AccountMenu() {
-  const { user, isPending } = useCurrentUserState();
+  const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
   const [open, setOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -30,6 +30,21 @@ export function AccountMenu() {
 
   if (isPending) {
     return <div className="size-11 shrink-0 animate-pulse rounded-full bg-bg-subtle" aria-hidden />;
+  }
+  if (!user && isReadFailed) {
+    // A failed session READ is not "signed out" (see `session-guard`). Telling a
+    // signed-in visitor to sign in because one request dropped is exactly how a
+    // hiccup reads as being logged out — so offer the retry instead.
+    return (
+      <button
+        type="button"
+        onClick={refetchSession}
+        title="Couldn't check your sign-in — tap to try again"
+        className="auth-sign-in pointer-events-auto inline-flex min-h-11 items-center px-3 text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+      >
+        Reconnect
+      </button>
+    );
   }
   if (!user) {
     return (
