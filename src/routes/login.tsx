@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   TurnstileWidget,
@@ -7,6 +7,15 @@ import {
   turnstileSiteKey,
 } from "@/components/TurnstileWidget";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
+import {
+  OTP_EXPIRES_SECONDS,
+  OTP_LENGTH,
+  OTP_RESEND_COOLDOWN_SECONDS,
+  cooldownSecondsLeft,
+  isCompleteOtp,
+  normalizeOtpInput,
+  emailOtpAvailable,
+} from "@/lib/auth/email-otp";
 import { MIN_AGE } from "@/lib/legal";
 import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
 import { cn } from "@/lib/utils";
@@ -26,6 +35,96 @@ function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
+
+  // ── One-time-code sign-in ──────────────────────────────────────────────────
+  // Offered only when the host can actually deliver mail, so the button never
+  // appears as a path that cannot finish.
+  const [otpAvailable, setOtpAvailable] = useState(false);
+  const [otpStage, setOtpStage] = useState<"idle" | "sent">("idle");
+  const [otp, setOtp] = useState("");
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    let cancelled = false;
+    emailOtpAvailable()
+      .then((ok) => {
+        if (!cancelled) setOtpAvailable(ok === true);
+      })
+      .catch(() => {
+        /* leave it hidden rather than offer a path that may not work */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Ticks only while a code is on screen, to re-enable "send another code".
+  useEffect(() => {
+    if (otpStage !== "sent") return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [otpStage]);
+
+  const cooldownLeft = cooldownSecondsLeft(cooldownUntil, now);
+
+  /** Guards shared by both sign-in paths. Returns an error message, or null. */
+  const formProblem = (): string | null => {
+    if (hpCompany.trim()) return "Could not continue";
+    if (mode === "up" && (!ageOk || !legalOk)) {
+      return `Confirm you are ${MIN_AGE} or older and accept the terms.`;
+    }
+    if (!email.trim()) return "Enter your email address first.";
+    return null;
+  };
+
+  const sendCode = async () => {
+    setError(null);
+    const problem = formProblem();
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error: err } = await authClient.emailOtp.sendVerificationOtp({
+        email: email.trim(),
+        type: "sign-in",
+        fetchOptions: { headers: turnstileCaptchaHeaders() },
+      });
+      if (err) throw new Error(err.message ?? "Could not send the code");
+      setOtp("");
+      setOtpStage("sent");
+      setCooldownUntil(Date.now() + OTP_RESEND_COOLDOWN_SECONDS * 1000);
+    } catch (e) {
+      resetTurnstile();
+      setError(e instanceof Error ? e.message : "Could not send the code");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    setError(null);
+    if (!isCompleteOtp(otp)) {
+      setError(`Enter the ${OTP_LENGTH}-digit code from the email.`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error: err } = await authClient.signIn.emailOtp({
+        email: email.trim(),
+        otp: otp.trim(),
+        fetchOptions: { headers: turnstileCaptchaHeaders() },
+      });
+      if (err) throw new Error(err.message ?? "That code did not work");
+      window.location.href = isOwnerLogin(email.trim()) ? "/admin" : "/account";
+    } catch (e) {
+      resetTurnstile();
+      setError(e instanceof Error ? e.message : "That code did not work");
+      setBusy(false);
+    }
+  };
 
   /**
    * Apple users have no SSO button (the auth broker federates Google and X
@@ -176,9 +275,9 @@ function Login() {
           <form
             className="relative mt-4 space-y-3"
             onSubmit={(e) => {
-              e.preventDefault();
-              void emailAuth();
-            }}
+                          e.preventDefault();
+                          void (otpStage === "sent" ? verifyCode() : emailAuth());
+                        }}
           >
             {mode === "up" ? (
               <label className="block">
@@ -212,18 +311,44 @@ function Login() {
                 placeholder={mode === "in" ? "ADMIN" : "you@icloud.com"}
               />
             </label>
-            <label className="block">
-              <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Password</span>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
-                autoComplete={mode === "up" ? "new-password" : "current-password"}
-                minLength={mode === "up" ? 8 : 1}
-              />
-            </label>
+            {otpStage === "sent" ? (
+                          <label className="block">
+                            <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+                              Code
+                            </span>
+                            <input
+                              value={otp}
+                              onChange={(e) => setOtp(normalizeOtpInput(e.target.value))}
+                              className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-center font-mono text-xl tracking-[0.35em] text-fg"
+                              inputMode="numeric"
+                              autoComplete="one-time-code"
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              spellCheck={false}
+                              maxLength={OTP_LENGTH}
+                              aria-label={`${OTP_LENGTH}-digit code sent to ${email.trim()}`}
+                            />
+                            <span className="mt-2 block text-xs leading-relaxed text-fg-subtle">
+                              {OTP_LENGTH} digits, sent to {email.trim()}. It expires in{" "}
+                              {Math.round(OTP_EXPIRES_SECONDS / 60)} minutes.
+                            </span>
+                          </label>
+                        ) : (
+                          <label className="block">
+                            <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+                              Password
+                            </span>
+                            <input
+                              type="password"
+                              required
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
+                              autoComplete={mode === "up" ? "new-password" : "current-password"}
+                              minLength={mode === "up" ? 8 : 1}
+                            />
+                          </label>
+                        )}
             <label className="absolute -left-[9999px] h-0 w-0 overflow-hidden" aria-hidden="true">
               <span>Company</span>
               <input
@@ -234,8 +359,8 @@ function Login() {
                 onChange={(e) => setHpCompany(e.target.value)}
               />
             </label>
-            {mode === "up" ? (
-              <div className="space-y-2 pt-1 text-sm text-fg-muted">
+            {mode === "up" && otpStage !== "sent" ? (
+                          <div className="space-y-2 pt-1 text-sm text-fg-muted">
                 <label className="flex min-h-11 items-start gap-2">
                   <input type="checkbox" checked={ageOk} onChange={(e) => setAgeOk(e.target.checked)} className="mt-1" />
                   <span>I am {MIN_AGE} or older.</span>
@@ -257,14 +382,55 @@ function Login() {
               </div>
             ) : null}
             {turnstileSiteKey() ? <TurnstileWidget /> : null}
-            {error ? <p className="text-sm text-wine">{error}</p> : null}
-            <button
-              type="submit"
-              disabled={busy || !authEnabled}
-              className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase disabled:opacity-50"
-            >
-              {mode === "up" ? "Create account" : "Sign in with email"}
-            </button>
+                        {error ? <p className="text-sm text-wine">{error}</p> : null}
+                        <button
+                          type="submit"
+                          disabled={busy || !authEnabled}
+                          className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase disabled:opacity-50"
+                        >
+                          {otpStage === "sent"
+                            ? "Sign in with code"
+                            : mode === "up"
+                              ? "Create account"
+                              : "Sign in with email"}
+                        </button>
+
+                        {/* The password-free path. Only rendered when the host can actually
+                            send mail, so it is never a button that cannot finish. */}
+                        {otpAvailable ? (
+                          otpStage === "sent" ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={busy || cooldownLeft > 0}
+                                onClick={() => void sendCode()}
+                                className="min-h-11 w-full rounded-md border border-border px-4 text-xs tracking-[0.18em] text-fg-muted uppercase hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+                              >
+                                {cooldownLeft > 0 ? `Another code in ${cooldownLeft}s` : "Send another code"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOtpStage("idle");
+                                  setOtp("");
+                                  setError(null);
+                                }}
+                                className="min-h-11 w-full px-4 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+                              >
+                                Use a password instead
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void sendCode()}
+                              className="min-h-11 w-full rounded-md border border-border px-4 text-xs tracking-[0.18em] text-fg-muted uppercase hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+                            >
+                              Email me a code instead
+                            </button>
+                          )
+                        ) : null}
           </form>
         </div>
 
