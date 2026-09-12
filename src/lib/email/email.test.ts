@@ -3,6 +3,48 @@ import { describe, it } from "node:test";
 import { expiryWording, otpHtml, otpSubject, otpText } from "./otp-message.ts";
 import { DEFAULT_EMAIL_ENDPOINT, emailDeliveryConfigured, parseEmailConfig } from "./send.server.ts";
 
+describe("mail settings survive a dashboard's casing", () => {
+  it("accepts a lowercased key and from (the Vercel footgun)", () => {
+    assert.equal(
+      emailDeliveryConfigured({ resend_api_key: "re_x", email_from: "vault@example.com" }),
+      true,
+    );
+  });
+
+  it("accepts mixed casing", () => {
+    const config = parseEmailConfig({ resend_api_key: "re_x", Email_From: "vault@example.com" });
+    assert.equal(config?.apiKey, "re_x");
+    assert.equal(config?.from, "vault@example.com");
+  });
+
+  it("accepts every spelling of the optional settings too", () => {
+    const config = parseEmailConfig({
+      resend_api_key: "re_x",
+      Email_From: "vault@example.com",
+      email_reply_to: "reply@example.com",
+      Email_Api_Url: "http://127.0.0.1:9099/emails",
+    });
+    assert.equal(config?.replyTo, "reply@example.com");
+    assert.equal(config?.endpoint, "http://127.0.0.1:9099/emails");
+  });
+
+  it("prefers the canonical spelling when a host has both", () => {
+    const config = parseEmailConfig({
+      RESEND_API_KEY: "canonical",
+      resend_api_key: "lowercase",
+      EMAIL_FROM: "canonical@example.com",
+      Email_From: "lowercase@example.com",
+    });
+    assert.equal(config?.apiKey, "canonical");
+    assert.equal(config?.from, "canonical@example.com");
+  });
+
+  it("is still unconfigured when a value is blank, whatever the casing", () => {
+    assert.equal(emailDeliveryConfigured({ resend_api_key: "   ", Email_From: "a@b.c" }), false);
+    assert.equal(emailDeliveryConfigured({ RESEND_API_KEY: "re_x", email_from: "" }), false);
+  });
+});
+
 describe("the code email", () => {
   it("subject reads per purpose", () => {
     assert.equal(otpSubject("sign-in"), "Your Vault sign-in code");
