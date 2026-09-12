@@ -69,11 +69,17 @@ function Login() {
 
   const cooldownLeft = cooldownSecondsLeft(cooldownUntil, now);
 
-  /** Guards shared by both sign-in paths. Returns an error message, or null. */
-  const formProblem = (): string | null => {
+  /**
+   * Guards shared by both sign-in paths. `requireAcceptance` is set for anything
+   * that can CREATE an account — and the code path always can, because a
+   * first-time code signs the visitor up. So acceptance is a precondition for
+   * being sent a code, not merely for the Create-account tab.
+   */
+  const formProblem = (opts: { requireAcceptance?: boolean } = {}): string | null => {
     if (hpCompany.trim()) return "Could not continue";
-    if (mode === "up" && (!ageOk || !legalOk)) {
-      return `Confirm you are ${MIN_AGE} or older and accept the terms.`;
+    const needsAcceptance = opts.requireAcceptance ?? mode === "up";
+    if (needsAcceptance && (!ageOk || !legalOk)) {
+      return `Confirm you are ${MIN_AGE} or older and accept the terms — both are needed before a code can be emailed.`;
     }
     if (!email.trim()) return "Enter your email address first.";
     return null;
@@ -81,7 +87,7 @@ function Login() {
 
   const sendCode = async () => {
     setError(null);
-    const problem = formProblem();
+    const problem = formProblem({ requireAcceptance: true });
     if (problem) {
       setError(problem);
       return;
@@ -392,7 +398,10 @@ function Login() {
                 onChange={(e) => setHpCompany(e.target.value)}
               />
             </label>
-            {mode === "up" && otpStage !== "sent" ? (
+            {/* Shown for anything that can create an account: the Create-account tab, and
+                            the code path at any time (a first-time code signs the visitor up).
+                            Hidden once a code is out, since acceptance was required to send it. */}
+                        {(mode === "up" || otpStage === "code") && otpStage !== "sent" ? (
                           <div className="space-y-2 pt-1 text-sm text-fg-muted">
                 <label className="flex min-h-11 items-start gap-2">
                   <input type="checkbox" checked={ageOk} onChange={(e) => setAgeOk(e.target.checked)} className="mt-1" />

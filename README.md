@@ -92,6 +92,10 @@ Behaviour worth knowing:
 - Codes are **6 digits, expire in 5 minutes, work once, and are stored hashed**
   (`verification.value` never holds a usable code). Five attempt limit.
 - The send path is rate-limited to **3/minute per IP** (verify: 5/minute).
+- **Acceptance is required before a code is sent.** A first-time code creates the
+  account, so the age and terms boxes must be ticked to be emailed a code — on
+  both tabs, not just *Create account*. They are hidden again once a code is out,
+  since acceptance is what unlocked sending it.
 - Editing the address after a code is sent steps back to the send step, so the
   visitor is never left typing a code that cannot verify.
 - **The owner can use this path too** — a code sent to `SITE_OWNER.email`
