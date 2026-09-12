@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { RedirectToSignIn } from "@/lib/auth/gates";
+import { RedirectToSignIn, SessionUnavailable } from "@/lib/auth/gates";
+import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { claimSite } from "@/lib/site";
@@ -12,7 +13,8 @@ import { AccountMenu } from "@/components/overlay/AccountMenu";
 export const Route = createFileRoute("/admin")({ component: Admin });
 
 function Admin() {
-  const { user, isPending } = useCurrentUserState();
+  const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
+  const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [claimed, setClaimed] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -22,13 +24,14 @@ function Admin() {
       .catch(() => setClaimed(false));
   }, [user]);
 
-  if (isPending) {
+  if (guard === "loading") {
     return (
       <main id="main-content" className="grid vault-page place-items-center bg-bg text-fg">
         <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
       </main>
     );
   }
+  if (guard === "unavailable") return <SessionUnavailable onRetry={refetchSession} />;
   if (!user) return <RedirectToSignIn />;
   if (!isSiteOwner(user) && claimed !== true) {
     return (

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { RedirectToSignIn } from "@/lib/auth/gates";
+import { RedirectToSignIn, SessionUnavailable } from "@/lib/auth/gates";
+import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { acceptLegal, deleteAllMyData, deleteChart, listCharts, upsertChart, type SavedChart } from "@/lib/charts";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
@@ -31,7 +32,8 @@ const MONTHS = [
 ];
 
 function Account() {
-  const { user, isPending } = useCurrentUserState();
+  const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
+  const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [charts, setCharts] = useState<SavedChart[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -49,13 +51,14 @@ function Account() {
     if (isSiteOwner(user)) void claimSite().catch(() => undefined);
   }, [user]);
 
-  if (isPending) {
+  if (guard === "loading") {
     return (
       <main id="main-content" className="grid vault-page place-items-center bg-bg text-fg">
         <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
       </main>
     );
   }
+  if (guard === "unavailable") return <SessionUnavailable onRetry={refetchSession} />;
   if (!user) return <RedirectToSignIn />;
 
   const mine = charts?.filter((c) => c.relation === "self") ?? [];
