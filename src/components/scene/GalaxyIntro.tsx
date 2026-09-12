@@ -891,7 +891,12 @@ function TempleRig() {
       if (state.claim) return;
       if (state.session) return;
       if (introPlaying()) {
-        if (introCanSkip()) {
+        // Tab must move focus — only Escape / Enter / Space skip the intro.
+        if (
+          introCanSkip() &&
+          (e.key === "Escape" || e.key === "Enter" || e.key === " ")
+        ) {
+          e.preventDefault();
           skipIntro();
           galaxyTravel.birth = 1;
           useGalaxy.getState().markBorn();
@@ -903,6 +908,13 @@ function TempleRig() {
           skipEnterGalaxy();
           noteControl();
         }
+        return;
+      }
+      const t = e.target;
+      if (
+        t instanceof HTMLElement &&
+        t.closest("input, textarea, select, [contenteditable=true]")
+      ) {
         return;
       }
       if (e.key === "ArrowDown" || e.key === "s" || e.key === "S" || e.key === "ArrowRight") {

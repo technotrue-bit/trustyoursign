@@ -8,11 +8,13 @@
   --color-bg-subtle: #1c1916;
   --color-fg: #efe8dc;
   --color-fg-muted: #9a9186;
-  --color-fg-subtle: #6e675e;
+  /* Warm stone ≥4.5:1 on #0c0b0a; keep subtle < muted (#9a9186) < fg. */
+  --color-fg-subtle: #8f877c;
   --color-accent: #d8cfc0;
   --color-accent-fg: #0c0b0a;
-  --color-border: #2c2824;
-  --color-wine: #8b4a62;
+  --color-border: #6a645c;
+  /* Warm rose ≥4.5:1 on #0c0b0a for error text */
+  --color-wine: #b86b86;
   --color-ring: #d8cfc0;
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -82,6 +84,33 @@
 
   p {
     text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  .skip-to-content {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 100;
+    padding: 0.65rem 1rem;
+    border-radius: var(--radius-md);
+    background: var(--color-bg-elevated);
+    color: var(--color-fg);
+    border: 1px solid var(--color-border);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transform: translateY(-160%);
+    transition: transform 0.15s ease-out;
+  }
+
+  .skip-to-content:focus,
+  .skip-to-content:focus-visible {
+    transform: translateY(0);
   }
 }
 
@@ -356,7 +385,8 @@
 }
 
 .auth-sign-in:focus-visible {
-  outline: none;
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
 }
 
 .sign-claim::before {
@@ -598,15 +628,13 @@
   font-style: italic;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  color: color-mix(in oklab, var(--color-fg-muted) 72%, #8a7a62);
-  opacity: 0.4;
+  color: var(--color-fg-muted);
   text-shadow:
     0 0 10px rgba(12, 11, 10, 0.82),
     0 1px 4px rgba(12, 11, 10, 0.72),
     0 0 18px rgba(12, 11, 10, 0.45);
   transition:
     color 0.22s ease-out,
-    opacity 0.22s ease-out,
     text-shadow 0.22s ease-out,
     transform 0.22s ease-out;
 }
@@ -619,11 +647,8 @@
   line-height: 1.2;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: color-mix(in oklab, var(--color-fg-subtle) 80%, #8a7a62);
-  opacity: 0.34;
-  transition:
-    color 0.22s ease-out,
-    opacity 0.22s ease-out;
+  color: var(--color-fg-subtle);
+  transition: color 0.22s ease-out;
 }
 
 .sign-strip-btn[aria-current="true"] .sign-strip-name {
