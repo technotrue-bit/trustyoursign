@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   TurnstileWidget,
@@ -25,6 +25,20 @@ function Login() {
   const [legalOk, setLegalOk] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Apple users have no SSO button (the auth broker federates Google and X
+   * only), so the Apple path IS the email form. This takes them straight to it
+   * instead of making them hunt below the provider buttons.
+   */
+  const useAppleEmail = () => {
+    setError(null);
+    const field = emailRef.current;
+    if (!field) return;
+    field.scrollIntoView({ behavior: "smooth", block: "center" });
+    field.focus();
+  };
 
   const social = async (id: string) => {
     setError(null);
@@ -121,8 +135,21 @@ function Login() {
                 Continue with {p.label}
               </button>
             ))}
-            <p className="pt-2 text-xs leading-relaxed text-fg-subtle">
-              Apple Sign-In is not offered. Use Google, or your iCloud / Apple email with a password below.
+            {/* Apple users get no SSO button — the auth broker federates Google
+                and X only — so the Apple path IS the email form. This takes
+                them to it instead of leaving them to find it below. */}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={useAppleEmail}
+              className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+            >
+              Use Apple or iCloud email
+            </button>
+            <p className="pt-1 text-xs leading-relaxed text-fg-subtle">
+              Apple sign-in isn&apos;t offered here yet. Your iCloud or Apple address works the same way —
+              pick <span className="text-fg-muted">Sign in</span> if you already keep a vault, or{" "}
+              <span className="text-fg-muted">Create account</span> if this is your first visit.
             </p>
           </div>
         ) : (
@@ -169,12 +196,19 @@ function Login() {
                 {mode === "in" ? "Owner or email" : "Email"}
               </span>
               <input
+                ref={emailRef}
                 type={mode === "in" ? "text" : "email"}
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
                 autoComplete={mode === "in" ? "username" : "email"}
+                /* iOS otherwise capitalises the first letter and autocorrects:
+                   an email typed on an iPhone arrives as "Technotrue@…". */
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder={mode === "in" ? "ADMIN" : "you@icloud.com"}
               />
             </label>
