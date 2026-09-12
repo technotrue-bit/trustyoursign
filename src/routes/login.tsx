@@ -131,7 +131,11 @@ function Login() {
         fetchOptions: { headers: turnstileCaptchaHeaders() },
       });
       if (err) throw new Error(err.message ?? "That code did not work");
-      window.location.href = isOwnerLogin(codeSentTo) ? "/admin" : "/account";
+      // Everyone lands on their profile. The owner's desk is one tap from it
+      // ("Owner desk" on /account), so routing by the address typed here is no
+      // longer needed — and guessing from a string disagreed with what the
+      // session actually was.
+      window.location.href = "/account";
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "That code did not work");
@@ -202,14 +206,14 @@ function Login() {
         const { error: err } = await authClient.signIn.email({
           email: addr,
           password,
-          callbackURL: owner ? "/admin" : "/account",
+          callbackURL: "/account",
           fetchOptions: {
             headers: captchaHeaders,
           },
         });
         if (err) throw new Error(err.message ?? "Could not sign in");
       }
-      window.location.href = mode === "up" ? "/account" : isOwnerLogin(email.trim()) ? "/admin" : "/account";
+      window.location.href = "/account";
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not continue");
