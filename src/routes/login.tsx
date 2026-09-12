@@ -42,6 +42,7 @@ function Login() {
   const [otpAvailable, setOtpAvailable] = useState(false);
   const [otpStage, setOtpStage] = useState<"idle" | "code" | "sent">("idle");
   const [otp, setOtp] = useState("");
+  const [codeSentTo, setCodeSentTo] = useState("");
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [now, setNow] = useState(() => Date.now());
 
@@ -94,6 +95,7 @@ function Login() {
       });
       if (err) throw new Error(err.message ?? "Could not send the code");
       setOtp("");
+      setCodeSentTo(email.trim());
       setOtpStage("sent");
       setCooldownUntil(Date.now() + OTP_RESEND_COOLDOWN_SECONDS * 1000);
     } catch (e) {
@@ -106,6 +108,10 @@ function Login() {
 
   const verifyCode = async () => {
     setError(null);
+    if (!codeSentTo) {
+      setError("Request a code first.");
+      return;
+    }
     if (!isCompleteOtp(otp)) {
       setError(`Enter the ${OTP_LENGTH}-digit code from the email.`);
       return;
@@ -113,12 +119,13 @@ function Login() {
     setBusy(true);
     try {
       const { error: err } = await authClient.signIn.emailOtp({
-        email: email.trim(),
+        // The address the code was actually sent to — the field may have moved on.
+        email: codeSentTo,
         otp: otp.trim(),
         fetchOptions: { headers: turnstileCaptchaHeaders() },
       });
       if (err) throw new Error(err.message ?? "That code did not work");
-      window.location.href = isOwnerLogin(email.trim()) ? "/admin" : "/account";
+      window.location.href = isOwnerLogin(codeSentTo) ? "/admin" : "/account";
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "That code did not work");
@@ -316,7 +323,16 @@ function Login() {
                 type={mode === "in" ? "text" : "email"}
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  // A code belongs to the address it was sent to: editing the
+                  // address invalidates it, so step back and offer a fresh one
+                  // instead of failing at verify time.
+                  if (otpStage === "sent" && e.target.value.trim() !== codeSentTo) {
+                    setOtpStage("code");
+                    setOtp("");
+                  }
+                }}
                 className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
                 autoComplete={mode === "in" ? "username" : "email"}
                 /* iOS otherwise capitalises the first letter and autocorrects:
@@ -343,10 +359,10 @@ function Login() {
                               autoCorrect="off"
                               spellCheck={false}
                               maxLength={OTP_LENGTH}
-                              aria-label={`${OTP_LENGTH}-digit code sent to ${email.trim()}`}
+                              aria-label={`${OTP_LENGTH}-digit code sent to ${codeSentTo}`}
                             />
                             <span className="mt-2 block text-xs leading-relaxed text-fg-subtle">
-                              {OTP_LENGTH} digits, sent to {email.trim()}. It expires in{" "}
+                              {OTP_LENGTH} digits, sent to {codeSentTo}. It expires in{" "}
                               {Math.round(OTP_EXPIRES_SECONDS / 60)} minutes.
                             </span>
                           </label>
