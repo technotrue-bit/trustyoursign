@@ -49,6 +49,34 @@ export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
   return <Navigate to={to} />;
 }
 
+/**
+ * Shown when the session could not be READ (see `session-guard`). The visitor is
+ * not signed out — we simply never got an answer, which is what a phone waking
+ * from the app switcher produces. Offering a retry keeps them signed in through
+ * a dropped request instead of stranding them at sign-in.
+ */
+export function SessionUnavailable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <main className="grid vault-page place-items-center bg-bg px-5 text-fg">
+      <div className="mx-auto max-w-sm text-center">
+        <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">One moment</p>
+        <h1 className="mt-2 font-display text-2xl text-fg italic">Couldn&apos;t check your sign-in.</h1>
+        <p className="mt-3 text-sm leading-relaxed text-fg-muted">
+          The server didn&apos;t answer just now — that&apos;s usually the network, not your account. Your sign-in is
+          still here.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-6 inline-flex min-h-11 items-center rounded-full border border-border px-5 text-xs tracking-[0.18em] text-fg uppercase hover:border-accent"
+        >
+          Try again
+        </button>
+      </div>
+    </main>
+  );
+}
+
 export function SignInGate({
   children,
   fallback,
