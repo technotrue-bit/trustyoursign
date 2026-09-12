@@ -40,7 +40,7 @@ function Login() {
   // Offered only when the host can actually deliver mail, so the button never
   // appears as a path that cannot finish.
   const [otpAvailable, setOtpAvailable] = useState(false);
-  const [otpStage, setOtpStage] = useState<"idle" | "sent">("idle");
+  const [otpStage, setOtpStage] = useState<"idle" | "code" | "sent">("idle");
   const [otp, setOtp] = useState("");
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -127,16 +127,20 @@ function Login() {
   };
 
   /**
-   * Apple users have no SSO button (the auth broker federates Google and X
-   * only), so the Apple path IS the email form. This takes them straight to it
-   * instead of making them hunt below the provider buttons.
+   * Apple users have no SSO button — the auth broker federates Google and X only
+   * — so their path is a code by email, with no password to invent. Tapping the
+   * Apple button puts the form into that mode for real: the address field takes
+   * focus, and if an address is already typed the code goes out immediately.
+   * (Scrolling to a form the visitor can already see is not an action.)
    */
-  const useAppleEmail = () => {
+  const startCodeSignIn = (opts: { sendNow?: boolean } = {}) => {
     setError(null);
+    setOtpStage("code");
     const field = emailRef.current;
     if (!field) return;
     field.scrollIntoView({ behavior: "smooth", block: "center" });
     field.focus();
+    if (opts.sendNow && email.trim()) void sendCode();
   };
 
   const social = async (id: string) => {
@@ -234,21 +238,24 @@ function Login() {
                 Continue with {p.label}
               </button>
             ))}
-            {/* Apple users get no SSO button — the auth broker federates Google
-                and X only — so the Apple path IS the email form. This takes
-                them to it instead of leaving them to find it below. */}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={useAppleEmail}
-              className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
-            >
-              Use Apple or iCloud email
-            </button>
+            {/* No Apple SSO exists (the broker federates Google and X only), so
+                the Apple path is a code by email. This starts that flow for
+                real, and is only rendered when the host can send mail — never a
+                button that merely scrolls the page. */}
+            {otpAvailable ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => startCodeSignIn({ sendNow: true })}
+                className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+              >
+                Use Apple or iCloud email
+              </button>
+            ) : null}
             <p className="pt-1 text-xs leading-relaxed text-fg-subtle">
-              Apple sign-in isn&apos;t offered here yet. Your iCloud or Apple address works the same way —
-              pick <span className="text-fg-muted">Sign in</span> if you already keep a vault, or{" "}
-              <span className="text-fg-muted">Create account</span> if this is your first visit.
+              {otpAvailable
+                ? "Apple sign-in isn't offered here. Your iCloud or Apple address gets you a code by email — no password to invent."
+                : "Apple sign-in isn't offered here. Your iCloud or Apple address works the same way, with a password, below."}
             </p>
           </div>
         ) : (
@@ -260,14 +267,24 @@ function Login() {
             <button
               type="button"
               className={cn("min-h-11 px-2", mode === "in" ? "text-fg" : "text-fg-subtle")}
-              onClick={() => setMode("in")}
+              onClick={() => {
+                setMode("in");
+                setOtpStage("idle");
+                setOtp("");
+                setError(null);
+              }}
             >
               Sign in
             </button>
             <button
               type="button"
               className={cn("min-h-11 px-2", mode === "up" ? "text-fg" : "text-fg-subtle")}
-              onClick={() => setMode("up")}
+              onClick={() => {
+                setMode("up");
+                setOtpStage("idle");
+                setOtp("");
+                setError(null);
+              }}
             >
               Create account
             </button>
@@ -276,7 +293,7 @@ function Login() {
             className="relative mt-4 space-y-3"
             onSubmit={(e) => {
                           e.preventDefault();
-                          void (otpStage === "sent" ? verifyCode() : emailAuth());
+                          void (otpStage === "sent" ? verifyCode() : otpStage === "code" ? sendCode() : emailAuth());
                         }}
           >
             {mode === "up" ? (
@@ -333,7 +350,7 @@ function Login() {
                               {Math.round(OTP_EXPIRES_SECONDS / 60)} minutes.
                             </span>
                           </label>
-                        ) : (
+                        ) : otpStage === "idle" ? (
                           <label className="block">
                             <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
                               Password
@@ -348,7 +365,7 @@ function Login() {
                               minLength={mode === "up" ? 8 : 1}
                             />
                           </label>
-                        )}
+                        ) : null}
             <label className="absolute -left-[9999px] h-0 w-0 overflow-hidden" aria-hidden="true">
               <span>Company</span>
               <input
@@ -389,10 +406,12 @@ function Login() {
                           className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase disabled:opacity-50"
                         >
                           {otpStage === "sent"
-                            ? "Sign in with code"
-                            : mode === "up"
-                              ? "Create account"
-                              : "Sign in with email"}
+                                                      ? "Sign in with code"
+                                                      : otpStage === "code"
+                                                        ? "Email me a code"
+                                                        : mode === "up"
+                                                          ? "Create account"
+                                                          : "Sign in with email"}
                         </button>
 
                         {/* The password-free path. Only rendered when the host can actually
@@ -420,11 +439,22 @@ function Login() {
                                 Use a password instead
                               </button>
                             </>
+                          ) : otpStage === "code" ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOtpStage("idle");
+                                setError(null);
+                              }}
+                              className="min-h-11 w-full px-4 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+                            >
+                              Use a password instead
+                            </button>
                           ) : (
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => void sendCode()}
+                              onClick={() => startCodeSignIn({ sendNow: true })}
                               className="min-h-11 w-full rounded-md border border-border px-4 text-xs tracking-[0.18em] text-fg-muted uppercase hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
                             >
                               Email me a code instead
