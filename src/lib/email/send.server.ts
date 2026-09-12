@@ -1,0 +1,107 @@
+import { otpHtml, otpSubject, otpText, type OtpPurpose } from "./otp-message";
+
+/**
+ * Outbound email for sign-in codes (server-only).
+ *
+ * Transport is whichever HTTP API the host is configured for — today Resend,
+ * which needs no SDK (one `fetch`, no dependency to keep patched). To move to
+ * another provider, replace `sendEmail` only: everything above it deals in
+ * `EmailMessage`, and `parseEmailConfig` is the single place that reads env.
+ *
+ * Nothing here runs at import time, so importing this module is safe.
+ */
+
+export type EmailConfig = { apiKey: string; from: string; replyTo?: string; endpoint: string };
+
+export type EmailMessage = {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+};
+
+/** Default provider endpoint (Resend). Override with `EMAIL_API_URL`. */
+export const DEFAULT_EMAIL_ENDPOINT = "https://api.resend.com/emails";
+
+/**
+ * Read the delivery config from an env bag. Returns null when unconfigured.
+ *
+ * `EMAIL_API_URL` points the same request shape at a different endpoint — a
+ * regional host, a self-hosted gateway, or a stub in a test.
+ */
+export function parseEmailConfig(env: Record<string, string | undefined>): EmailConfig | null {
+  const apiKey = env.RESEND_API_KEY?.trim();
+  const from = env.EMAIL_FROM?.trim();
+  if (!apiKey || !from) return null;
+  const replyTo = env.EMAIL_REPLY_TO?.trim();
+  const endpoint = env.EMAIL_API_URL?.trim() || DEFAULT_EMAIL_ENDPOINT;
+  return replyTo ? { apiKey, from, replyTo, endpoint } : { apiKey, from, endpoint };
+}
+
+/** True when one-time-code delivery can actually happen. */
+export function emailDeliveryConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return parseEmailConfig(env) !== null;
+}
+
+const SEND_TIMEOUT_MS = 10_000;
+
+/**
+ * Send one message. Throws with a status + provider message on failure — never
+ * with the key. The caller decides whether a failure breaks the request.
+ */
+export async function sendEmail(message: EmailMessage): Promise<void> {
+  const config = parseEmailConfig(process.env);
+  if (!config) {
+    throw new Error(
+      "Email delivery is not configured — set RESEND_API_KEY and EMAIL_FROM in the host environment.",
+    );
+  }
+
+  const body: Record<string, unknown> = {
+    from: config.from,
+    to: [message.to],
+    subject: message.subject,
+    text: message.text,
+    html: message.html,
+  };
+  if (config.replyTo) body.reply_to = config.replyTo;
+
+  let res: Response;
+  try {
+    res = await fetch(config.endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not reach the email provider: ${reason}`);
+  }
+
+  if (!res.ok) {
+    // Provider errors are useful (bad from-address, unverified domain, quota),
+    // and none of them echo the key back.
+    const detail = (await res.text().catch(() => "")).slice(0, 300);
+    throw new Error(`Email provider rejected the message (${res.status}): ${detail}`);
+  }
+}
+
+/** Build and send the one-time code email for a sign-in attempt. */
+export async function sendOtpEmail(opts: {
+  email: string;
+  otp: string;
+  type: OtpPurpose;
+  expiresInSeconds: number;
+}): Promise<void> {
+  const input = { otp: opts.otp, purpose: opts.type, expiresInSeconds: opts.expiresInSeconds };
+  await sendEmail({
+    to: opts.email,
+    subject: otpSubject(input.purpose),
+    text: otpText(input),
+    html: otpHtml(input),
+  });
+}
