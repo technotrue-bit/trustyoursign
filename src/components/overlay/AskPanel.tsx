@@ -355,7 +355,9 @@ export function AskPanel() {
                   </li>
                 ))}
                 {pending ? (
-                  <li className="text-sm text-fg-muted">The machine is reading the bones…</li>
+                  <li className="text-sm text-fg-muted" aria-live="polite">
+                    The machine is reading the bones…
+                  </li>
                 ) : null}
               </ol>
             )}
@@ -373,7 +375,7 @@ export function AskPanel() {
                 </li>
               ))}
             </ul>
-            {error ? <p className="mt-4 text-sm text-fg-muted">{error}</p> : null}
+            {error ? <p role="alert" className="mt-4 text-sm text-fg-muted">{error}</p> : null}
             </GlossRoot>
           </div>
           <form

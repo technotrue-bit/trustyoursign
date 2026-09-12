@@ -222,7 +222,7 @@ function Login() {
   };
 
   return (
-    <main className="vault-page bg-bg px-5 text-fg">
+    <main id="main-content" className="vault-page bg-bg px-5 text-fg">
       <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[max(2.5rem,var(--chrome-bottom))]">
         <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">The Vault · {SITE_OWNER.name}</p>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Keep the sky.</h1>
@@ -428,7 +428,7 @@ function Login() {
               </div>
             ) : null}
             {turnstileSiteKey() ? <TurnstileWidget /> : null}
-                        {error ? <p className="text-sm text-wine">{error}</p> : null}
+                        {error ? <p role="alert" className="text-sm text-wine">{error}</p> : null}
                         <button
                           type="submit"
                           disabled={busy || !authEnabled}

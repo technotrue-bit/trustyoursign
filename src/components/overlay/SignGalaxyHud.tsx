@@ -150,7 +150,7 @@ export function SignGalaxyHud() {
                         i === explore.pointIndex
                           ? "bg-fg/10 text-fg"
                           : locked
-                            ? "text-fg-subtle/35"
+                            ? "cursor-not-allowed text-fg-muted"
                             : "text-fg-subtle hover:text-fg",
                       )}
                       aria-label={locked ? `${p.purpose.title} (locked)` : p.purpose.title}
