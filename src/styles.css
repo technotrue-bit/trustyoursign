@@ -43,8 +43,10 @@
     --app-top: 0px;
     --app-aspect: 0.46;
     --overlay-hit: 0px;
+    --vv-bottom: 0px;
     --chrome-top: max(0.75rem, calc(var(--safe-top) + var(--overlay-hit)));
-    --chrome-bottom: max(0.5rem, var(--safe-bottom));
+    --chrome-bottom: max(0.5rem, calc(var(--safe-bottom) + var(--vv-bottom)));
+    --page-chrome-bottom: max(2.5rem, var(--chrome-bottom));
     --dock-h: 4.35rem;
   }
 
@@ -148,6 +150,11 @@
 
   :root[data-preview-host="1"] {
     --overlay-hit: 4.35rem;
+  }
+
+  /* Phone browser / in-app chrome sits on the page; document screens need room. */
+  .vault-page {
+    --page-chrome-bottom: max(5.5rem, calc(var(--chrome-bottom) + 3.75rem));
   }
 }
 
