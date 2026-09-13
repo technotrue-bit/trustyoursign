@@ -37,7 +37,8 @@ export type Nativity = {
   meta: Meta;
   angles: Angles;
   planets: PlanetDef[];
-  planetById: Record<PlanetId, PlanetDef>;
+  /** Research books fill every PlanetId; visitor casts are Partial (no stub node/chiron/lilith). */
+  planetById: Partial<Record<PlanetId, PlanetDef>>;
   houses: HouseCusp[];
   elements: { fire: number; earth: number; air: number; water: number };
   modalities: { cardinal: number; fixed: number; mutable: number };

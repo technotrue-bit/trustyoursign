@@ -30,21 +30,24 @@
  * a verified id via `@/lib/auth/middleware`.
  */
 import { betterAuth } from "better-auth";
-import { bearer, genericOAuth } from "better-auth/plugins";
+import { bearer, genericOAuth, captcha } from "better-auth/plugins";
+import { emailOTP } from "better-auth/plugins/email-otp";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
-import { Pool } from "pg";
-import { ensureDbReady, getPglite } from "../db";
+import { ensureDbReady, getNeonPool, getPglite } from "../db.server";
+import { emailDeliveryConfigured, sendOtpEmail } from "../email/send.server";
+import { OTP_EXPIRES_SECONDS, OTP_LENGTH } from "./otp-code";
 import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
+import { extraTrustedOrigins } from "./trusted-origins";
 import { pgliteDialect } from "./pglite-dialect";
 import {
   GROK_ISSUER_DEFAULT,
   PREVIEW_ALLOWED_HOSTS,
   PREVIEW_CLIENT_ID,
-  PREVIEW_CLIENT_SECRET,
+  PreviewOAuthSecret,
 } from "./preview";
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
@@ -79,7 +82,7 @@ const authDisabled = env("VITE_AUTH_ENABLED") === "false";
 // for any `*.grok-sandbox.com` callback (see `./preview`).
 const grokIssuer = env("GROK_AUTH_ISSUER") ?? GROK_ISSUER_DEFAULT;
 const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? PREVIEW_CLIENT_ID;
-const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET;
+const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PreviewOAuthSecret.read();
 
 /** True when federated sign-in is active (real auth is enforced). */
 export const authConfigured =
@@ -114,16 +117,22 @@ const baseURL = explicitBaseURL ?? {
 };
 
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
-// Missing entries here surface as FORBIDDEN "Invalid origin".
-const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
-  : [
-      // Host wildcards (matched against Origin's host)
-      ...previewAllowedHosts,
-      // Full-origin wildcards (matched against Origin)
-      ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-      ...LOCAL_DEV_ORIGINS,
-    ];
+// Missing entries here surface as FORBIDDEN "Invalid origin" — which rejects the
+// request BEFORE any credential is read, so the host you are browsing must be
+// listed. The canonical origin plus this project's own Vercel deployment hosts
+// (see ./trusted-origins) and any `AUTH_TRUSTED_ORIGINS` extras.
+const trustedOrigins: string[] = [
+  ...(explicitBaseURL
+    ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
+    : [
+        // Host wildcards (matched against Origin's host)
+        ...previewAllowedHosts,
+        // Full-origin wildcards (matched against Origin)
+        ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
+        ...LOCAL_DEV_ORIGINS,
+      ]),
+  ...extraTrustedOrigins(process.env),
+];
 
 const databaseUrl = env("DATABASE_URL");
 
@@ -142,7 +151,7 @@ const grokUserInfoUrl = `${issuerBase}/api/auth/oauth2/userinfo`;
 // schema from `migrations/auth/0001_auth.sql`, copied into `migrations/` when
 // the app turns sign-in on.
 const database = databaseUrl
-  ? new Pool({ connectionString: databaseUrl })
+  ? getNeonPool()
   : { dialect: pgliteDialect(() => getPglite()), type: "postgres" as const };
 
 /** Session token cookie name — also read by the live-preview popup completion page. */
@@ -231,8 +240,59 @@ export const auth = betterAuth({
     },
   },
 
+  // Login / auth abuse controls — enabled in all environments (fail closed on brute force).
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 60,
+    customRules: {
+      "/sign-in/email": { window: 60, max: 5 },
+      "/sign-up/email": { window: 60, max: 3 },
+      "/request-password-reset": { window: 60, max: 3 },
+      "/forget-password": { window: 60, max: 3 },
+      // One-time codes cost money to send and are worth brute-forcing, so the
+      // send path is capped harder than the verify path.
+      "/email-otp/send-verification-otp": { window: 60, max: 3 },
+      "/sign-in/email-otp": { window: 60, max: 5 },
+    },
+  },
+
   plugins: [
     gateIdentitySessions(),
+
+    // Bot protection: Cloudflare Turnstile when TURNSTILE_SECRET_KEY is set.
+    // Pair with VITE_TURNSTILE_SITE_KEY on the login form (see docs/security/turnstile.md).
+    ...(env("TURNSTILE_SECRET_KEY") && env("VITE_TURNSTILE_SITE_KEY")
+      ? [
+          captcha({
+            provider: "cloudflare-turnstile",
+            secretKey: env("TURNSTILE_SECRET_KEY")!,
+          }),
+        ]
+      : []),
+
+    // One-time-code sign-in by email. Registered only when the host can actually
+    // deliver mail (RESEND_API_KEY + EMAIL_FROM), mirroring the captcha spread
+    // above: an unreachable endpoint beats a half-configured one, and the sign-in
+    // UI hides the option whenever this is absent (see `emailOtpAvailable`).
+    //
+    // `disableSignUp` stays false on purpose — this is the easy path for someone
+    // with an iCloud address and no password, so a first-time code creates the
+    // account. Codes are stored hashed, so the verification table never holds a
+    // usable code.
+    ...(emailDeliveryConfigured()
+      ? [
+          emailOTP({
+            otpLength: OTP_LENGTH,
+            expiresIn: OTP_EXPIRES_SECONDS,
+            allowedAttempts: 5,
+            storeOTP: "hashed",
+            async sendVerificationOTP({ email, otp, type }) {
+              await sendOtpEmail({ email, otp, type, expiresInSeconds: OTP_EXPIRES_SECONDS });
+            },
+          }),
+        ]
+      : []),
 
     // One genericOAuth provider per upstream (when auth is on), all federating
     // to the broker with the SAME client and differing only by the `idp` hint.

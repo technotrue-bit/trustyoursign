@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { authClient } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
-import { bindOwnerPreview, claimSite, primeOwner } from "@/lib/site";
+import { bindOwnerPreview, claimSite } from "@/lib/site";
 
 const BEARER = "grok-auth.bearer-token";
 
@@ -59,7 +59,6 @@ export function OwnerBind() {
     }
     void (async () => {
       restoreBearer();
-      await primeOwner().catch(() => {});
       const next = await bindOwnerPreview().catch(() => ({ token: null }));
       if (!next.token) return;
       writeStore(next.token);

@@ -6,7 +6,7 @@ import { isDateInSign } from "@/lib/chart/sun";
 import { followingBeat, markBeatSeen, markTourDone, nextJoeyBeat } from "@/lib/chart/tour";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy } from "@/lib/galaxy/store";
-import { OPEN_T, resetTravel, seekSign } from "@/lib/galaxy/travel";
+import { OPEN_T, exitSignGalaxy, exploringSign, resetTravel, seekSign } from "@/lib/galaxy/travel";
 import {
   applyCloseState,
   clearClaimState,
@@ -159,6 +159,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   close: () => {
     const state = get();
+    // Leaving claim/natal while a sign galaxy is open must exit the dive —
+    // otherwise StarBack only clears claim and remounts the trapped hub HUD.
+    if (exploringSign()) exitSignGalaxy();
     const returnsToGalaxy =
       state.session?.origin === "galaxy" ||
       (!state.session && !state.claim && state.surface === "library");

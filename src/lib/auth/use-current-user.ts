@@ -31,6 +31,15 @@ export type CurrentUserState = {
   user: AppUser | null;
   /** True while the session is still resolving — don't treat `user: null` as signed out yet. */
   isPending: boolean;
+  /**
+   * The session READ failed — the request never got an answer (network drop,
+   * server hiccup). NOT "signed out": the cookie may be perfectly good. A phone
+   * waking from the app switcher fires exactly this request, so treating it as
+   * signed out logs people out on resume. See `session-guard`.
+   */
+  isReadFailed: boolean;
+  /** Re-read the session (the "try again" path after a failed read). */
+  refetchSession: () => void;
 };
 
 /**
@@ -55,9 +64,10 @@ export type CurrentUserState = {
  * call keeps a stable hook order across every render of a given component.
  */
 export function useCurrentUserState(): CurrentUserState {
-  if (!authEnabled) return { user: DEV_USER, isPending: false };
-  // eslint-disable-next-line react-hooks/rules-of-hooks -- authEnabled is constant for the app's lifetime
-  const { data, isPending } = authClient.useSession();
+  if (!authEnabled) {
+    return { user: DEV_USER, isPending: false, isReadFailed: false, refetchSession: () => {} };
+  }
+  const { data, isPending, error, refetch } = authClient.useSession();
   const user = data?.user;
   return {
     user: user
@@ -70,6 +80,8 @@ export function useCurrentUserState(): CurrentUserState {
         }
       : null,
     isPending,
+    isReadFailed: Boolean(error),
+    refetchSession: () => void refetch(),
   };
 }
 

@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
 import { cn } from "@/lib/utils";
 
 export function AccountMenu() {
-  const { user, isPending } = useCurrentUserState();
+  const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
   const [open, setOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const menuRef = useDialogFocus<HTMLDivElement>(open);
 
   useEffect(() => {
     if (!open) return;
@@ -29,11 +31,26 @@ export function AccountMenu() {
   if (isPending) {
     return <div className="size-11 shrink-0 animate-pulse rounded-full bg-bg-subtle" aria-hidden />;
   }
+  if (!user && isReadFailed) {
+    // A failed session READ is not "signed out" (see `session-guard`). Telling a
+    // signed-in visitor to sign in because one request dropped is exactly how a
+    // hiccup reads as being logged out — so offer the retry instead.
+    return (
+      <button
+        type="button"
+        onClick={refetchSession}
+        title="Couldn't check your sign-in — tap to try again"
+        className="auth-sign-in pointer-events-auto inline-flex min-h-11 items-center px-3 text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+      >
+        Reconnect
+      </button>
+    );
+  }
   if (!user) {
     return (
       <a
         href="/login"
-        className="pointer-events-auto inline-flex min-h-11 items-center px-3 text-[0.65rem] tracking-[0.2em] text-fg-muted uppercase hover:text-fg"
+        className="auth-sign-in pointer-events-auto inline-flex min-h-11 items-center px-3 text-[0.65rem] tracking-[0.2em] text-fg-muted uppercase hover:text-fg"
       >
         Sign in
       </a>
@@ -62,9 +79,11 @@ export function AccountMenu() {
       </button>
       {open ? (
         <div
+          ref={menuRef}
           role="menu"
+          tabIndex={-1}
           className={cn(
-            "absolute top-[calc(100%+0.4rem)] right-0 z-[80] w-56 overflow-hidden rounded-xl border border-border bg-bg-elevated/96 py-1 shadow-[var(--shadow-border)] backdrop-blur-sm",
+            "absolute top-[calc(100%+0.4rem)] right-0 z-[80] w-56 overflow-hidden rounded-xl border border-border bg-bg-elevated/96 py-1 shadow-[var(--shadow-border)] backdrop-blur-sm outline-none",
           )}
         >
           <p className="truncate px-4 pt-3 pb-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
@@ -106,7 +125,7 @@ export function AccountMenu() {
               void signOut("/").catch(() => setLeaving(false));
             }}
           >
-            {leaving ? "Leaving…" : "Log out"}
+            {leaving ? <span aria-live="polite">Leaving…</span> : "Log out"}
           </button>
         </div>
       ) : null}

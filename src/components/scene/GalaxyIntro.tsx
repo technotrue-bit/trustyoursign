@@ -25,16 +25,25 @@ import {
   HOLD_FLY,
   aimedIndex,
   ensureAutoClock,
+  stopAutoClock,
   ensureFlyInput,
+  enterAnimating,
+  enterSignGalaxy,
+  exitSignGalaxy,
+  exploringSign,
   galaxyTravel,
   noteControl,
   prefersReducedMotion,
   publishTravel,
   skipBirth,
+  skipEnterGalaxy,
   stepBirth,
+  stepExplore,
+  stepSelectionHold,
   stepSeek,
   stepZoom,
 } from "@/lib/galaxy/travel";
+import { enterHubSettle, getSignGalaxy, insideHardGateHidesLeftovers } from "@/lib/galaxy/signGalaxy";
 import {
   bootIntro,
   introCam,
@@ -55,10 +64,12 @@ import {
   computePlateOpacity,
 } from "@/lib/galaxy/birthchat-slide";
 import { createDiskSim, disposeDisk, stepDisk } from "@/lib/galaxy/disk";
+import { galaxyLayerName } from "@/lib/galaxy/layers";
 import {
   loadSignArt,
   preloadSignArt,
-  preloadSignArtRest,
+  preloadSignArtNear,
+  releaseSignArt,
   hydrateSignArt,
   artReady,
   artAspect,
@@ -95,6 +106,7 @@ import { useSessionStore } from "@/lib/chart/session/store";
 import { CelestialSky } from "./CelestialSky";
 import { CornerGalaxies } from "./CornerGalaxies";
 import { SignShell } from "./SignShell";
+import { SignGalaxyField, pointLocalOffset } from "./SignGalaxyField";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const DUST_N = SMALL ? 180 : 320;
@@ -104,6 +116,7 @@ const _cam = new Vector3();
 const _look = new Vector3();
 const _chest = new Vector3();
 const _fog = new Color();
+const _bg = new Color();
 const _accent = new Color();
 const _up = new Vector3(0, 1, 0);
 const _sitCam = new Vector3();
@@ -173,9 +186,11 @@ export function GalaxyIntro() {
     const restT = window.setTimeout(
       () => {
         setRest(true);
-        preloadSignArtRest();
+        preloadSignArtNear(0);
         primeSignVolumes();
-        for (const c of CONSTELLATIONS) primeSignArt(c.id);
+        primeSignArt("aries");
+        primeSignArt("taurus");
+        primeSignArt("gemini");
       },
       SMALL ? 700 : 480,
     );
@@ -255,7 +270,13 @@ function SignDisk() {
     const state = useSessionStore.getState();
     const chatting = state.claim !== null && state.session === null;
     const picked = chatting && state.claim?.signId === sign.id;
-    const show = gather > 0.32 && intro > 0.4 && veil < 0.45;
+    const world = exploringSign() ? galaxyTravel.worldFade : 1;
+    const show =
+      gather > 0.32 &&
+      intro > 0.4 &&
+      veil < 0.45 &&
+      world > 0.08 &&
+      !insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
     g.visible = show;
     if (!show) {
       sim.mat.uniforms.uFade.value = 0;
@@ -310,8 +331,10 @@ function SignDisk() {
     sim.mat.uniforms.uPixelRatio.value = Math.min(2, gl.getPixelRatio());
   });
   return (
-    <group ref={group} visible={false} frustumCulled={false}>
+    <group ref={group} visible={false} frustumCulled={false} name={galaxyLayerName("sign-disk")}>
       <points
+        key={galaxyLayerName("sign-disk")}
+        name={galaxyLayerName("sign-disk")}
         geometry={sim.geo}
         material={sim.mat}
         frustumCulled={false}
@@ -346,16 +369,23 @@ function Dust() {
     },
     [tex, geo],
   );
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, dt) => {
     const mesh = points.current;
     if (!mesh) return;
-    const vis = introField();
+    const vis = introField() * (exploringSign() ? galaxyTravel.worldFade : 1);
     mesh.visible = vis > 0.02;
     const mat = mesh.material;
     if (!Array.isArray(mat) && "opacity" in mat) mat.opacity = 0.35 * vis;
   });
   return (
-    <points ref={points} geometry={geo} frustumCulled={false} raycast={noopRaycast}>
+    <points
+      ref={points}
+      key={galaxyLayerName("dust-field")}
+      name={galaxyLayerName("dust-field")}
+      geometry={geo}
+      frustumCulled={false}
+      raycast={noopRaycast}
+    >
       <pointsMaterial
         map={tex}
         color="#e8d8c0"
@@ -423,6 +453,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const group = useRef<Group>(null);
   const cores = useRef<Points>(null);
   const art = useRef<Mesh>(null);
+  const shellWrap = useRef<Group>(null);
   const shown = useRef(false);
   const hydrated = useRef(false);
   const wantArt = useRef(eager);
@@ -458,20 +489,42 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     }
     return g;
   }, [eager, index, n, sign.id, morphPairs, useVolume]);
-  const pick = () => useSessionStore.getState().openClaim(sign.id);
+  const pick = () => {
+    if (enterAnimating()) return;
+    if (exploringSign()) {
+      if (galaxyTravel.exploreSignIndex === index && galaxyTravel.explorePhase === "inside") {
+        useSessionStore.getState().openClaim(sign.id);
+      }
+      return;
+    }
+    enterSignGalaxy(index);
+  };
 
   useEffect(() => {
     return () => {
       coreMat.dispose();
       starGeo.dispose();
+      releaseSignArt(artTex);
     };
-  }, [coreMat, starGeo]);
+  }, [coreMat, starGeo, artTex]);
 
   useEffect(() => {
     if (artTex) return;
     const id = window.setTimeout(() => setArtTex(loadSignArt(sign.id)), 420 + index * 85);
     return () => window.clearTimeout(id);
   }, [artTex, index, sign.id]);
+
+  const shellMats = useRef<{ opacity?: number; transparent?: boolean }[]>([]);
+  useEffect(() => {
+    const wrap = shellWrap.current;
+    if (!wrap) return;
+    const mats: { opacity?: number; transparent?: boolean }[] = [];
+    wrap.traverse((obj) => {
+      const mat = (obj as Mesh).material as { opacity?: number; transparent?: boolean } | undefined;
+      if (mat && typeof mat.opacity === "number") mats.push(mat);
+    });
+    shellMats.current = mats;
+  });
 
   useFrame(({ clock, camera }, dt) => {
     const g = group.current;
@@ -492,6 +545,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const dist = Math.abs(t - dest);
     const incoming = index === Math.min(11, stationFromT(t) + 1);
     const focused = held || index === aimedIndex() || index === stationFromT(t);
+    if (focused || incoming) preloadSignArtNear(index);
     const ready = plateReady(sign.id);
     if (!artTex && (focused || incoming || ready) && !wantArt.current) {
       wantArt.current = true;
@@ -505,14 +559,26 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       g.visible = false;
       return;
     }
-    const fade = held
+    const exploringHere =
+      galaxyTravel.exploreSignIndex === index && galaxyTravel.explorePhase !== "idle";
+    const worldFade = exploringSign() ? galaxyTravel.worldFade : 1;
+    if (exploringSign() && !exploringHere && !held) {
+      g.visible = false;
+      return;
+    }
+    const fade = held || exploringHere
       ? 1
       : direct && index === aimedIndex()
         ? Math.max(0.35, smooth(1 - Math.min(1, dist / 0.22)))
-        : smooth(1 - Math.min(1, dist / 0.08));
-    const show = held || dist < 0.078 || (direct && index === aimedIndex());
+        : smooth(1 - Math.min(1, dist / 0.08)) * worldFade;
+    const show =
+      held || exploringHere || dist < 0.078 || (direct && index === aimedIndex());
     g.visible = show;
-    if (!show) return;
+    if (!show) {
+      mesh.visible = false;
+      if (starGeo.getAttribute("position")) starGeo.setDrawRange(0, 0);
+      return;
+    }
 
     const sit = TEMPLE_STATIONS[index]!;
     const cam = camera as PerspectiveCamera;
@@ -569,67 +635,106 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         ? Math.max(0, (arrive - 0.12) / 0.62)
         : smooth(Math.max(0, (gather - 0.52) / 0.48));
 
-    if (art.current && artTex && !useVolume) {
-      const mat = art.current.material as MeshBasicMaterial;
-      const plateOn = Boolean(artTex && (artReady(artTex) || ready));
-      const bornIn = plateReveal;
-      // Plate opacity via tested helper — fully opaque during BirthChat, no plateMorphFade.
-      const plateOp = computePlateOpacity({
-        plateOn,
-        held,
-        focused,
-        fade,
-        bornIn,
-        morphLevel: morphLevel.current,
-      });
-      art.current.visible = plateOp > 0.04;
-      art.current.scale.set(wide, wide / aspect, 1);
-      mat.opacity = plateOp;
-      mat.map = artTex;
-      mat.depthTest = false;
-      mat.alphaTest = 0.04;
-      if (plateOn && !shown.current) {
-        artTex.needsUpdate = true;
-        mat.needsUpdate = true;
-        shown.current = true;
+    const landedHere =
+      exploringHere && insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
+
+    if (landedHere) {
+      mesh.visible = false;
+      if (art.current) {
+        art.current.visible = false;
+        (art.current.material as MeshBasicMaterial).opacity = 0;
       }
+      if (shellWrap.current) shellWrap.current.visible = false;
+    } else {
+      if (art.current && artTex && !useVolume) {
+        const mat = art.current.material as MeshBasicMaterial;
+        const plateOn = Boolean(artTex && (artReady(artTex) || ready));
+        const bornIn = plateReveal;
+        // Plate opacity via tested helper — fully opaque during BirthChat, no plateMorphFade.
+        const plateOp =
+          computePlateOpacity({
+            plateOn,
+            held,
+            focused,
+            fade,
+            bornIn,
+            morphLevel: morphLevel.current,
+          }) * (exploringHere ? galaxyTravel.plateFade : 1);
+        art.current.visible = plateOp > 0.04;
+        art.current.scale.set(wide, wide / aspect, 1);
+        mat.opacity = plateOp;
+        mat.map = artTex;
+        mat.depthTest = false;
+        mat.alphaTest = 0.04;
+        if (plateOn && !shown.current) {
+          artTex.needsUpdate = true;
+          mat.needsUpdate = true;
+          shown.current = true;
+        }
+      }
+      if (shellWrap.current) {
+        const shellOp = exploringHere ? galaxyTravel.plateFade : 1;
+        shellWrap.current.visible = shellOp > 0.04;
+        if (shellWrap.current.visible) {
+          for (const mat of shellMats.current) {
+            mat.transparent = true;
+            mat.opacity = 0.94 * shellOp;
+          }
+        }
+      }
+
+      if (!focused && !incoming && !held && !exploringHere) {
+        mesh.visible = false;
+        return;
+      }
+      if (introPlaying() && index === 0 && introAries() < 0.1) {
+        mesh.visible = false;
+        return;
+      }
+      mesh.visible = true;
+      const morphTarget = picked ? 1 : 0;
+      // Faster in (star formation feels snappy), slower out (dissolve back gracefully)
+      const morphRate = prefersReducedMotion() ? 20 : picked ? 1.8 : 1.2;
+      morphLevel.current += (morphTarget - morphLevel.current) * Math.min(1, dt * morphRate);
+      const ml = morphLevel.current;
+      const u = coreMat.uniforms;
+      u.uTime.value = clock.elapsedTime;
+      u.uGather.value = gather;
+      u.uWide.value = wide;
+      u.uTall.value = wide / aspect;
+      u.uMorph.value = ml;
+      // Group slide handles X positioning; per-star bias causes double-shift
+      u.uGlyphBiasX.value = 0;
+      // Swirl dampens as morph settles; halo/spiral fade so glyph reads clean
+      u.uSwirl.value = prefersReducedMotion() ? 0 : 1 - ml * 0.9;
+      u.uFade.value = fade;
+      u.uHover.value = galaxyTravel.ptrOn && focused ? 1.12 : 1;
+      u.uPxScale.value = SMALL ? 0.9 : 1;
+      u.uBaseSize.value = SMALL ? 2.6 : 2.05;
+      // Boost opacity when forming glyph so stars are crisp and visible
+      const formBoost = exploringHere ? 0.35 + galaxyTravel.galaxyForm * 0.85 : 1;
+      u.uOpacity.value = (0.62 + fade * 0.32) * (1 + ml * 0.55) * formBoost;
+      // Dissolving plate: keep animal gather high; swirl eases as galaxy forms.
+      if (exploringHere) {
+        u.uGather.value = Math.max(gather, 0.72 + galaxyTravel.galaxyForm * 0.28);
+        u.uSwirl.value = prefersReducedMotion()
+          ? 0
+          : Math.max(0, (1 - ml * 0.9) * (1 - galaxyTravel.galaxyForm * 0.85));
+        u.uMorph.value = ml * (1 - galaxyTravel.galaxyForm);
+      }
+      (u.uTint.value as Color).copy(tint);
     }
 
-    if (!focused && !incoming && !held) {
-      mesh.visible = false;
-      return;
+    if (landedHere) {
+      const u = coreMat.uniforms;
+      u.uOpacity.value = 0;
+      u.uFade.value = 0;
     }
-    if (introPlaying() && index === 0 && introAries() < 0.1) {
-      mesh.visible = false;
-      return;
-    }
-    mesh.visible = true;
-    const morphTarget = picked ? 1 : 0;
-    // Faster in (star formation feels snappy), slower out (dissolve back gracefully)
-    const morphRate = prefersReducedMotion() ? 20 : picked ? 1.8 : 1.2;
-    morphLevel.current += (morphTarget - morphLevel.current) * Math.min(1, dt * morphRate);
-    const ml = morphLevel.current;
-    const u = coreMat.uniforms;
-    u.uTime.value = clock.elapsedTime;
-    u.uGather.value = gather;
-    u.uWide.value = wide;
-    u.uTall.value = wide / aspect;
-    u.uMorph.value = ml;
-    // Group slide handles X positioning; per-star bias causes double-shift
-    u.uGlyphBiasX.value = 0;
-    // Swirl dampens as morph settles; halo/spiral fade so glyph reads clean
-    u.uSwirl.value = prefersReducedMotion() ? 0 : 1 - ml * 0.9;
-    u.uFade.value = fade;
-    u.uHover.value = galaxyTravel.ptrOn && focused ? 1.12 : 1;
-    u.uPxScale.value = SMALL ? 0.9 : 1;
-    u.uBaseSize.value = SMALL ? 2.6 : 2.05;
-    // Boost opacity when forming glyph so stars are crisp and visible
-    u.uOpacity.value = (0.62 + fade * 0.32) * (1 + ml * 0.55);
-    (u.uTint.value as Color).copy(tint);
   });
 
+  const stationName = `${galaxyLayerName("station-cloud")}-${sign.id}`;
   return (
-    <group ref={group} frustumCulled={false}>
+    <group ref={group} frustumCulled={false} name={stationName}>
       <mesh
         onClick={(e) => {
           e.stopPropagation();
@@ -662,7 +767,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         />
       </mesh>
       {useVolume ? (
-        <group position={[0, 0.05, -0.06]}>
+        <group ref={shellWrap} position={[0, 0.05, -0.06]}>
           <Suspense fallback={null}>
             <SignShell signId={sign.id} plateWide={PLATE_WIDE} />
           </Suspense>
@@ -670,11 +775,14 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       ) : null}
       <points
         ref={cores}
+        key={stationName}
+        name={stationName}
         geometry={starGeo}
         material={coreMat}
         frustumCulled={false}
         raycast={noopRaycast}
       />
+      <SignGalaxyField sign={sign} index={index} />
       <BigThreeLights signId={sign.id} />
     </group>
   );
@@ -774,6 +882,7 @@ function TempleRig() {
   useEffect(() => {
     ensureAutoClock();
     ensureFlyInput();
+    return () => stopAutoClock();
   }, []);
 
   useEffect(() => {
@@ -782,11 +891,30 @@ function TempleRig() {
       if (state.claim) return;
       if (state.session) return;
       if (introPlaying()) {
-        if (introCanSkip()) {
+        // Tab must move focus — only Escape / Enter / Space skip the intro.
+        if (
+          introCanSkip() &&
+          (e.key === "Escape" || e.key === "Enter" || e.key === " ")
+        ) {
+          e.preventDefault();
           skipIntro();
           galaxyTravel.birth = 1;
           useGalaxy.getState().markBorn();
         }
+        return;
+      }
+      if (enterAnimating()) {
+        if (e.key === "Escape" || e.key === "Enter") {
+          skipEnterGalaxy();
+          noteControl();
+        }
+        return;
+      }
+      const t = e.target;
+      if (
+        t instanceof HTMLElement &&
+        t.closest("input, textarea, select, [contenteditable=true]")
+      ) {
         return;
       }
       if (e.key === "ArrowDown" || e.key === "s" || e.key === "S" || e.key === "ArrowRight") {
@@ -806,6 +934,11 @@ function TempleRig() {
       } else if (e.key === "Enter" && galaxyTravel.birth < 1) {
         skipBirth();
         useGalaxy.getState().markBorn();
+      } else if (e.key === "Escape" && exploringSign()) {
+        exitSignGalaxy();
+        noteControl();
+      } else if (e.key === "Enter" && !exploringSign() && galaxyTravel.birth >= 1 && !introPlaying()) {
+        enterSignGalaxy();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -828,10 +961,14 @@ function TempleRig() {
       if (galaxyTravel.awaken < 0.2) galaxyTravel.awaken = 1;
     }
     stepIntro(d);
+    stepExplore(d);
     const state = useSessionStore.getState();
     const chatting = state.claim !== null && state.session === null;
     const arriving = introPlaying();
-    const sought = stepSeek(current.current, d);
+    const exploring = exploringSign();
+    // Keep busy in sync so selection hold pauses during claim / intro.
+    galaxyTravel.busy = chatting || state.session !== null || arriving;
+    const sought = exploring ? { active: false, t: current.current } : stepSeek(current.current, d);
     if (sought.active) {
       current.current = sought.t;
       galaxyTravel.tTarget = sought.t;
@@ -839,7 +976,7 @@ function TempleRig() {
     if (chatting) {
       const i = CONSTELLATIONS.findIndex((c) => c.id === state.claim?.signId);
       if (i >= 0) galaxyTravel.tTarget = stationT(i);
-    } else if (!arriving && !sought.active) {
+    } else if (!arriving && !sought.active && !exploring) {
       const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
       galaxyTravel.handsOn = hands;
       if (hands && galaxyTravel.hold !== 0) {
@@ -857,9 +994,10 @@ function TempleRig() {
     TEMPLE_CURVE.getPointAt(t, _chest);
     const aspect = viewAspect(size);
     const idx = stationFromT(t);
-    stepZoom(d, idx !== lastStation.current);
+    const exploreIdx = galaxyTravel.exploreSignIndex ?? idx;
+    stepZoom(d, idx !== lastStation.current && !exploring);
     lastStation.current = idx;
-    const vol = getSignVolume(TEMPLE_SIGNS[idx]!.id);
+    const vol = getSignVolume(TEMPLE_SIGNS[exploreIdx]!.id);
     const plateA = vol?.aspect ?? 16 / 9;
     const shelfOn = state.session?.kind === "shelf";
     const well = chatting || shelfOn ? { top: 0.12, bottom: 0.48 } : { top: 0.15, bottom: 0.24 };
@@ -872,32 +1010,85 @@ function TempleRig() {
     _look.copy(_chest);
     _look.z -= 1.4 + introCam() * 1.0;
     _look.y += frame.portrait ? 0.05 : 0.15;
-    if (!arriving) {
+    if (!arriving && !exploring) {
       _look.x += galaxyTravel.ptrX * 1.1;
       _look.y += -galaxyTravel.ptrY * 0.6;
       _cam.x += galaxyTravel.ptrX * 0.35;
       _cam.y += galaxyTravel.ptrY * 0.2;
     }
-    // Local dive: while a volume-gated station is held (BirthChat or shelf),
-    // ease the camera a small step toward the shell/station center. Does not
-    // alter the travel curve, target station, or look-at math above.
+    // Local dive: BirthChat volume hold, or selected-sign galaxy enter.
     const heldSignId = chatting ? state.claim?.signId : shelfOn ? state.session?.signId : undefined;
-    const diveTarget = heldSignId && hasVolumeSign(heldSignId) ? 0.35 * PLATE_WIDE : 0;
-    diveAmount.current = lerpToward({
-      current: diveAmount.current,
-      target: diveTarget,
-      dt: d,
-      rate: 2.2,
-    });
+    const volumeDive = heldSignId && hasVolumeSign(heldSignId) ? 0.35 * PLATE_WIDE : 0;
+    const exploreDive =
+      exploring && galaxyTravel.exploreSignIndex != null
+        ? // Stay in front of the plate while approaching the hub star — don't punch through into empty sky.
+          galaxyTravel.diveBlend * (0.65 + galaxyTravel.galaxyForm * 2.1)
+        : 0;
+    const diveTarget = Math.max(volumeDive, exploreDive);
+    const snapSkipPose = galaxyTravel.enterSkip === "hold" || galaxyTravel.skipVeil > 0.5;
+    // During sign-enter (not BirthChat volume-only), track the curve tightly.
+    const diveRate =
+      exploring && galaxyTravel.exploreSignIndex != null
+        ? galaxyTravel.explorePhase === "inside"
+          ? 3.2
+          : 6.5
+        : 2.2;
+    diveAmount.current = snapSkipPose
+      ? diveTarget
+      : lerpToward({
+          current: diveAmount.current,
+          target: diveTarget,
+          dt: d,
+          rate: diveRate,
+        });
     if (diveAmount.current > 0.0005) _cam.z -= diveAmount.current;
+
+    if (exploring && galaxyTravel.exploreSignIndex != null) {
+      const sit = TEMPLE_STATIONS[galaxyTravel.exploreSignIndex]!;
+      const gxy = getSignGalaxy(TEMPLE_SIGNS[galaxyTravel.exploreSignIndex]!.id);
+      const form = galaxyTravel.galaxyForm;
+      const dive = galaxyTravel.diveBlend;
+      // Enter aims at the hub portal; inside and exit keep the active travel node
+      // so leaving a deep node doesn't snap the look back to hub.
+      const entering =
+        galaxyTravel.explorePhase === "fading" || galaxyTravel.explorePhase === "diving";
+      const pi = entering
+        ? 0
+        : galaxyTravel.pointSeek != null
+          ? galaxyTravel.pointT
+          : galaxyTravel.pointIndex;
+      const local = pointLocalOffset(gxy, Math.round(pi), Math.max(form, dive * 0.85));
+      // Billboard station: offset along camera right/up, then into look.
+      _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+      _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+      _look.copy(sit);
+      _look.addScaledVector(_camRight, local.x);
+      _look.addScaledVector(_camUp, local.y);
+      _look.z += local.z * 0.15;
+      const settle =
+        galaxyTravel.explorePhase === "inside"
+          ? 1
+          : Math.max(enterHubSettle(galaxyTravel.exploreProgress), dive);
+      if (settle > 0.001) {
+        // Ease toward the hub star on the figure while the plate is still filling the frame.
+        const pull = 0.025 + settle * 0.1;
+        _cam.x += (_look.x - _cam.x) * pull;
+        _cam.y += (_look.y - _cam.y) * (pull * 0.85);
+        if (galaxyTravel.explorePhase === "inside") {
+          _look.lerp(_chest, 0.35);
+        }
+      }
+    }
+
     if (!Number.isFinite(_cam.x) || !Number.isFinite(_look.x)) return;
     camera.up.copy(_up);
-    if (!booted.current || arriving) {
+    if (!booted.current || arriving || snapSkipPose) {
       camera.position.copy(_cam);
       camera.lookAt(_look);
       booted.current = true;
     } else {
-      camera.position.lerp(_cam, k);
+      const ease = exploring ? 1 - Math.exp(-d * 1.6) : k;
+      camera.position.lerp(_cam, ease);
       camera.lookAt(_look);
     }
     if (camera instanceof PerspectiveCamera) {
@@ -906,7 +1097,9 @@ function TempleRig() {
         ? Math.min(52, frame.fov)
         : arriving
           ? frame.fov - (1 - introCam()) * 4
-          : frame.fov / (0.92 + (zoom - 1) * 0.18);
+          : exploring
+            ? frame.fov / (0.94 + galaxyTravel.galaxyForm * 0.18)
+            : frame.fov / (0.92 + (zoom - 1) * 0.18);
       if (arriving || Math.abs(camera.fov - fovWant) > 3) camera.fov = fovWant;
       else camera.fov += (fovWant - camera.fov) * k;
       camera.aspect = aspect;
@@ -914,11 +1107,19 @@ function TempleRig() {
     }
     if (scene.fog instanceof FogExp2) {
       lerpFog(t, _fog);
-      scene.fog.color.copy(_fog);
-      scene.background = _fog.clone().multiplyScalar(0.35);
+      const fogMul = exploring ? 0.55 + galaxyTravel.worldFade * 0.45 : 1;
+      scene.fog.color.copy(_fog).multiplyScalar(fogMul);
+      _bg.copy(_fog).multiplyScalar(0.35 * fogMul);
+      scene.background = _bg;
+      if (exploring) {
+        scene.fog.density = 0.01 * (0.35 + galaxyTravel.worldFade * 0.65);
+      } else {
+        scene.fog.density = 0.01;
+      }
     }
     galaxyTravel.t = t;
     if (galaxyTravel.moved) galaxyTravel.awaken = 1;
+    stepSelectionHold();
     if (
       Math.abs(t - lastPub.current) > 0.004 ||
       galaxyTravel.moved !== useGalaxy.getState().moved

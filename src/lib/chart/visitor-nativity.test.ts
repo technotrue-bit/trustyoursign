@@ -34,6 +34,10 @@ describe("visitor natal cast", () => {
     assert.equal(nat.meta.houses, "Whole Sign");
     assert.equal(nat.meta.engine, "astronomy-engine");
     assert.ok(nat.planets.some((p) => p.id === "venus"));
+    assert.equal(nat.planetById.node, undefined);
+    assert.equal(nat.planetById.chiron, undefined);
+    assert.equal(nat.planetById.lilith, undefined);
+    assert.ok(nat.planetById.sun);
     assert.equal(nat.houses.length, 12);
     assert.equal(nat.chakras.length, 7);
     assert.equal(nat.gates.length, 0);

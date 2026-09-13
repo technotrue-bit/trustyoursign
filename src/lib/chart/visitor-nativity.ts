@@ -137,28 +137,6 @@ function toPlanetDef(p: CastPoint): PlanetDef {
   };
 }
 
-function stubPlanet(id: PlanetId, name: string, lon: number): PlanetDef {
-  const look = PLANET_LOOK[id] ?? { color: "#7a7068", glow: "#5a5048", size: 0.12, radius: 4.8 };
-  return {
-    id,
-    name,
-    glyph: name.slice(0, 4),
-    lon,
-    house: 1,
-    wholeSign: 1,
-    retrograde: false,
-    dignity: "peregrine",
-    color: look.color,
-    glow: look.glow,
-    size: look.size,
-    radius: look.radius,
-    headline: `${name} is not cast in this sky.`,
-    why: "This point is reserved for research charts.",
-    body: ["Not calculated for visitor nativities yet."],
-    note: "not cast",
-  };
-}
-
 function wholeSignCusps(ascLon: number): HouseCusp[] {
   const ascSign = Math.floor(wrap360(ascLon) / 30) * 30;
   const labels = ["ASC", "2", "3", "IC", "5", "6", "DSC", "8", "9", "MC", "11", "12"];
@@ -295,12 +273,10 @@ function oneCutFrom(planets: PlanetDef[]) {
 /** Build a research-shaped Nativity from a computed cast — tables first, seed prose only. */
 export function buildVisitorNativity(cast: NatalCast, opts: VisitorNatalOpts): Nativity {
   const planets = cast.points.map(toPlanetDef);
-  const planetById = {
-    ...Object.fromEntries(planets.map((p) => [p.id, p])),
-    node: stubPlanet("node", "North Node", cast.angles.asc),
-    chiron: stubPlanet("chiron", "Chiron", cast.angles.mc),
-    lilith: stubPlanet("lilith", "Lilith", cast.angles.dsc),
-  } as Record<PlanetId, PlanetDef>;
+  // Only cast points — no fake node/chiron/lilith stubs.
+  const planetById = Object.fromEntries(planets.map((p) => [p.id, p])) as Partial<
+    Record<PlanetId, PlanetDef>
+  >;
 
   const { elements, modalities } = countElements(planets);
   const aspects = buildAspects(planets);
