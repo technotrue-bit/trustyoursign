@@ -169,10 +169,10 @@ export function GalaxyShell() {
             "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase md:min-h-11 md:w-auto",
             moved
               ? "sign-claim text-fg hover:text-accent active:text-accent"
-              : "text-fg-subtle/50 transition-colors duration-150",
+              : "cursor-not-allowed border border-border/80 bg-bg-subtle/40 text-fg-muted",
           )}
         >
-          Enter this sign
+          {moved ? "Enter this sign" : "Slide to choose a sign"}
         </button>
         <button
           type="button"
@@ -180,7 +180,7 @@ export function GalaxyShell() {
           onClick={() => sign && openClaim(sign.id)}
           className={cn(
             "pointer-events-auto min-h-10 px-3 text-[0.65rem] tracking-[0.18em] uppercase",
-            moved ? "text-fg-subtle hover:text-fg" : "text-fg-subtle/40",
+            moved ? "text-fg-subtle hover:text-fg" : "cursor-not-allowed text-fg-muted",
           )}
         >
           This is my sign

@@ -1,8 +1,6 @@
-import { createRequire } from "node:module";
+import pg from "pg";
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 import { AppRls } from "./db-rls.server";
-
-const nodeRequire = createRequire(import.meta.url);
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
@@ -83,7 +81,13 @@ export function getNeonPool(): import("pg").Pool {
     throw new Error("getNeonPool() requires DATABASE_URL");
   }
   if (globalRef.__neonPool__) return globalRef.__neonPool__;
-  const { Pool, types } = nodeRequire("pg") as typeof import("pg");
+  // `pg` is imported STATICALLY at the top of this file — deliberately, not via
+  // `createRequire`. A runtime require is invisible to the bundler, so the
+  // driver never made it into the deployed function and the Neon path died with
+  // `Cannot find module 'pg'` at 500-everywhere severity. A static import is
+  // still synchronous, and Rollup now ships it. The POOL stays lazy: nothing
+  // connects until this function is first called.
+  const { Pool, types } = pg;
   if (!globalRef.__neonTypesConfigured__) {
     types.setTypeParser(OID_INT8, Number);
     types.setTypeParser(OID_DATE, identity);

@@ -24,17 +24,42 @@ export type EmailMessage = {
 export const DEFAULT_EMAIL_ENDPOINT = "https://api.resend.com/emails";
 
 /**
+ * Read one setting, tolerating the spelling the host actually received.
+ *
+ * Environment variable names are case-sensitive, and a dashboard makes it easy
+ * to save `resend_api_key` or `Email_From` where the docs say `RESEND_API_KEY`
+ * and `EMAIL_FROM`. The misspelling is invisible — the app just reports "not
+ * configured" and hides the feature, which is a baffling failure for a
+ * plausible typo. So match names case-insensitively, with the canonical
+ * uppercase spelling winning when both are present.
+ */
+export function readEnvSetting(
+  env: Record<string, string | undefined>,
+  canonicalName: string,
+): string | undefined {
+  const canonical = env[canonicalName]?.trim();
+  if (canonical) return canonical;
+  const wanted = canonicalName.toLowerCase();
+  for (const [key, value] of Object.entries(env)) {
+    if (key.toLowerCase() !== wanted) continue;
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return undefined;
+}
+
+/**
  * Read the delivery config from an env bag. Returns null when unconfigured.
  *
  * `EMAIL_API_URL` points the same request shape at a different endpoint — a
  * regional host, a self-hosted gateway, or a stub in a test.
  */
 export function parseEmailConfig(env: Record<string, string | undefined>): EmailConfig | null {
-  const apiKey = env.RESEND_API_KEY?.trim();
-  const from = env.EMAIL_FROM?.trim();
+  const apiKey = readEnvSetting(env, "RESEND_API_KEY");
+  const from = readEnvSetting(env, "EMAIL_FROM");
   if (!apiKey || !from) return null;
-  const replyTo = env.EMAIL_REPLY_TO?.trim();
-  const endpoint = env.EMAIL_API_URL?.trim() || DEFAULT_EMAIL_ENDPOINT;
+  const replyTo = readEnvSetting(env, "EMAIL_REPLY_TO");
+  const endpoint = readEnvSetting(env, "EMAIL_API_URL") || DEFAULT_EMAIL_ENDPOINT;
   return replyTo ? { apiKey, from, replyTo, endpoint } : { apiKey, from, endpoint };
 }
 

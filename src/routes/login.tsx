@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   TurnstileWidget,
   resetTurnstile,
@@ -18,6 +18,8 @@ import {
 } from "@/lib/auth/email-otp";
 import { MIN_AGE } from "@/lib/legal";
 import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
+import { resolveSessionGuardState } from "@/lib/auth/session-guard";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/login")({
@@ -25,6 +27,14 @@ export const Route = createFileRoute("/login")({
 });
 
 function Login() {
+  const { user, isPending: sessionPending, isReadFailed: sessionReadFailed } = useCurrentUserState();
+  const alreadySignedIn =
+    resolveSessionGuardState({
+      isPending: sessionPending,
+      isReadFailed: sessionReadFailed,
+      hasUser: user !== null,
+    }) === "signed_in";
+  const navigate = useNavigate();
   const [mode, setMode] = useState<"in" | "up">("in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -131,7 +141,11 @@ function Login() {
         fetchOptions: { headers: turnstileCaptchaHeaders() },
       });
       if (err) throw new Error(err.message ?? "That code did not work");
-      window.location.href = isOwnerLogin(codeSentTo) ? "/admin" : "/account";
+      // Everyone lands on their profile. The owner's desk is one tap from it
+      // ("Owner desk" on /account), so routing by the address typed here is no
+      // longer needed — and guessing from a string disagreed with what the
+      // session actually was.
+      window.location.href = "/account";
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "That code did not work");
@@ -202,14 +216,14 @@ function Login() {
         const { error: err } = await authClient.signIn.email({
           email: addr,
           password,
-          callbackURL: owner ? "/admin" : "/account",
+          callbackURL: "/account",
           fetchOptions: {
             headers: captchaHeaders,
           },
         });
         if (err) throw new Error(err.message ?? "Could not sign in");
       }
-      window.location.href = mode === "up" ? "/account" : isOwnerLogin(email.trim()) ? "/admin" : "/account";
+      window.location.href = "/account";
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not continue");
@@ -217,8 +231,34 @@ function Login() {
     }
   };
 
+  // A session can outlive the page that made it: a dropped session read bounces
+  // a signed-in visitor back here, and this page then has nothing to offer them.
+  // Carry them to their profile rather than leave them at a form that would mean
+  // signing in twice.
+  useEffect(() => {
+    if (!alreadySignedIn) return;
+    void navigate({ to: "/account", replace: true });
+  }, [alreadySignedIn, navigate]);
+
+  if (alreadySignedIn) {
+    return (
+      <main className="grid vault-page place-items-center bg-bg px-5 text-fg">
+        <div className="mx-auto max-w-sm text-center">
+          <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">Signed in</p>
+          <h1 className="mt-2 font-display text-2xl text-fg italic">Taking you to your profile…</h1>
+          <Link
+            to="/account"
+            className="mt-6 inline-flex min-h-11 items-center text-xs tracking-[0.18em] text-fg uppercase underline"
+          >
+            Go now
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="vault-page bg-bg px-5 text-fg">
+    <main id="main-content" className="vault-page bg-bg px-5 text-fg">
       <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[max(2.5rem,var(--chrome-bottom))]">
         <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">The Vault · {SITE_OWNER.name}</p>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Keep the sky.</h1>
@@ -424,7 +464,7 @@ function Login() {
               </div>
             ) : null}
             {turnstileSiteKey() ? <TurnstileWidget /> : null}
-                        {error ? <p className="text-sm text-wine">{error}</p> : null}
+                        {error ? <p role="alert" className="text-sm text-wine">{error}</p> : null}
                         <button
                           type="submit"
                           disabled={busy || !authEnabled}

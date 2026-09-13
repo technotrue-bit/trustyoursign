@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { RedirectToSignIn } from "@/lib/auth/gates";
+import { RedirectToSignIn, SessionUnavailable } from "@/lib/auth/gates";
+import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { acceptLegal, deleteAllMyData, deleteChart, listCharts, upsertChart, type SavedChart } from "@/lib/charts";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
@@ -31,7 +32,8 @@ const MONTHS = [
 ];
 
 function Account() {
-  const { user, isPending } = useCurrentUserState();
+  const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
+  const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [charts, setCharts] = useState<SavedChart[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -49,20 +51,21 @@ function Account() {
     if (isSiteOwner(user)) void claimSite().catch(() => undefined);
   }, [user]);
 
-  if (isPending) {
+  if (guard === "loading") {
     return (
-      <main className="grid vault-page place-items-center bg-bg text-fg">
+      <main id="main-content" className="grid vault-page place-items-center bg-bg text-fg">
         <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
       </main>
     );
   }
+  if (guard === "unavailable") return <SessionUnavailable onRetry={refetchSession} />;
   if (!user) return <RedirectToSignIn />;
 
   const mine = charts?.filter((c) => c.relation === "self") ?? [];
   const others = charts?.filter((c) => c.relation === "other") ?? [];
 
   return (
-    <main className="vault-page bg-bg px-5 py-10 text-fg">
+    <main id="main-content" className="vault-page bg-bg px-5 py-10 text-fg">
       <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[max(2rem,var(--chrome-bottom))]">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -108,7 +111,7 @@ function Account() {
           onError={setError}
         />
 
-        {error ? <p className="mt-4 text-sm text-wine">{error}</p> : null}
+        {error ? <p role="alert" className="mt-4 text-sm text-wine">{error}</p> : null}
 
         <section id="charts" className="mt-10 scroll-mt-24">
           <h2 className="font-display text-2xl text-fg italic">Your chart</h2>
@@ -283,50 +286,65 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
         </button>
       </div>
       {relation === "other" ? (
-        <input
-          required
-          value={personName}
-          onChange={(e) => setPersonName(e.target.value)}
-          placeholder="Their name"
-          className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
-        />
+        <label className="block">
+          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Their name</span>
+          <input
+            required
+            value={personName}
+            onChange={(e) => setPersonName(e.target.value)}
+            placeholder="Their name"
+            className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
+          />
+        </label>
       ) : null}
-      <select
-        value={signId}
-        onChange={(e) => setSignId(e.target.value as SignId)}
-        className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
-      >
-        {CONSTELLATIONS.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
+      <label className="block">
+        <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Sign</span>
+        <select
+          value={signId}
+          onChange={(e) => setSignId(e.target.value as SignId)}
+          className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
+        >
+          {CONSTELLATIONS.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="grid grid-cols-3 gap-2">
-        <select value={month} onChange={(e) => setMonth(e.target.value)} className="min-h-12 rounded-md border border-border bg-bg-elevated px-2 text-fg" required>
-          <option value="">Month</option>
-          {signMonths.map((m) => (
-            <option key={m} value={m}>
-              {MONTHS[m - 1]}
-            </option>
-          ))}
-        </select>
-        <select value={day} onChange={(e) => setDay(e.target.value)} className="min-h-12 rounded-md border border-border bg-bg-elevated px-2 text-fg" required disabled={!monthN}>
-          <option value="">Day</option>
-          {signDays.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
-        </select>
-        <select value={year} onChange={(e) => setYear(e.target.value)} className="min-h-12 rounded-md border border-border bg-bg-elevated px-2 text-fg" required>
-          <option value="">Year</option>
-          {years.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
+        <label className="block">
+          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Month</span>
+          <select value={month} onChange={(e) => setMonth(e.target.value)} className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg" required>
+            <option value="">—</option>
+            {signMonths.map((m) => (
+              <option key={m} value={m}>
+                {MONTHS[m - 1]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Day</span>
+          <select value={day} onChange={(e) => setDay(e.target.value)} className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg" required disabled={!monthN}>
+            <option value="">—</option>
+            {signDays.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Year</span>
+          <select value={year} onChange={(e) => setYear(e.target.value)} className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg" required>
+            <option value="">—</option>
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <label className="flex min-h-11 items-start gap-2 text-sm text-fg-muted">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1" />

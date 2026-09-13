@@ -10,6 +10,7 @@ import { upsertChart } from "@/lib/charts";
 import { computeVisitorNatal } from "@/lib/chart/sky";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { Nativity } from "@/lib/chart/schema";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { cn } from "@/lib/utils";
 import { Gloss, GlossRoot } from "./Gloss";
 
@@ -58,6 +59,7 @@ export function BirthChat() {
   const [visitorBook, setVisitorBook] = useState<Nativity | null>(null);
   const [casting, setCasting] = useState(false);
   const [castErr, setCastErr] = useState<string | null>(null);
+  const dialogRef = useDialogFocus<HTMLDivElement>(true);
 
   const years = useMemo(() => {
     const y = new Date().getFullYear();
@@ -154,9 +156,19 @@ export function BirthChat() {
   return (
     <div className="vault-overlay pointer-events-none absolute inset-0 z-30 flex items-end justify-start md:items-center">
       <div className="absolute inset-0 bg-gradient-to-t from-bg from-25% via-bg/70 to-transparent md:bg-gradient-to-r md:from-bg md:from-20% md:via-bg/80 md:to-transparent" />
-      <div className="birth-chat pointer-events-auto relative w-full max-w-md px-5 pt-[var(--chrome-top)] pb-[var(--chrome-bottom)] md:px-12 md:pt-16">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="birth-chat-title"
+        tabIndex={-1}
+        className="birth-chat pointer-events-auto relative w-full max-w-md px-5 pt-[var(--chrome-top)] pb-[var(--chrome-bottom)] outline-none md:px-12 md:pt-16"
+      >
         <p className="text-xs tracking-[0.28em] text-fg-muted uppercase">{temple.month}</p>
-        <h2 className="mt-2 font-display text-[2.15rem] leading-[1.08] font-medium tracking-tight text-fg italic md:text-5xl">
+        <h2
+          id="birth-chat-title"
+          className="mt-2 font-display text-[2.15rem] leading-[1.08] font-medium tracking-tight text-fg italic md:text-5xl"
+        >
           {sign.name}.
         </h2>
         <p className="mt-2 text-[0.7rem] tracking-[0.2em] text-fg-subtle uppercase">
@@ -367,7 +379,7 @@ export function BirthChat() {
                   : "cursor-not-allowed bg-bg-subtle text-fg-subtle",
               )}
             >
-              {casting ? "Reading the sky…" : "Hold this natal"}
+              {casting ? <span aria-live="polite">Reading the sky…</span> : "Hold this natal"}
             </button>
             <button
               type="button"
@@ -393,7 +405,7 @@ export function BirthChat() {
                     ? "The clock is held. Planets wait until the sky is calculated."
                     : `The sun was in ${sunName}. You reached for what was already yours.`}
             </p>
-            {castErr ? <p className="text-sm text-wine">{castErr}</p> : null}
+            {castErr ? <p role="alert" className="text-sm text-wine">{castErr}</p> : null}
             {natal ? (
               <ul className="space-y-1 text-sm text-fg-muted">
                 {natal.bodies.map((b) => (
@@ -477,7 +489,7 @@ export function BirthChat() {
                 >
                   {saved ? "Saved to your vault" : "Keep this chart"}
                 </button>
-                {saveErr ? <p className="text-sm text-wine">{saveErr}</p> : null}
+                {saveErr ? <p role="alert" className="text-sm text-wine">{saveErr}</p> : null}
               </div>
             ) : (
               <p className="text-sm text-fg-muted">

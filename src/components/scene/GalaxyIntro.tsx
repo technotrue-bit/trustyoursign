@@ -57,14 +57,24 @@ import {
   uBirth,
 } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
-import { fillMorphCloud, makeSparkMaterial } from "@/lib/galaxy/starRender";
+import { fillMorphCloud, makeSparkMaterial, setCloudDrawRange } from "@/lib/galaxy/starRender";
 import {
   computeBirthChatSlide,
   lerpToward,
   computePlateOpacity,
 } from "@/lib/galaxy/birthchat-slide";
-import { createDiskSim, disposeDisk, stepDisk } from "@/lib/galaxy/disk";
+import { createDiskSim, disposeDisk, kickDiskBurst, stepDisk } from "@/lib/galaxy/disk";
 import { galaxyLayerName } from "@/lib/galaxy/layers";
+import {
+  CLOUD_GAIN_IDLE,
+  burstEnvelope,
+  cloudBurstGain,
+  fieldFade,
+  fieldGather,
+  fieldVisible,
+  signArrive,
+  stepArriveBurst,
+} from "@/lib/galaxy/signField";
 import {
   loadSignArt,
   preloadSignArt,
@@ -264,15 +274,23 @@ function SignDisk() {
     const chest = volumeChest(sign.id);
     const aspect = getSignVolume(sign.id)?.aspect ?? 16 / 9;
     const dist = Math.abs(galaxyTravel.t - stationT(idx));
-    const gather = 1 - Math.min(1, dist / 0.07);
+    const gather = fieldGather(dist);
     const intro = introPlaying() ? introAries() : 1;
     const veil = useGalaxy.getState().introVeil;
     const state = useSessionStore.getState();
     const chatting = state.claim !== null && state.session === null;
     const picked = chatting && state.claim?.signId === sign.id;
     const world = exploringSign() ? galaxyTravel.worldFade : 1;
+    const reduced = prefersReducedMotion();
+    const { burst, fired } = stepArriveBurst(signArrive, {
+      aimed: idx,
+      dist,
+      dt,
+      reduced,
+      paused: exploringSign() || introPlaying() || enterAnimating(),
+    });
     const show =
-      gather > 0.32 &&
+      fieldVisible(gather) &&
       intro > 0.4 &&
       veil < 0.45 &&
       world > 0.08 &&
@@ -315,6 +333,7 @@ function SignDisk() {
     g.position.addScaledVector(_camRight, slideX.current);
     g.position.addScaledVector(_camUp, slideY.current);
     g.scale.setScalar(3.2);
+    if (fired) kickDiskBurst(sim, 1);
     stepDisk(
       sim,
       dt,
@@ -323,11 +342,14 @@ function SignDisk() {
       galaxyTravel.ptrX,
       galaxyTravel.ptrY,
       galaxyTravel.ptrOn && !galaxyTravel.dragging,
-      prefersReducedMotion(),
+      reduced,
     );
     sim.mat.uniforms.uTime.value = clock.elapsedTime;
     sim.mat.uniforms.uFade.value =
-      Math.min(1, (gather - 0.32) / 0.4) * Math.min(1, (intro - 0.38) / 0.4) * (1 - veil);
+      fieldFade(gather) *
+      Math.min(1, (intro - 0.38) / 0.4) *
+      (1 - veil) *
+      (1 + burstEnvelope(burst) * 0.55);
     sim.mat.uniforms.uPixelRatio.value = Math.min(2, gl.getPixelRatio());
   });
   return (
@@ -492,9 +514,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const pick = () => {
     if (enterAnimating()) return;
     if (exploringSign()) {
-      if (galaxyTravel.exploreSignIndex === index && galaxyTravel.explorePhase === "inside") {
-        useSessionStore.getState().openClaim(sign.id);
-      }
+      // Inside: look / star travel stay live. Claim is the HUD CTA — a hub
+      // tap must not open BirthChat (that sets busy and freezes look).
       return;
     }
     enterSignGalaxy(index);
@@ -569,16 +590,17 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const fade = held || exploringHere
       ? 1
       : direct && index === aimedIndex()
-        ? Math.max(0.35, smooth(1 - Math.min(1, dist / 0.22)))
-        : smooth(1 - Math.min(1, dist / 0.08)) * worldFade;
+        ? Math.max(0.35, smooth(fieldGather(dist, 0.22)))
+        : fieldFade(fieldGather(dist)) * worldFade;
     const show =
-      held || exploringHere || dist < 0.078 || (direct && index === aimedIndex());
+      held || exploringHere || fieldVisible(fieldGather(dist)) || (direct && index === aimedIndex());
     g.visible = show;
     if (!show) {
       mesh.visible = false;
-      if (starGeo.getAttribute("position")) starGeo.setDrawRange(0, 0);
+      setCloudDrawRange(starGeo, false);
       return;
     }
+    if (hydrated.current) setCloudDrawRange(starGeo, true);
 
     const sit = TEMPLE_STATIONS[index]!;
     const cam = camera as PerspectiveCamera;
@@ -627,7 +649,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const aspect = vol?.aspect ?? (artTex ? artAspect(artTex) : 16 / 9) ?? 16 / 9;
     const wide = PLATE_WIDE;
     const arrive = index === 0 ? introAries() : 1;
-    const along = smooth(1 - Math.min(1, dist / 0.072));
+    const along = smooth(fieldGather(dist));
     const gather = held ? 1 : introPlaying() && index === 0 ? Math.max(0.02, arrive) : along;
     const plateReveal = held
       ? 1
@@ -698,6 +720,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       morphLevel.current += (morphTarget - morphLevel.current) * Math.min(1, dt * morphRate);
       const ml = morphLevel.current;
       const u = coreMat.uniforms;
+      const landGain =
+        index === aimedIndex() && !exploringHere ? cloudBurstGain(signArrive.burst) : CLOUD_GAIN_IDLE;
       u.uTime.value = clock.elapsedTime;
       u.uGather.value = gather;
       u.uWide.value = wide;
@@ -706,14 +730,14 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       // Group slide handles X positioning; per-star bias causes double-shift
       u.uGlyphBiasX.value = 0;
       // Swirl dampens as morph settles; halo/spiral fade so glyph reads clean
-      u.uSwirl.value = prefersReducedMotion() ? 0 : 1 - ml * 0.9;
+      u.uSwirl.value = (prefersReducedMotion() ? 0 : 1 - ml * 0.9) * landGain.swirl;
       u.uFade.value = fade;
-      u.uHover.value = galaxyTravel.ptrOn && focused ? 1.12 : 1;
+      u.uHover.value = (galaxyTravel.ptrOn && focused ? 1.12 : 1) * landGain.hover;
       u.uPxScale.value = SMALL ? 0.9 : 1;
       u.uBaseSize.value = SMALL ? 2.6 : 2.05;
       // Boost opacity when forming glyph so stars are crisp and visible
       const formBoost = exploringHere ? 0.35 + galaxyTravel.galaxyForm * 0.85 : 1;
-      u.uOpacity.value = (0.62 + fade * 0.32) * (1 + ml * 0.55) * formBoost;
+      u.uOpacity.value = (0.62 + fade * 0.32) * (1 + ml * 0.55) * formBoost * landGain.opacity;
       // Dissolving plate: keep animal gather high; swirl eases as galaxy forms.
       if (exploringHere) {
         u.uGather.value = Math.max(gather, 0.72 + galaxyTravel.galaxyForm * 0.28);
@@ -891,7 +915,12 @@ function TempleRig() {
       if (state.claim) return;
       if (state.session) return;
       if (introPlaying()) {
-        if (introCanSkip()) {
+        // Tab must move focus — only Escape / Enter / Space skip the intro.
+        if (
+          introCanSkip() &&
+          (e.key === "Escape" || e.key === "Enter" || e.key === " ")
+        ) {
+          e.preventDefault();
           skipIntro();
           galaxyTravel.birth = 1;
           useGalaxy.getState().markBorn();
@@ -901,6 +930,19 @@ function TempleRig() {
       if (enterAnimating()) {
         if (e.key === "Escape" || e.key === "Enter") {
           skipEnterGalaxy();
+          noteControl();
+        }
+        return;
+      }
+      // Keys typed into a form field belong to that field, not to the sky.
+      const t = e.target;
+      if (t instanceof HTMLElement && t.closest("input, textarea, select, [contenteditable=true]")) {
+        return;
+      }
+      // While exploring one sign's galaxy, Escape is the way out.
+      if (exploringSign()) {
+        if (e.key === "Escape") {
+          exitSignGalaxy();
           noteControl();
         }
         return;
@@ -922,10 +964,7 @@ function TempleRig() {
       } else if (e.key === "Enter" && galaxyTravel.birth < 1) {
         skipBirth();
         useGalaxy.getState().markBorn();
-      } else if (e.key === "Escape" && exploringSign()) {
-        exitSignGalaxy();
-        noteControl();
-      } else if (e.key === "Enter" && !exploringSign() && galaxyTravel.birth >= 1 && !introPlaying()) {
+      } else if (e.key === "Enter" && galaxyTravel.birth >= 1 && !introPlaying()) {
         enterSignGalaxy();
       }
     };
@@ -1064,6 +1103,23 @@ function TempleRig() {
         _cam.y += (_look.y - _cam.y) * (pull * 0.85);
         if (galaxyTravel.explorePhase === "inside") {
           _look.lerp(_chest, 0.35);
+          const lx = galaxyTravel.exploreLookX;
+          const ly = galaxyTravel.exploreLookY;
+          if (lx !== 0 || ly !== 0) {
+            _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+            _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+            // Negative lookX is look-left / grab-right so A and a right-drag agree.
+            _look.addScaledVector(_camRight, -lx);
+            _look.addScaledVector(_camUp, ly);
+            _cam.addScaledVector(_camRight, -lx * 0.72);
+            _cam.addScaledVector(_camUp, ly * 0.68);
+          }
+          if (!galaxyTravel.dragging && galaxyTravel.ptrOn) {
+            _look.x += galaxyTravel.ptrX * 0.35;
+            _look.y += -galaxyTravel.ptrY * 0.2;
+            _cam.x += galaxyTravel.ptrX * 0.12;
+            _cam.y += galaxyTravel.ptrY * 0.08;
+          }
         }
       }
     }
