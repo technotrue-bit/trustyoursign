@@ -915,7 +915,12 @@ function TempleRig() {
       if (state.claim) return;
       if (state.session) return;
       if (introPlaying()) {
-        if (introCanSkip()) {
+        // Tab must move focus — only Escape / Enter / Space skip the intro.
+        if (
+          introCanSkip() &&
+          (e.key === "Escape" || e.key === "Enter" || e.key === " ")
+        ) {
+          e.preventDefault();
           skipIntro();
           galaxyTravel.birth = 1;
           useGalaxy.getState().markBorn();
@@ -929,6 +934,12 @@ function TempleRig() {
         }
         return;
       }
+      // Keys typed into a form field belong to that field, not to the sky.
+      const t = e.target;
+      if (t instanceof HTMLElement && t.closest("input, textarea, select, [contenteditable=true]")) {
+        return;
+      }
+      // While exploring one sign's galaxy, Escape is the way out.
       if (exploringSign()) {
         if (e.key === "Escape") {
           exitSignGalaxy();

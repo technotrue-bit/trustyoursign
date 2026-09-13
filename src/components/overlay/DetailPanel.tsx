@@ -161,7 +161,7 @@ function ShelfPanel() {
         ) : natal && !user ? (
           <p className="mt-3 text-xs text-fg-subtle">Sign in to ask the machine, and for one deep cut a week.</p>
         ) : null}
-        {err ? <p className="mt-2 text-sm text-wine">{err}</p> : null}
+        {err ? <p role="alert" className="mt-2 text-sm text-wine">{err}</p> : null}
       </div>
     </ChartSheet>
   );

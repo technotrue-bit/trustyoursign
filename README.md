@@ -70,6 +70,40 @@ owner with no allow list configured yet. It is off by default, applies only
 while no real identity is bound, and logs `[owner] legacy name claim accepted`
 when it fires. Set an allow list and remove it.
 
+## Sign-in by email code (password-free)
+
+"Email me a code instead" — or the **Use Apple or iCloud email** button — signs a
+visitor in with a 6-digit code instead of a password. A first-time code creates
+the account.
+
+Set in the host environment (**Production *and* Preview**) or the option simply
+does not render — there is no half-configured state and no button that cannot
+complete:
+
+- `RESEND_API_KEY` — provider API key
+- `EMAIL_FROM` — the from-address, on a domain verified with the provider
+  (use `onboarding@resend.dev` to trial it before verifying a domain)
+- `EMAIL_REPLY_TO` — optional
+- `EMAIL_API_URL` — optional; points the same request shape at another endpoint
+  (a regional host, a self-hosted gateway)
+
+Behaviour worth knowing:
+
+- Codes are **6 digits, expire in 5 minutes, work once, and are stored hashed**
+  (`verification.value` never holds a usable code). Five attempt limit.
+- The send path is rate-limited to **3/minute per IP** (verify: 5/minute).
+- **Acceptance is required before a code is sent.** A first-time code creates the
+  account, so the age and terms boxes must be ticked to be emailed a code — on
+  both tabs, not just *Create account*. They are hidden again once a code is out,
+  since acceptance is what unlocked sending it.
+- Editing the address after a code is sent steps back to the send step, so the
+  visitor is never left typing a code that cannot verify.
+- **The owner can use this path too** — a code sent to `SITE_OWNER.email`
+  resolves to the canonical `vault-owner-devin` row, so owner rights apply and
+  the redirect goes to `/admin`.
+- To move providers, replace `sendEmail` in `src/lib/email/send.server.ts`; the
+  message copy lives in `src/lib/email/otp-message.ts`.
+
 ## Cloudflare Turnstile (optional bot protection)
 
 Joey’s existing Cloudflare Turnstile widget — do **not** create a new one.

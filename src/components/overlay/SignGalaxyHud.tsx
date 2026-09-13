@@ -74,8 +74,8 @@ export function SignGalaxyHud() {
       ) : null}
 
       <div
-        aria-hidden={!inside}
-        inert={!inside}
+        // inert alone — never combine aria-hidden with Back / AuthSlot / CTAs.
+        inert={!inside ? true : undefined}
         className={cn(
           "absolute inset-0 flex flex-col px-4 pt-[max(1.25rem,var(--safe-top))] pb-[max(1.25rem,var(--safe-bottom))] transition-opacity duration-[350ms]",
           inside ? "opacity-100" : "pointer-events-none opacity-0",

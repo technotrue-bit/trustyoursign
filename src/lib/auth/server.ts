@@ -31,10 +31,13 @@
  */
 import { betterAuth } from "better-auth";
 import { bearer, genericOAuth, captcha } from "better-auth/plugins";
+import { emailOTP } from "better-auth/plugins/email-otp";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { ensureDbReady, getNeonPool, getPglite } from "../db.server";
+import { emailDeliveryConfigured, sendOtpEmail } from "../email/send.server";
+import { OTP_EXPIRES_SECONDS, OTP_LENGTH } from "./otp-code";
 import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
@@ -247,6 +250,10 @@ export const auth = betterAuth({
       "/sign-up/email": { window: 60, max: 3 },
       "/request-password-reset": { window: 60, max: 3 },
       "/forget-password": { window: 60, max: 3 },
+      // One-time codes cost money to send and are worth brute-forcing, so the
+      // send path is capped harder than the verify path.
+      "/email-otp/send-verification-otp": { window: 60, max: 3 },
+      "/sign-in/email-otp": { window: 60, max: 5 },
     },
   },
 
@@ -260,6 +267,29 @@ export const auth = betterAuth({
           captcha({
             provider: "cloudflare-turnstile",
             secretKey: env("TURNSTILE_SECRET_KEY")!,
+          }),
+        ]
+      : []),
+
+    // One-time-code sign-in by email. Registered only when the host can actually
+    // deliver mail (RESEND_API_KEY + EMAIL_FROM), mirroring the captcha spread
+    // above: an unreachable endpoint beats a half-configured one, and the sign-in
+    // UI hides the option whenever this is absent (see `emailOtpAvailable`).
+    //
+    // `disableSignUp` stays false on purpose — this is the easy path for someone
+    // with an iCloud address and no password, so a first-time code creates the
+    // account. Codes are stored hashed, so the verification table never holds a
+    // usable code.
+    ...(emailDeliveryConfigured()
+      ? [
+          emailOTP({
+            otpLength: OTP_LENGTH,
+            expiresIn: OTP_EXPIRES_SECONDS,
+            allowedAttempts: 5,
+            storeOTP: "hashed",
+            async sendVerificationOTP({ email, otp, type }) {
+              await sendOtpEmail({ email, otp, type, expiresInSeconds: OTP_EXPIRES_SECONDS });
+            },
           }),
         ]
       : []),

@@ -162,8 +162,10 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
 
   return (
     <main
+      id="main-content"
       className="vault-stage relative overflow-hidden bg-bg text-fg"
       style={{ background: "#0c0b0a", color: "#efe8dc" }}
+      tabIndex={-1}
     >
       {Scene && !sceneFailed ? (
         <SceneErrorBoundary
