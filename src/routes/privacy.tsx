@@ -61,8 +61,9 @@ function Privacy() {
         <h2 className="mt-8 font-display text-xl text-fg italic">Sharing</h2>
         <p className="mt-2">
           Sign-in with Google or X is handled by a headless identity broker. They receive the fact that you signed in,
-          not your saved charts. Hosting and database providers process data on our instructions. We disclose data if
-          the law requires it.
+                    not your saved charts. One-time sign-in codes are delivered by our email provider (Resend), which handles
+                    your email address for that purpose alone. Hosting and database providers process data on our instructions.
+                    We disclose data if the law requires it.
         </p>
 
         <h2 className="mt-8 font-display text-xl text-fg italic">Retention and your rights</h2>
