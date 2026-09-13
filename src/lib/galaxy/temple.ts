@@ -1,6 +1,7 @@
 import { CatmullRomCurve3, Color, Vector3 } from "three";
 import type { ChakraId, Element, Modality, SignId } from "@/lib/chart/types";
 import { SIGNS } from "@/lib/chart/signs";
+import { SIGN_CANON } from "@/lib/chart/sign-canon";
 
 export const STATION_N = 12;
 export const NAVE = 44;
@@ -43,10 +44,11 @@ const PALETTE: Record<SignId, TemplePalette> = {
   pisces: { particle: "#c0c8e0", fog: "#0e1018", accent: "#7a88c8", chest: "#e0e4f4" },
 };
 
-const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSign["chakra"]; chakraNote: string; dates: string; month: string }> = {
+const COPY: Record<
+  SignId,
+  { essence: string; lines: string[]; chakra: TempleSign["chakra"]; chakraNote: string }
+> = {
   aries: {
-    dates: "Mar 21 – Apr 19",
-    month: "March 21 – April 19",
     essence: "The private strike. Heat at the root, not a public war.",
     lines: [
       "Cardinal fire. Beginnings live in the body, the house, the first step taken without a committee.",
@@ -57,8 +59,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "The ram starts in the feet. Enough. A first step that still exists on a Tuesday.",
   },
   taurus: {
-    dates: "Apr 20 – May 20",
-    month: "April 20 – May 20",
     essence: "Enoughness. A nervous system allowed to come down.",
     lines: [
       "Fixed earth. Slow worth. Food, land, a private life that is actually private.",
@@ -69,8 +69,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "Taurus is the root’s medicine: body, food, land, the holy boring.",
   },
   gemini: {
-    dates: "May 21 – Jun 20",
-    month: "May 21 – June 20",
     essence: "Two channels. Talk as a way of arriving.",
     lines: [
       "Mutable air. Wit, twins, the conversation that is already a kiss.",
@@ -81,8 +79,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "Gemini lives in the throat: two voices, one breath.",
   },
   cancer: {
-    dates: "Jun 21 – Jul 22",
-    month: "June 21 – July 22",
     essence: "Need that lives inside the bond.",
     lines: [
       "Cardinal water. Belonging has a tide and a cost.",
@@ -93,8 +89,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "Cancer is the sacral’s weather: held, or it floods.",
   },
   leo: {
-    dates: "Jul 23 – Aug 22",
-    month: "July 23 – August 22",
     essence: "The vault, not the stage.",
     lines: [
       "Fixed fire. Pride is the self that remains after fusion.",
@@ -105,8 +99,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "Leo is the furnace behind the door, not a stage light.",
   },
   virgo: {
-    dates: "Aug 23 – Sep 22",
-    month: "August 23 – September 22",
     essence: "The blade that loves small truths.",
     lines: [
       "Mutable earth. Craft, discrimination, the sacred ordinary.",
@@ -117,8 +109,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "Virgo sorts the fire into work that can be kept.",
   },
   libra: {
-    dates: "Sep 23 – Oct 22",
-    month: "September 23 – October 22",
     essence: "The public in-between.",
     lines: [
       "Cardinal air. Harmony, counsel, the art of sitting between.",
@@ -129,8 +119,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "Libra is the heart’s diplomacy: two, not one.",
   },
   scorpio: {
-    dates: "Oct 23 – Nov 21",
-    month: "October 23 – November 21",
     essence: "All or nothing. Never halfway.",
     lines: [
       "Fixed water. Safety is truth that cannot be taken.",
@@ -141,8 +129,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "Scorpio is the feeling-body that does not do halfway.",
   },
   sagittarius: {
-    dates: "Nov 22 – Dec 21",
-    month: "November 22 – December 21",
     essence: "Fire at the door.",
     lines: [
       "Mutable fire. Heat, horizon, a future-tense walk.",
@@ -153,8 +139,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "Sagittarius aims. The arrow is a sentence.",
   },
   capricorn: {
-    dates: "Dec 22 – Jan 19",
-    month: "December 22 – January 19",
     essence: "Time as a spine.",
     lines: [
       "Cardinal earth. Authority, competence, the long weather.",
@@ -165,8 +149,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "Capricorn is the root’s architecture: a Tuesday that holds.",
   },
   aquarius: {
-    dates: "Jan 20 – Feb 18",
-    month: "January 20 – February 18",
     essence: "The future’s atmosphere.",
     lines: [
       "Fixed air. Worth that belongs to a group as much as a wallet.",
@@ -177,8 +159,6 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
     chakraNote: "Aquarius speaks for the weather, not the brand.",
   },
   pisces: {
-    dates: "Feb 19 – Mar 20",
-    month: "February 19 – March 20",
     essence: "The dissolve that still has a name.",
     lines: [
       "Mutable water. Mercy, music, the edge of the map.",
@@ -192,13 +172,14 @@ const COPY: Record<SignId, { essence: string; lines: string[]; chakra: TempleSig
 
 export const TEMPLE_SIGNS: TempleSign[] = SIGNS.map((s) => {
   const c = COPY[s.id]!;
+  const canon = SIGN_CANON[s.id];
   return {
     id: s.id,
-    name: s.name,
-    dates: c.dates,
-    month: c.month,
-    element: s.element,
-    modality: s.modality,
+    name: canon.name,
+    dates: canon.dates,
+    month: canon.month,
+    element: canon.element,
+    modality: canon.modality,
     palette: PALETTE[s.id],
     essence: c.essence,
     lines: c.lines,

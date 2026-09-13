@@ -20,13 +20,14 @@ export function GalaxyShell() {
   const introVeil = useGalaxy((s) => s.introVeil);
   const introSkip = useGalaxy((s) => s.introSkip);
   const introDone = useGalaxy((s) => s.introDone);
-  const explore = useGalaxy((s) => s.explore);
+  const explorePhase = useGalaxy((s) => s.explore.phase);
+  const exploreWorldFade = useGalaxy((s) => s.explore.worldFade);
   const asking = introVeil > 0.04;
   const titleAnimating = !introDone && introTitle > 0.08;
   const openClaim = useSessionStore((s) => s.openClaim);
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
-  const exploring = explore.phase !== "idle";
-  const worldFade = exploring ? explore.worldFade : 1;
+  const exploring = explorePhase !== "idle";
+  const worldFade = exploring ? exploreWorldFade : 1;
 
   if (!born) {
     return (
@@ -86,22 +87,22 @@ export function GalaxyShell() {
             }}
           >
             <div className="relative mx-auto grid min-h-14 place-items-center md:min-h-44">
-              <h1
-                className={cn(
-                  "galaxy-title col-start-1 row-start-1 font-display leading-[1.08] font-medium tracking-tight text-fg italic",
-                  titleAnimating ? "sign-soft" : "intro-hold",
-                  "transition-[opacity,filter] duration-500 ease-out",
-                  moved ? "pointer-events-none opacity-0 blur-sm" : "opacity-100",
-                )}
-                aria-hidden={moved}
-              >
-                <span className="word">what&rsquo;s</span>
-                <span className="word">your</span>
-                <span className="word pointer-events-auto">
-                  <Gloss card={false}>sign</Gloss>
-                </span>
-                <span className="word">?</span>
-              </h1>
+              {/* Unmount when moved — do not leave Gloss buttons under aria-hidden. */}
+              {!moved ? (
+                <h1
+                  className={cn(
+                    "galaxy-title col-start-1 row-start-1 font-display leading-[1.08] font-medium tracking-tight text-fg italic",
+                    titleAnimating ? "sign-soft" : "intro-hold",
+                  )}
+                >
+                  <span className="word">what&rsquo;s</span>
+                  <span className="word">your</span>
+                  <span className="word pointer-events-auto">
+                    <Gloss card={false}>sign</Gloss>
+                  </span>
+                  <span className="word">?</span>
+                </h1>
+              ) : null}
               {moved && sign ? (
                 <div key={sign.id} className="sign-swap pointer-events-auto col-start-1 row-start-1">
                   <button
@@ -139,10 +140,12 @@ export function GalaxyShell() {
 
       <div
         className="galaxy-chrome pointer-events-none absolute inset-x-0 bottom-[var(--chrome-bottom)] flex flex-col items-center gap-2 md:bottom-8 md:gap-3"
+        // Leave the tab order while claim/dive chrome owns the screen.
+        inert={asking || exploring ? true : undefined}
         style={{
           opacity: asking || exploring ? 0 : introChrome * worldFade,
           animation: "none",
-          pointerEvents: exploring ? "none" : undefined,
+          pointerEvents: asking || exploring ? "none" : undefined,
         }}
       >
         <LegalFooter />
@@ -166,10 +169,10 @@ export function GalaxyShell() {
             "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase md:min-h-11 md:w-auto",
             moved
               ? "sign-claim text-fg hover:text-accent active:text-accent"
-              : "text-fg-subtle/50 transition-colors duration-150",
+              : "cursor-not-allowed border border-border/80 bg-bg-subtle/40 text-fg-muted",
           )}
         >
-          Enter this sign
+          {moved ? "Enter this sign" : "Slide to choose a sign"}
         </button>
         <button
           type="button"
@@ -177,7 +180,7 @@ export function GalaxyShell() {
           onClick={() => sign && openClaim(sign.id)}
           className={cn(
             "pointer-events-auto min-h-10 px-3 text-[0.65rem] tracking-[0.18em] uppercase",
-            moved ? "text-fg-subtle hover:text-fg" : "text-fg-subtle/40",
+            moved ? "text-fg-subtle hover:text-fg" : "cursor-not-allowed text-fg-muted",
           )}
         >
           This is my sign

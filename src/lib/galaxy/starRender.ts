@@ -235,6 +235,17 @@ export function fillStationCloud(
   return geo;
 }
 
+/**
+ * Far-station GPU skip. Hiding a cloud by zeroing drawRange must restore
+ * `position.count` when the station is live again — otherwise the stars
+ * stay gone after you fly past and come back.
+ */
+export function setCloudDrawRange(geo: BufferGeometry, live: boolean) {
+  const pos = geo.getAttribute("position");
+  if (!pos) return;
+  geo.setDrawRange(0, live ? pos.count : 0);
+}
+
 /** Bakes glyph stroke targets for pick-triggered animal → symbol morph. */
 export function fillMorphCloud(
   geo: BufferGeometry,

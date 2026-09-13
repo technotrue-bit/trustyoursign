@@ -1,35 +1,6 @@
 import { Body, Ecliptic, GeoVector, SiderealTime } from "astronomy-engine";
 import type { SignId } from "./types";
-
-const SIGN_IDS: SignId[] = [
-  "aries",
-  "taurus",
-  "gemini",
-  "cancer",
-  "leo",
-  "virgo",
-  "libra",
-  "scorpio",
-  "sagittarius",
-  "capricorn",
-  "aquarius",
-  "pisces",
-];
-
-const SIGN_NAMES: Record<SignId, string> = {
-  aries: "Aries",
-  taurus: "Taurus",
-  gemini: "Gemini",
-  cancer: "Cancer",
-  leo: "Leo",
-  virgo: "Virgo",
-  libra: "Libra",
-  scorpio: "Scorpio",
-  sagittarius: "Sagittarius",
-  capricorn: "Capricorn",
-  aquarius: "Aquarius",
-  pisces: "Pisces",
-};
+import { SIGN_IDS, signName } from "./sign-canon";
 
 export function wrap360(x: number) {
   return ((x % 360) + 360) % 360;
@@ -42,7 +13,7 @@ export function signFromLon(lon: number): { id: SignId; name: string; deg: numbe
   const inSign = L - i * 30;
   const deg = Math.floor(inSign);
   const minute = Math.round((inSign - deg) * 60);
-  return { id, name: SIGN_NAMES[id], deg, minute: minute === 60 ? 59 : minute };
+  return { id, name: signName(id), deg, minute: minute === 60 ? 59 : minute };
 }
 
 export function formatLon(lon: number) {
@@ -300,9 +271,16 @@ export function computeBigThree(date: Date, place: GeoPlace): Omit<SkyNatal, "to
   return bigThreeFromCast(computeNatalCast(date, place));
 }
 
+const GEOCODE_TTL_MS = 60 * 60 * 1000;
+const geocodeCache = new Map<string, { place: GeoPlace; expiresAt: number }>();
+
 export async function geocodePlace(query: string): Promise<GeoPlace> {
   const q = query.trim().slice(0, 120);
   if (q.length < 2) throw new Error("Name the place.");
+  const key = q.toLowerCase();
+  const hitCache = geocodeCache.get(key);
+  if (hitCache && hitCache.expiresAt > Date.now()) return hitCache.place;
+
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`;
   const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
   if (!res.ok) throw new Error("The place could not be found.");
@@ -312,10 +290,12 @@ export async function geocodePlace(query: string): Promise<GeoPlace> {
   const hit = body.results?.[0];
   if (!hit) throw new Error("The place could not be found.");
   const bits = [hit.name, hit.admin1, hit.country].filter(Boolean);
-  return {
+  const place: GeoPlace = {
     name: bits.join(", "),
     lat: hit.latitude,
     lon: hit.longitude,
     timeZone: hit.timezone || "UTC",
   };
+  geocodeCache.set(key, { place, expiresAt: Date.now() + GEOCODE_TTL_MS });
+  return place;
 }

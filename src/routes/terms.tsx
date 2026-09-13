@@ -5,7 +5,8 @@ export const Route = createFileRoute("/terms")({ component: Terms });
 
 function Terms() {
   return (
-    <main className="vault-page bg-bg px-5 py-10 text-fg">
+
+    <main id="main-content" className="vault-page bg-bg px-5 py-10 text-fg">
       <article className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[var(--page-chrome-bottom)] text-sm leading-relaxed text-fg-muted">
         <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">The Vault</p>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Terms of Use</h1>
