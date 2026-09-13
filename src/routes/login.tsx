@@ -24,6 +24,12 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/login")({
   component: Login,
+  // `?create=1` opens the Create-account tab directly, so a link can carry the
+  // intent instead of dropping the visitor on the sign-in form.
+  validateSearch: (search: Record<string, unknown>): { create?: true } => ({
+    create:
+      search.create === true || search.create === "1" || search.create === "true" ? true : undefined,
+  }),
 });
 
 function Login() {
@@ -35,7 +41,9 @@ function Login() {
       hasUser: user !== null,
     }) === "signed_in";
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"in" | "up">("in");
+    // The route search picks the opening tab; switching tabs after that is local.
+    const { create } = Route.useSearch();
+    const [mode, setMode] = useState<"in" | "up">(create ? "up" : "in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
