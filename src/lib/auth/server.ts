@@ -67,6 +67,30 @@ function previewAuthSecret(): string {
   return globalAuthRef.__grokAuthPreviewSecret__;
 }
 
+/**
+ * The signing secret, and the reason this function exists.
+ *
+ * Deployed apps MUST inject `BETTER_AUTH_SECRET`. The fallback above is random
+ * PER PROCESS, which in a serverless runtime means per INSTANCE: cookies and
+ * encrypted session rows written by one instance cannot be read by the next, so
+ * visitors are signed in and then silently signed out as traffic lands
+ * elsewhere. It also breaks Google/X sign-in, whose state cookies are signed the
+ * same way.
+ *
+ * That failure is indistinguishable from "the site forgot me", so say it out
+ * loud in the logs rather than degrading quietly.
+ */
+function resolveAuthSecret(): string {
+  const injected = env("BETTER_AUTH_SECRET");
+  if (injected) return injected;
+  if (process.env.VERCEL) {
+    console.error(
+      "[auth] BETTER_AUTH_SECRET is NOT set. Each serverless instance will use a different random secret, so sessions will not survive across instances and sign-ins will appear to be lost at random. Set BETTER_AUTH_SECRET (Production and Preview) to a stable random value.",
+    );
+  }
+  return previewAuthSecret();
+}
+
 /** Read an env var, treating empty/whitespace as unset. */
 const env = (key: string): string | undefined => {
   const value = process.env[key]?.trim();
@@ -185,7 +209,7 @@ export const auth = betterAuth({
   baseURL,
   // Deployed apps inject BETTER_AUTH_SECRET. Preview: process-stable secret on
   // globalThis so HMR doesn't invalidate PGLite-backed sessions (see above).
-  secret: env("BETTER_AUTH_SECRET") ?? previewAuthSecret(),
+  secret: resolveAuthSecret(),
   database,
 
   // CSRF / origin check for credentialed auth POSTs (email sign-up/sign-in, …).
