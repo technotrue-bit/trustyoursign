@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { daysForSign, formatBirth, formatClock, isDateInSign, monthsForSign, sunSignOn } from "@/lib/chart/sun";
-import { useClaim, useSessionStore } from "@/lib/chart/session";
+import { fromVisitor, useClaim, useSessionStore } from "@/lib/chart/session";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
 import { upsertChart } from "@/lib/charts";
@@ -34,9 +34,9 @@ export function BirthChat() {
   const picked = claim?.signId;
   const birth = claim?.birth ?? null;
   const setClaimBirth = useSessionStore((s) => s.setClaimBirth);
-  const openLibrary = useSessionStore((s) => s.openLibrary);
+  const openSession = useSessionStore((s) => s.openSession);
   const openShelf = useSessionStore((s) => s.openShelf);
-  const openVisitor = useSessionStore((s) => s.openVisitor);
+  const openLibrary = useSessionStore((s) => s.openLibrary);
   const closeClaim = useSessionStore((s) => s.closeClaim);
   const sign = CONSTELLATIONS.find((c) => c.id === picked) ?? CONSTELLATIONS[0]!;
   const temple = TEMPLE_SIGNS.find((c) => c.id === sign.id) ?? TEMPLE_SIGNS[0]!;
@@ -183,11 +183,6 @@ export function BirthChat() {
           {temple.lines.slice(0, 2).map((line) => (
             <li key={line.slice(0, 24)}>{line}</li>
           ))}
-          {temple.lines.slice(2, 4).map((line) => (
-            <li key={line.slice(0, 24)} className="birth-chat-lines-extra">
-              {line}
-            </li>
-          ))}
         </ul>
 
         {!birth ? (
@@ -273,6 +268,11 @@ export function BirthChat() {
               Keep flying
             </button>
             <p className="max-w-sm text-xs leading-relaxed text-fg-subtle">{temple.chakraNote}</p>
+            <ul className="max-w-sm space-y-2 text-sm leading-relaxed text-fg-muted birth-chat-lines-extra">
+              {temple.lines.slice(2, 4).map((line) => (
+                <li key={line.slice(0, 24)}>{line}</li>
+              ))}
+            </ul>
           </form>
         ) : step === "offer" ? (
           <div className="mt-8 space-y-5">
@@ -424,7 +424,15 @@ export function BirthChat() {
               type="button"
               onClick={() => {
                 if (visitorBook) {
-                  openVisitor(visitorBook, natal);
+                  openSession(
+                    fromVisitor({
+                      nativity: visitorBook,
+                      skyNatal: natal,
+                      birth,
+                      signId: sign.id,
+                      origin: "galaxy",
+                    }),
+                  );
                   return;
                 }
                 const s = sketch();

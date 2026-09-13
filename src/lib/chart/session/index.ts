@@ -1,6 +1,9 @@
 export type { BirthFacts, ClaimDraft, ChartSession, SessionKind, Surface } from "./types";
 export {
   isEntered,
+  hasSession,
+  isClaiming,
+  isVisitorSession,
   nativityOf,
   skyNatalOf,
   originOf,
@@ -27,10 +30,13 @@ export {
 } from "./factories";
 export {
   openSessionState,
+  openSession,
   patchSessionState,
   applyCloseState,
   openClaimState,
+  setClaim,
   clearClaimState,
+  clearClaim,
   setClaimBirthState,
   setSurfaceState,
   setModeState,

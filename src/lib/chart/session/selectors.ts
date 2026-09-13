@@ -2,8 +2,23 @@ import type { ChartSession, ClaimDraft, Surface } from "./types";
 
 export type ShelfSession = ChartSession & { kind: "shelf" };
 
-export function isEntered(session: ChartSession | null): boolean {
+export function isClaiming(
+  claim: ClaimDraft | null,
+  session: ChartSession | null,
+): boolean {
+  return claim !== null && session === null;
+}
+
+export function hasSession(session: ChartSession | null): boolean {
   return session !== null;
+}
+
+export function isEntered(session: ChartSession | null): boolean {
+  return hasSession(session);
+}
+
+export function isVisitorSession(session: ChartSession | null): boolean {
+  return session?.kind === "visitor";
 }
 
 export function nativityOf(session: ChartSession | null) {

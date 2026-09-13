@@ -126,6 +126,7 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
 
   useEffect(() => {
     galaxyTravel.busy = Boolean(claiming || entered);
+    galaxyTravel.claiming = Boolean(claiming);
   }, [claiming, entered]);
 
   useEffect(() => {

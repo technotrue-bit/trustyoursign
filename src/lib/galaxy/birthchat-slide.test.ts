@@ -11,6 +11,9 @@ import {
   lerpToward,
   computePlateOpacity,
   computeBirthChatSlide,
+  liftTargetScale,
+  PICKED_SCALE,
+  SOFT_SCALE,
 } from "./birthchat-slide.ts";
 
 const PLATE = 16.5;
@@ -247,5 +250,38 @@ describe("computePlateOpacity (plate never fades)", () => {
     const partial = computePlateOpacity({ plateOn: true, held: true, focused: true, fade: 1, bornIn: 0.5, morphLevel: 1 });
     const full = computePlateOpacity({ plateOn: true, held: true, focused: true, fade: 1, bornIn: 1, morphLevel: 1 });
     assert.ok(partial < full, `expected bornIn 0.5 to give lower opacity than 1.0`);
+  });
+});
+
+describe("liftTargetScale (Station + SignDisk share one clamp)", () => {
+  it("returns rest 1 when not picked", () => {
+    assert.equal(
+      liftTargetScale({
+        picked: false,
+        desiredNdcX: 0.35,
+        desiredNdcY: 0,
+        halfW: 20,
+        halfH: 12,
+        plateWide: PLATE,
+        plateAspect: ASPECT_WIDE,
+      }),
+      1,
+    );
+  });
+
+  it("uses the same picked scale for Station and SignDisk", () => {
+    const args = {
+      picked: true,
+      desiredNdcX: 0.35,
+      desiredNdcY: 0,
+      halfW: 20,
+      halfH: 12,
+      plateWide: PLATE,
+      plateAspect: ASPECT_WIDE,
+    };
+    const station = liftTargetScale(args);
+    const disk = liftTargetScale(args);
+    assert.equal(station, disk);
+    assert.ok(station === PICKED_SCALE || station === SOFT_SCALE);
   });
 });

@@ -332,7 +332,7 @@ function SignDisk() {
     _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
     g.position.addScaledVector(_camRight, slideX.current);
     g.position.addScaledVector(_camUp, slideY.current);
-    g.scale.setScalar(3.2);
+    g.scale.setScalar(3.2 * scaleBoost.current);
     if (fired) kickDiskBurst(sim, 1);
     stepDisk(
       sim,
@@ -995,6 +995,7 @@ function TempleRig() {
     const exploring = exploringSign();
     // Keep busy in sync so selection hold pauses during claim / intro.
     galaxyTravel.busy = chatting || state.session !== null || arriving;
+    galaxyTravel.claiming = chatting;
     const sought = exploring ? { active: false, t: current.current } : stepSeek(current.current, d);
     if (sought.active) {
       current.current = sought.t;

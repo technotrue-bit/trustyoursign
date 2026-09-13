@@ -25,7 +25,7 @@ import {
   type VaultDomainState,
 } from "./actions";
 import { fromResearch, fromShelf, fromVisitor, visitorBirth, visitorSign } from "./factories";
-import type { BirthFacts, Surface } from "./types";
+import type { BirthFacts, ChartSession, Surface } from "./types";
 
 export type ShelfSessionInput = {
   id?: string;
@@ -42,6 +42,7 @@ export type ShelfSessionInput = {
 
 export type SessionStore = VaultDomainState & {
   openVisitor: (nativity: Nativity, skyNatal: SkyNatal | null) => void;
+  openSession: (session: ChartSession) => void;
   openResearch: (id: ResearchChartId, nativity: Nativity) => void;
   openShelf: (input: ShelfSessionInput) => void;
   openLibrary: () => void;
@@ -91,6 +92,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     });
     set((current) => openSessionState(current, session));
   },
+
+  openSession: (session) => set((current) => openSessionState(current, session)),
 
   openResearch: (id, nativity) => {
     const beat = id === "joey" ? nextJoeyBeat() : null;

@@ -23,6 +23,7 @@ describe("selection hold", () => {
     resetTravel(false);
     galaxyTravel.birth = 1;
     galaxyTravel.busy = false;
+    galaxyTravel.claiming = false;
     templeIntro.done = true;
     templeIntro.asking = false;
     useGalaxy.setState({
@@ -59,6 +60,22 @@ describe("selection hold", () => {
     assert.equal(galaxyTravel.moved, false);
     assert.equal(galaxyTravel.selectionHoldLeft, null);
     assert.equal(useGalaxy.getState().moved, false);
+  });
+
+  it("pauses while claiming even if busy is false", () => {
+    armSelectionHold();
+    galaxyTravel.moved = true;
+    galaxyTravel.busy = false;
+    galaxyTravel.claiming = true;
+
+    now = 1_000 + 5_000;
+    stepSelectionHold();
+    assert.equal(galaxyTravel.selectionHoldLeft, SELECTION_HOLD_MS);
+
+    galaxyTravel.claiming = false;
+    now = 1_000 + 8_000;
+    stepSelectionHold();
+    assert.equal(galaxyTravel.selectionHoldLeft, SELECTION_HOLD_MS - 3_000);
   });
 
   it("pauses while busy and resumes afterward", () => {

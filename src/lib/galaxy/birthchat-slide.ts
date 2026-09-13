@@ -68,6 +68,30 @@ function scaleFits(
   );
 }
 
+export function liftTargetScale({
+  picked,
+  desiredNdcX,
+  desiredNdcY,
+  halfW,
+  halfH,
+  plateWide,
+  plateAspect,
+}: {
+  picked: boolean;
+  desiredNdcX: number;
+  desiredNdcY: number;
+  halfW: number;
+  halfH: number;
+  plateWide: number;
+  plateAspect: number;
+}): number {
+  if (!picked) return 1;
+  if (halfW <= 0 || halfH <= 0) return SOFT_SCALE;
+  return scaleFits(desiredNdcX, desiredNdcY, halfW, halfH, plateWide, plateAspect, PICKED_SCALE)
+    ? PICKED_SCALE
+    : SOFT_SCALE;
+}
+
 export function computeBirthChatSlide({
   picked,
   travelT,
@@ -101,10 +125,15 @@ export function computeBirthChatSlide({
   const halfH = depth < 1e-3 ? 0 : Math.tan((fov * Math.PI) / 360) * depth;
   const halfW = halfH * aspect;
 
-  const targetScale =
-    halfW > 0 && halfH > 0 && scaleFits(desiredNdcX, desiredNdcY, halfW, halfH, plateWide, plateAspect, PICKED_SCALE)
-      ? PICKED_SCALE
-      : SOFT_SCALE;
+  const targetScale = liftTargetScale({
+    picked,
+    desiredNdcX,
+    desiredNdcY,
+    halfW,
+    halfH,
+    plateWide,
+    plateAspect,
+  });
 
   const arrived = Math.abs(travelT - stationT) <= ARRIVED_T;
   if (!arrived || depth < 1e-3 || halfW <= 0 || halfH <= 0) {
