@@ -275,6 +275,31 @@ export function stepDisk(
   sim.geo.attributes.aColor!.needsUpdate = true;
 }
 
+/**
+ * Land burst: kick the existing disk pool outward + around. No new geometry.
+ * `amount` 0–1. Half the points so a phone frame stays cheap.
+ */
+export function kickDiskBurst(sim: Pick<DiskSim, "n" | "pos" | "vel">, amount: number) {
+  const a = Math.min(1, Math.max(0, amount));
+  if (a <= 0) return;
+  const { n, pos, vel } = sim;
+  const radial = 0.52 * a;
+  const spin = 0.26 * a;
+  const lift = 0.14 * a;
+  for (let i = 0; i < n; i += 2) {
+    const o = i * 3;
+    const x = pos[o]!;
+    const y = pos[o + 1]!;
+    const z = pos[o + 2]!;
+    const r = Math.hypot(x, z) + 1e-4;
+    const nx = x / r;
+    const nz = z / r;
+    vel[o] += nx * radial + -nz * spin;
+    vel[o + 1] += lift + y * 0.08 * a;
+    vel[o + 2] += nz * radial + nx * spin;
+  }
+}
+
 export function disposeDisk(sim: DiskSim) {
   sim.geo.dispose();
   sim.mat.dispose();

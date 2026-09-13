@@ -4,7 +4,7 @@ import { lonToXZ } from "@/lib/chart/geometry";
 import { CONSTELLATIONS, constellationDust, nearestSign, pairFigures } from "@/lib/galaxy/constellations";
 import { preloadSignArt, signArtImage } from "@/lib/galaxy/signArt";
 import { getSignVolume } from "@/lib/galaxy/signVolume";
-import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, ensureAutoClock, ensureFlyInput, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
+import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, ensureAutoClock, ensureFlyInput, exploringSign, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
 import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
@@ -532,7 +532,8 @@ export function FallbackSky() {
       stepExplore(dt);
       const arriving = introPlaying();
       const birthing = arriving;
-      const flying = !entered && !chatting && !birthing;
+      const exploring = exploringSign();
+      const flying = !entered && !chatting && !birthing && !exploring;
       const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
       galaxyTravel.handsOn = hands;
       galaxyTravel.busy = chatting || entered || birthing;
@@ -590,8 +591,10 @@ export function FallbackSky() {
       }
       trauma *= Math.exp(-dt * 4.2);
       const shake = trauma * trauma;
-      const cx = w * 0.5 + Math.sin(now * 0.053) * shake * 6;
-      const cy = h * 0.48 + Math.cos(now * 0.061) * shake * 4;
+      const lookX = exploring ? galaxyTravel.exploreLookX : 0;
+      const lookY = exploring ? galaxyTravel.exploreLookY : 0;
+      const cx = w * 0.5 + Math.sin(now * 0.053) * shake * 6 + lookX * 28;
+      const cy = h * 0.48 + Math.cos(now * 0.061) * shake * 4 - lookY * 22;
       const cur = stationFromT(galaxyTravel.t);
       stepZoom(dt, cur !== lastStation);
       lastStation = cur;
@@ -695,6 +698,7 @@ export function FallbackSky() {
       const state = useSessionStore.getState();
       if (state.session || state.claim) return;
       if (galaxyTravel.birth < 1) return;
+      if (exploringSign()) return;
       if (Math.hypot(dx, dy) > 10 || galaxyTravel.hold !== 0 || pinchQuiet()) return;
       const r = canvas.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) return;
