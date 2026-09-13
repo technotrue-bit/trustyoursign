@@ -1,5 +1,5 @@
-import { getSql } from "@/lib/db";
-import { OWNER_USER_ID, isSiteOwner, SITE_OWNER } from "@/lib/owner";
+import { getSql } from "@/lib/db.server";
+import { assertSiteOwner } from "@/lib/owner.server";
 
 export type Effort = "low" | "medium" | "high" | "xhigh";
 
@@ -50,30 +50,32 @@ export function parseDesk(raw: unknown): AiDesk {
   };
 }
 
+const DESK_TTL_MS = 30_000;
+let deskCache: { desk: AiDesk; expiresAt: number } | null = null;
+
+function clearDeskCache() {
+  deskCache = null;
+}
+
 export async function loadDesk(): Promise<AiDesk> {
+  if (deskCache && deskCache.expiresAt > Date.now()) return deskCache.desk;
   const sql = await getSql();
   const rows = await sql<{ ai_json: unknown }>`select ai_json from site_state where id = 'vault'`;
-  return parseDesk(rows[0]?.ai_json);
+  const desk = parseDesk(rows[0]?.ai_json);
+  deskCache = { desk, expiresAt: Date.now() + DESK_TTL_MS };
+  return desk;
 }
 
 export async function saveDesk(desk: AiDesk) {
+  clearDeskCache();
   const sql = await getSql();
   await sql`
     update site_state set ai_json = ${JSON.stringify(desk)}::jsonb where id = 'vault'
   `;
 }
 
-export async function assertOwner(userId: string) {
-  if (userId === OWNER_USER_ID) return;
-  const sql = await getSql();
-  const rows = await sql<{ email: string | null; name: string | null }>`
-    select email, name from "user" where id = ${userId} limit 1
-  `;
-  const row = rows[0];
-  if (isSiteOwner({ displayName: row?.name, primaryEmail: row?.email })) return;
-  if (row?.email?.toLowerCase() === SITE_OWNER.email) return;
-  throw new Error("Not found");
-}
+/** @deprecated Prefer assertSiteOwner from @/lib/owner — kept as a re-export for sky.ts callers. */
+export const assertOwner = assertSiteOwner;
 
 export async function talkToSky(opts: {
   kind: "light" | "deep";

@@ -53,6 +53,9 @@ export const Route = createRootRoute({
         />
       </head>
       <body style={{ background: "#0c0b0a", color: "#efe8dc", margin: 0 }}>
+        <a href="#main-content" className="skip-to-content">
+          Skip to content
+        </a>
         <PreviewHostBridge />
         <StageLock />
         <AuthProvider>

@@ -12,6 +12,7 @@ import {
 import { introArms, introBulge, introField, introHaze } from "@/lib/galaxy/intro";
 import { buildNearSky, makeNearSkyMaterial } from "@/lib/galaxy/nearSky";
 import { TEMPLE_STATIONS, stationFromT } from "@/lib/galaxy/temple";
+import { galaxyLayerName } from "@/lib/galaxy/layers";
 import { exploringSign, galaxyTravel } from "@/lib/galaxy/travel";
 
 function noopRaycast() {
@@ -137,9 +138,20 @@ export function CelestialSky() {
         <points ref={bulgePts} geometry={layers.bulge} material={matBulge} frustumCulled={false} renderOrder={-1} raycast={noopRaycast} />
         <points ref={armPts} geometry={layers.arms} material={matArms} frustumCulled={false} renderOrder={-1} raycast={noopRaycast} />
       </group>
-      <points ref={fieldPts} geometry={layers.field} material={matField} frustumCulled={false} renderOrder={-4} raycast={noopRaycast} />
+      <points
+        ref={fieldPts}
+        key={`${galaxyLayerName("dust-field")}-far`}
+        name={`${galaxyLayerName("dust-field")}-far`}
+        geometry={layers.field}
+        material={matField}
+        frustumCulled={false}
+        renderOrder={-4}
+        raycast={noopRaycast}
+      />
       <points
         ref={nearPts}
+        key={`${galaxyLayerName("dust-field")}-near`}
+        name={`${galaxyLayerName("dust-field")}-near`}
         geometry={nearGeo}
         material={matNear}
         position={[TEMPLE_STATIONS[0]!.x, TEMPLE_STATIONS[0]!.y, TEMPLE_STATIONS[0]!.z]}

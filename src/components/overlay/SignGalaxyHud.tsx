@@ -42,10 +42,11 @@ export function SignGalaxyHud() {
       : point?.purpose.body;
 
   return (
-    <div data-no-fly className="pointer-events-none absolute inset-0 z-40">
+    <div className="pointer-events-none absolute inset-0 z-40">
       {/* Lock the screen for the whole enter dive — only Skip is live. */}
       {entering ? (
         <div
+          data-no-fly
           className="pointer-events-auto absolute inset-0 z-[55]"
           aria-hidden
           onPointerDown={(e) => e.preventDefault()}
@@ -73,8 +74,8 @@ export function SignGalaxyHud() {
       ) : null}
 
       <div
-        aria-hidden={!inside}
-        inert={!inside}
+        // inert alone — never combine aria-hidden with Back / AuthSlot / CTAs.
+        inert={!inside ? true : undefined}
         className={cn(
           "absolute inset-0 flex flex-col px-4 pt-[max(1.25rem,var(--safe-top))] pb-[max(1.25rem,var(--safe-bottom))] transition-opacity duration-[350ms]",
           inside ? "opacity-100" : "pointer-events-none opacity-0",
@@ -128,6 +129,11 @@ export function SignGalaxyHud() {
                   {point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}
                 </Gloss>
               </p>
+              {point.isHub && !unlocked ? (
+                <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
+                  Drag to look around. Tap a star to move.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -135,27 +141,23 @@ export function SignGalaxyHud() {
             {inside ? (
               <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-2">
                 {galaxy.points.map((p, i) => {
-                  const locked = !p.isHub && !unlocked;
+                  const sealed = !p.isHub && !unlocked;
                   return (
                     <button
                       key={p.id}
                       type="button"
-                      disabled={locked}
-                      onClick={() => {
-                        if (locked) return;
-                        seekGalaxyPoint(i);
-                      }}
+                      onClick={() => seekGalaxyPoint(i)}
                       className={cn(
                         "min-h-10 min-w-10 rounded-sm px-2 text-[0.65rem] tracking-[0.14em] uppercase",
                         i === explore.pointIndex
                           ? "bg-fg/10 text-fg"
-                          : locked
-                            ? "text-fg-subtle/35"
+                          : sealed
+                            ? "text-fg-subtle/55 hover:text-fg-muted"
                             : "text-fg-subtle hover:text-fg",
                       )}
-                      aria-label={locked ? `${p.purpose.title} (locked)` : p.purpose.title}
+                      aria-label={sealed ? `${p.purpose.title} (sealed)` : p.purpose.title}
                     >
-                      {p.isHub ? "●" : locked ? "◌" : "○"}
+                      {p.isHub ? "●" : sealed ? "◌" : "○"}
                     </button>
                   );
                 })}

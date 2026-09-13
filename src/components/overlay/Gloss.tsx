@@ -12,6 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { lexById, splitGloss } from "@/lib/chart/lexicon";
 import { lexDeep } from "@/lib/chart/lexicon-deep";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { cn } from "@/lib/utils";
 
 type GlossState = {
@@ -151,7 +152,7 @@ function GlossCard({ id, uid }: { id: string; uid: string }) {
   }, [uid]);
   if (!entry || !ctx) return null;
   return (
-    <span ref={ref} className="gloss-card" role="dialog" aria-label={entry.word}>
+    <span ref={ref} className="gloss-card" role="region" aria-label={entry.word}>
       <p className="text-xs tracking-[0.22em] text-fg-subtle uppercase">{entry.word}</p>
       <p className="mt-2 text-sm leading-relaxed text-fg">{entry.info}</p>
       <p className="mt-2 text-sm leading-relaxed text-fg-muted">{entry.meaning}</p>
@@ -185,10 +186,13 @@ function GlossCard({ id, uid }: { id: string; uid: string }) {
 function GlossEssay({ id, onClose }: { id: string; onClose: () => void }) {
   const entry = lexById(id);
   const deep = lexDeep(id);
+  const dialogRef = useDialogFocus<HTMLDivElement>(Boolean(entry));
   if (!entry) return null;
   return (
     <div
-      className="fixed inset-0 z-[80] overflow-y-auto bg-bg text-fg"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-[80] overflow-y-auto bg-bg text-fg outline-none"
       role="dialog"
       aria-modal="true"
       aria-label={entry.word}

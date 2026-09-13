@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType, lazy, Suspense } from "react";
 import { getResearchChart } from "@/lib/chart/research";
 import {
   useClaim,
@@ -16,11 +16,11 @@ import {
   ensureFlyInput,
   galaxyTravel,
   skipBirth,
+  stopAutoClock,
 } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
 import { SceneErrorBoundary } from "../scene-error-boundary";
-import { FallbackSky } from "./FallbackSky";
 import { GalaxyShell } from "./GalaxyShell";
 import { ClaimShell } from "./ClaimShell";
 import { LibraryShell } from "./LibraryShell";
@@ -28,6 +28,10 @@ import { MeshReviewShell, wantsMeshReview } from "./MeshReviewShell";
 import { StarBack } from "./StarBack";
 import { NatalShell } from "./NatalShell";
 import { resolveGate } from "./resolveGate";
+
+const FallbackSky = lazy(() =>
+  import("./FallbackSky").then((m) => ({ default: m.FallbackSky })),
+);
 
 type VaultAppProps = {
   /** From route search — keeps SSR/client mesh-review branch in sync. */
@@ -117,6 +121,7 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
     galaxyTravel.birth = 1;
     ensureAutoClock();
     ensureFlyInput();
+    return () => stopAutoClock();
   }, []);
 
   useEffect(() => {
@@ -158,15 +163,25 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
 
   return (
     <main
+      id="main-content"
       className="vault-stage relative overflow-hidden bg-bg text-fg"
       style={{ background: "#0c0b0a", color: "#efe8dc" }}
+      tabIndex={-1}
     >
       {Scene && !sceneFailed ? (
-        <SceneErrorBoundary fallback={<FallbackSky />}>
+        <SceneErrorBoundary
+          fallback={
+            <Suspense fallback={null}>
+              <FallbackSky />
+            </Suspense>
+          }
+        >
           <Scene />
         </SceneErrorBoundary>
       ) : (
-        <FallbackSky />
+        <Suspense fallback={null}>
+          <FallbackSky />
+        </Suspense>
       )}
       {showStarBack ? <StarBack /> : null}
       {gate === "galaxy" ? <GalaxyShell /> : null}

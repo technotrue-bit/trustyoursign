@@ -1,4 +1,4 @@
-import type { SavedChart } from "./charts";
+import type { SavedChart, ChartSummary } from "./charts";
 
 /** LocalStorage / guest Ask key used before a charts row exists. */
 export const GUEST_ASK_KEY = "visitor";
@@ -12,12 +12,21 @@ export function asChartKey(k: string) {
   throw new Error("Unknown chart");
 }
 
-export function hasTimedNatal(chart: SavedChart): boolean {
+/** Timed natal: full SavedChart uses natal payload; ChartSummary uses hasTimedNatal flag. */
+export function hasTimedNatal(
+  chart:
+    | Pick<SavedChart, "natal" | "birthHour" | "birthMinute" | "birthPlace">
+    | Pick<ChartSummary, "hasTimedNatal" | "birthHour" | "birthMinute" | "birthPlace">,
+): boolean {
+  if ("hasTimedNatal" in chart && !("natal" in chart)) {
+    return chart.hasTimedNatal;
+  }
+  const full = chart as Pick<SavedChart, "natal" | "birthHour" | "birthMinute" | "birthPlace">;
   return Boolean(
-    chart.natal &&
-      chart.birthHour != null &&
-      chart.birthMinute != null &&
-      chart.birthPlace,
+    full.natal &&
+      full.birthHour != null &&
+      full.birthMinute != null &&
+      full.birthPlace,
   );
 }
 

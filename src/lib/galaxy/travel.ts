@@ -11,7 +11,7 @@ import {
 } from "./signGalaxy";
 import { useGalaxy, currentConstellation } from "./store";
 import { clamp01, stationFromT, stationT } from "./temple";
-import { introPlaying, skipIntro, introCanSkip } from "./intro";
+import { introPlaying, skipIntro, introCanSkip, templeIntro } from "./intro";
 
 export { signedDelta, wrap12 };
 export type { ExplorePhase };
@@ -61,6 +61,14 @@ const DIRECT_SEEK_SEC = 0.85;
 export const SELECTION_HOLD_MS = 10_000;
 /** First look starts on the ram, before the Aries station. */
 export const OPEN_T = 0;
+/** Max look offset inside a sign galaxy (camera-right, world units). */
+export const EXPLORE_LOOK_MAX_X = 8.5;
+export const EXPLORE_LOOK_MAX_Y = 5.5;
+/** Drag pixels → look units. Grab-the-sky: drag right moves stars right. */
+const EXPLORE_LOOK_DRAG_X = 78;
+const EXPLORE_LOOK_DRAG_Y = 92;
+/** Look units per second while WASD / arrows are held. */
+const EXPLORE_LOOK_KEY_RATE = 3.2;
 
 let reduceCache = false;
 let reduceAt = -1e9;
@@ -138,6 +146,12 @@ export const galaxyTravel = {
   starsUnlocked: false,
   /** Pulse once when enter lands on hub — UI may open birth claim. */
   claimPrompt: false,
+  /** Look offset inside a sign galaxy (camera-right / camera-up, world units). */
+  exploreLookX: 0,
+  exploreLookY: 0,
+  /** Held look: −1 left / +1 right, −1 down / +1 up. Integrated in stepExplore. */
+  lookHoldX: 0,
+  lookHoldY: 0,
 };
 
 export function prefersReducedMotion() {
@@ -310,7 +324,19 @@ export function resetExplore(publish = true) {
   galaxyTravel.pointTTarget = 0;
   galaxyTravel.starsUnlocked = false;
   galaxyTravel.claimPrompt = false;
+  resetExploreLook();
   if (publish) publishExplore();
+}
+
+function clamp(n: number, lo: number, hi: number) {
+  return Math.min(hi, Math.max(lo, n));
+}
+
+function resetExploreLook() {
+  galaxyTravel.exploreLookX = 0;
+  galaxyTravel.exploreLookY = 0;
+  galaxyTravel.lookHoldX = 0;
+  galaxyTravel.lookHoldY = 0;
 }
 
 /** True while a sign galaxy is entering, active, or exiting. */
@@ -340,6 +366,7 @@ function landInsideHub() {
   galaxyTravel.claimPrompt = true;
   galaxyTravel.hold = 0;
   galaxyTravel.steer = 0;
+  resetExploreLook();
   publishExplore();
 }
 
@@ -404,6 +431,7 @@ export function enterSignGalaxy(index?: number) {
   galaxyTravel.zoomTarget = 1.35;
   galaxyTravel.starsUnlocked = false;
   galaxyTravel.claimPrompt = false;
+  resetExploreLook();
   applyEnterCurves(0);
   primeSignArt(sign.id);
   getSignGalaxy(sign.id);
@@ -421,6 +449,7 @@ export function exitSignGalaxy() {
   galaxyTravel.explorePhase = "exiting";
   galaxyTravel.pointSeek = null;
   galaxyTravel.zoomTarget = 1;
+  resetExploreLook();
   noteControl();
   publishExplore();
   return true;
@@ -442,7 +471,9 @@ export function seekGalaxyPoint(pointIndex: number) {
   if (galaxy.points.length === 0) return false;
   const i = ((Math.round(pointIndex) % galaxy.points.length) + galaxy.points.length) % galaxy.points.length;
   const point = galaxy.points[i]!;
-  if (!point.isHub && !galaxyTravel.starsUnlocked) return false;
+  if (!point) return false;
+  // Every sign galaxy can travel its form while locked. Lore stays sealed in the HUD
+  // until starsUnlocked (sign-in + timed chart). Do not gate movement on unlock.
   galaxyTravel.pointSeek = i;
   galaxyTravel.pointTTarget = i;
   galaxyTravel.pointIndex = i;
@@ -504,6 +535,12 @@ export function stepExplore(dt: number) {
   }
 
   if (phase === "inside") {
+    if (galaxyTravel.lookHoldX !== 0 || galaxyTravel.lookHoldY !== 0) {
+      applyExploreLookOffset(
+        galaxyTravel.lookHoldX * EXPLORE_LOOK_KEY_RATE * dt,
+        galaxyTravel.lookHoldY * EXPLORE_LOOK_KEY_RATE * dt,
+      );
+    }
     if (galaxyTravel.pointSeek != null) {
       const k = 1 - Math.exp(-dt * 2.4);
       galaxyTravel.pointT += (galaxyTravel.pointTTarget - galaxyTravel.pointT) * k;
@@ -614,7 +651,10 @@ export function noteControl() {
 }
 
 function flyLocked() {
-  return (galaxyTravel.birth >= 1 && galaxyTravel.busy) || exploringSign();
+  if (galaxyTravel.birth >= 1 && galaxyTravel.busy) return true;
+  if (enterAnimating()) return true;
+  if (galaxyTravel.explorePhase === "exiting") return true;
+  return false;
 }
 
 function flyIgnore(target: EventTarget | null) {
@@ -632,10 +672,52 @@ function trackPtr(e: PointerEvent) {
   galaxyTravel.ptrOn = true;
 }
 
+function canExploreLook() {
+  return insideSignGalaxy() && !flyLocked();
+}
+
+/** Apply a look offset in camera-right / camera-up. Positive X looks right. */
+export function applyExploreLookOffset(dx: number, dy: number) {
+  galaxyTravel.exploreLookX = clamp(
+    galaxyTravel.exploreLookX + dx,
+    -EXPLORE_LOOK_MAX_X,
+    EXPLORE_LOOK_MAX_X,
+  );
+  galaxyTravel.exploreLookY = clamp(
+    galaxyTravel.exploreLookY + dy,
+    -EXPLORE_LOOK_MAX_Y,
+    EXPLORE_LOOK_MAX_Y,
+  );
+}
+
+/** Held look stick: −1…1 on each axis. Integrated while inside the galaxy. */
+export function setExploreLookHold(x: number, y: number) {
+  galaxyTravel.lookHoldX = clamp(x, -1, 1);
+  galaxyTravel.lookHoldY = clamp(y, -1, 1);
+}
+
+/**
+ * Grab-the-sky pan inside a sign galaxy. Drag right moves the stars right
+ * (look left). Does not change corridor t, and does not unseal stars.
+ */
+export function applyExploreLook(dy: number, dx = 0, touch = false) {
+  if (!canExploreLook()) return false;
+  const feel = touch ? 1.7 : 1;
+  applyExploreLookOffset(-(dx * feel) / EXPLORE_LOOK_DRAG_X, (dy * feel) / EXPLORE_LOOK_DRAG_Y);
+  galaxyTravel.handsOn = true;
+  galaxyTravel.awaken = 1;
+  noteControl();
+  return true;
+}
+
 /** Finger down → forward, finger up → back. Same for a mouse drag. */
 export function applyFlyDelta(dy: number, dx = 0, touch = false) {
   if (introPlaying()) {
     if (introCanSkip()) skipIntro();
+    return;
+  }
+  if (insideSignGalaxy()) {
+    applyExploreLook(dy, dx, touch);
     return;
   }
   if (flyLocked()) return;
@@ -644,9 +726,13 @@ export function applyFlyDelta(dy: number, dx = 0, touch = false) {
     return;
   }
   const feel = touch ? 1.7 : 1;
-  galaxyTravel.steer += (dy / 420 - dx / 720) * feel;
-  galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + (dy * feel) / 2200 - (dx * feel) / 3800);
-  if (Math.abs(dy) > 2) galaxyTravel.hold = dy > 0 ? 1 : -1;
+  // Match L/R drag to U/D: same feel coeff, and sustain hold on the dominant axis
+  // (hold used to ignore dx, so horizontal fly felt one-shot while vertical cruised).
+  galaxyTravel.steer += (dy / 420 - dx / 420) * feel;
+  galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + (dy * feel) / 2200 - (dx * feel) / 2200);
+  const useX = Math.abs(dx) > Math.abs(dy);
+  const axis = useX ? -dx : dy;
+  if (Math.abs(axis) > 2) galaxyTravel.hold = axis > 0 ? 1 : -1;
   galaxyTravel.moved = true;
   galaxyTravel.awaken = 1;
   noteControl();
@@ -659,7 +745,12 @@ export function applyWheel(deltaY: number, deltaX = 0, deltaMode = 0) {
   }
   if (flyLocked()) return;
   const scale = deltaMode === 1 ? 16 : deltaMode === 2 ? 120 : 1;
-  const impulse = (deltaY * scale + deltaX * scale * 0.45) / 900;
+  const impulse = (deltaY * scale + deltaX * scale) / 900;
+  if (insideSignGalaxy()) {
+    if (galaxyTravel.birth < 1) return;
+    applyPinch(Math.exp(-impulse * 0.55));
+    return;
+  }
   if (galaxyTravel.birth < 1) {
     skipBirth();
     return;
@@ -868,6 +959,58 @@ export function ensureFlyInput() {
 
   const onGesture = (e: Event) => e.preventDefault();
 
+  const LOOK_CODES = new Set([
+    "KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD",
+    "ArrowUp",
+    "ArrowLeft",
+    "ArrowDown",
+    "ArrowRight",
+  ]);
+  const lookKeys = new Set<string>();
+
+  const typingInField = () => {
+    const el = document.activeElement;
+    if (!(el instanceof HTMLElement)) return false;
+    if (el.isContentEditable) return true;
+    return Boolean(el.closest("input, textarea, select, [contenteditable='true']"));
+  };
+
+  const refreshLookHold = () => {
+    let x = 0;
+    let y = 0;
+    if (lookKeys.has("KeyA") || lookKeys.has("ArrowLeft")) x -= 1;
+    if (lookKeys.has("KeyD") || lookKeys.has("ArrowRight")) x += 1;
+    if (lookKeys.has("KeyW") || lookKeys.has("ArrowUp")) y += 1;
+    if (lookKeys.has("KeyS") || lookKeys.has("ArrowDown")) y -= 1;
+    galaxyTravel.lookHoldX = x;
+    galaxyTravel.lookHoldY = y;
+  };
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (typingInField()) return;
+    if (!LOOK_CODES.has(e.code)) return;
+    if (!canExploreLook()) return;
+    lookKeys.add(e.code);
+    refreshLookHold();
+    e.preventDefault();
+  };
+
+  const onKeyUp = (e: KeyboardEvent) => {
+    if (!LOOK_CODES.has(e.code)) return;
+    lookKeys.delete(e.code);
+    refreshLookHold();
+  };
+
+  const clearLookKeys = () => {
+    if (lookKeys.size === 0) return;
+    lookKeys.clear();
+    refreshLookHold();
+  };
+
   window.addEventListener("pointerdown", onDown, { capture: true, passive: false });
   window.addEventListener("pointermove", onMove, { capture: true, passive: false });
   window.addEventListener("pointerup", onUp, { capture: true, passive: true });
@@ -878,6 +1021,52 @@ export function ensureFlyInput() {
   window.addEventListener("touchcancel", onTouchEnd, { capture: true, passive: true });
   window.addEventListener("gesturestart", onGesture, { capture: true, passive: false });
   window.addEventListener("gesturechange", onGesture, { capture: true, passive: false });
+  window.addEventListener("keydown", onKeyDown, { capture: true });
+  window.addEventListener("keyup", onKeyUp, { capture: true });
+  window.addEventListener("blur", clearLookKeys);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) clearLookKeys();
+  });
+
+  type ControlsProbe = {
+    getYaw: () => number;
+    getSpeed: () => number;
+    getLookX: () => number;
+    getLookY: () => number;
+    getT: () => number;
+    getPhase: () => string;
+    setKeys: (codes: string[]) => void;
+    applyDrag: (dx: number, dy: number) => void;
+    enterSign: (index: number) => boolean;
+  };
+  (window as Window & { __controlsTest?: ControlsProbe }).__controlsTest = {
+    getYaw: () => -galaxyTravel.exploreLookX,
+    getSpeed: () => 1,
+    getLookX: () => galaxyTravel.exploreLookX,
+    getLookY: () => galaxyTravel.exploreLookY,
+    getT: () => galaxyTravel.t,
+    getPhase: () => galaxyTravel.explorePhase,
+    setKeys: (codes: string[]) => {
+      lookKeys.clear();
+      for (const c of codes) lookKeys.add(c);
+      refreshLookHold();
+    },
+    applyDrag: (dx, dy) => {
+      applyFlyDelta(dy, dx, true);
+    },
+    enterSign: (index) => {
+      if (!templeIntro.done) {
+        templeIntro.t = Math.max(templeIntro.t, 0.4);
+        templeIntro.askT = Math.max(templeIntro.askT, 0.4);
+        skipIntro();
+      }
+      galaxyTravel.birth = 1;
+      galaxyTravel.busy = false;
+      if (!exploringSign()) enterSignGalaxy(index);
+      if (enterAnimating()) skipEnterGalaxy();
+      return insideSignGalaxy() || galaxyTravel.enterSkip !== "idle";
+    },
+  };
 }
 
 
@@ -964,8 +1153,19 @@ export function stepAutoSign(
 export function ensureAutoClock() {
   if (typeof window === "undefined" || autoClock) return;
   autoLast = nowMs();
+  const onVis = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      autoLast = nowMs();
+    }
+  };
+  document.addEventListener("visibilitychange", onVis);
+  (ensureAutoClock as { _onVis?: () => void })._onVis = onVis;
   const tick = (now: number) => {
     autoClock = requestAnimationFrame(tick);
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      autoLast = now;
+      return;
+    }
     const dt = Math.min(0.1, (now - autoLast) / 1000);
     autoLast = now;
     if (!Number.isFinite(dt) || dt < 0) return;
@@ -977,6 +1177,20 @@ export function ensureAutoClock() {
     });
   };
   autoClock = requestAnimationFrame(tick);
+}
+
+/** Cancel the auto-sign rAF and drop the visibility listener. */
+export function stopAutoClock() {
+  if (typeof window === "undefined") return;
+  if (autoClock) {
+    cancelAnimationFrame(autoClock);
+    autoClock = 0;
+  }
+  const onVis = (ensureAutoClock as { _onVis?: () => void })._onVis;
+  if (onVis) {
+    document.removeEventListener("visibilitychange", onVis);
+    (ensureAutoClock as { _onVis?: () => void })._onVis = undefined;
+  }
 }
 
 /** t-distance from the camera to this sign's gate. Positive = still ahead. */

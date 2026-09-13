@@ -1,11 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
 import { formatBirth, formatClock } from "./sun";
 import {
   computeNatalCast,
   geocodePlace,
   localToUtc,
+  type GeoPlace,
   type SkyBody,
   type SkyNatal,
 } from "./ephemeris";
@@ -43,6 +43,9 @@ function birthInput(input: {
   place: string;
   tone?: string;
   label?: string;
+  lat?: number;
+  lon?: number;
+  timeZone?: string;
 }) {
   const year = Math.floor(Number(input.year));
   const month = Math.floor(Number(input.month));
@@ -54,32 +57,57 @@ function birthInput(input: {
   if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1926) throw new Error("That date cannot be read.");
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) throw new Error("That time cannot be read.");
   if (place.length < 2) throw new Error("Name the place.");
-  return { year, month, day, hour, minute, place, tone: asTone(input.tone ?? "vault"), label };
-}
 
-export const computeSky = createServerFn({ method: "POST" })
-  .validator((input: {
-    year: number;
-    month: number;
-    day: number;
-    hour: number;
-    minute: number;
-    place: string;
-    tone?: string;
-  }) => birthInput(input))
-  .handler(async ({ data }): Promise<SkyNatal> => {
-    const geo = await geocodePlace(data.place);
-    const utc = localToUtc(data.year, data.month, data.day, data.hour, data.minute, geo.timeZone);
-    const cast = computeNatalCast(utc, geo);
-    const when = `${formatBirth(data.month, data.day, data.year)} · ${formatClock(data.hour, data.minute)}`;
-    const sky = skyNatalFromCast(cast, when, data.tone);
-    return { ...sky, bodies: seedCopy(sky.bodies) };
-  });
+  let lat: number | undefined;
+  let lon: number | undefined;
+  let timeZone: string | undefined;
+  // Only accept real coordinates — never invent them.
+  if (
+    typeof input.lat === "number" &&
+    Number.isFinite(input.lat) &&
+    typeof input.lon === "number" &&
+    Number.isFinite(input.lon) &&
+    typeof input.timeZone === "string" &&
+    input.timeZone.trim().length > 0
+  ) {
+    lat = input.lat;
+    lon = input.lon;
+    timeZone = input.timeZone.trim().slice(0, 64);
+  }
+
+  return { year, month, day, hour, minute, place, tone: asTone(input.tone ?? "vault"), label, lat, lon, timeZone };
+}
 
 export type VisitorChartPayload = {
   sky: SkyNatal;
   nativity: Nativity;
 };
+
+/** Slim natal for askTheSky — positions + tone + place/when, not full essays. */
+export type AskSkyNatal = {
+  tone: "vault" | "warm";
+  when: string;
+  place: string;
+  bodies: Pick<SkyBody, "id" | "name" | "lon" | "signId" | "signName" | "degInSign" | "house" | "note">[];
+};
+
+function trimNatalForAsk(natal: SkyNatal | AskSkyNatal): AskSkyNatal {
+  return {
+    tone: asTone(natal.tone),
+    when: String(natal.when ?? "").slice(0, 120),
+    place: String(natal.place ?? "").slice(0, 120),
+    bodies: (natal.bodies ?? []).slice(0, 12).map((b) => ({
+      id: b.id,
+      name: b.name,
+      lon: b.lon,
+      signId: b.signId,
+      signName: b.signName,
+      degInSign: b.degInSign,
+      house: b.house,
+      note: b.note,
+    })),
+  };
+}
 
 /** Timed visitor chart: Big Three save payload + full room-ready Nativity. */
 export const computeVisitorNatal = createServerFn({ method: "POST" })
@@ -92,9 +120,22 @@ export const computeVisitorNatal = createServerFn({ method: "POST" })
     place: string;
     tone?: string;
     label?: string;
+    lat?: number;
+    lon?: number;
+    timeZone?: string;
   }) => birthInput(input))
   .handler(async ({ data }): Promise<VisitorChartPayload> => {
-    const geo = await geocodePlace(data.place);
+    let geo: GeoPlace;
+    if (data.lat != null && data.lon != null && data.timeZone) {
+      geo = {
+        name: data.place,
+        lat: data.lat,
+        lon: data.lon,
+        timeZone: data.timeZone,
+      };
+    } else {
+      geo = await geocodePlace(data.place);
+    }
     const utc = localToUtc(data.year, data.month, data.day, data.hour, data.minute, geo.timeZone);
     const cast = computeNatalCast(utc, geo);
     const dateLabel = formatBirth(data.month, data.day, data.year);
@@ -115,6 +156,7 @@ export const computeVisitorNatal = createServerFn({ method: "POST" })
 export const getSkyPass = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     const rows = await sql<{ last_deep_at: string | null; entitlement: string }>`
       select last_deep_at, entitlement from sky_pass where user_id = ${context.userId}
@@ -137,9 +179,18 @@ export const saveChartTone = createServerFn({ method: "POST" })
   }))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
+    // charts.tone is authoritative; keep natal_json.tone in sync when natal exists.
     await sql`
-      update charts set tone = ${data.tone}, updated_at = now()
+      update charts
+      set
+        tone = ${data.tone},
+        natal_json = case
+          when natal_json is not null then jsonb_set(natal_json, '{tone}', to_jsonb(${data.tone}::text), true)
+          else natal_json
+        end,
+        updated_at = now()
       where id = ${data.chartId} and user_id = ${context.userId}
     `;
     return { tone: data.tone };
@@ -149,11 +200,15 @@ export const persistNatal = createServerFn({ method: "POST" })
   .validator((input: { chartId?: string; natal: SkyNatal }) => input)
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     if (data.chartId) {
+      // Tone column is authoritative; force natal_json.tone from the column after write.
+      const tone = asTone(data.natal.tone);
+      const natal = { ...data.natal, tone };
       await sql`
         update charts
-        set natal_json = ${JSON.stringify(data.natal)}::jsonb, tone = ${data.natal.tone}, updated_at = now()
+        set natal_json = ${JSON.stringify(natal)}::jsonb, tone = ${tone}, updated_at = now()
         where id = ${data.chartId} and user_id = ${context.userId}
       `;
       return { id: data.chartId };
@@ -183,26 +238,11 @@ function parseJsonBodies(text: string, natal: SkyNatal): SkyNatal {
   }
 }
 
-export const writeTheThree = createServerFn({ method: "POST" })
-  .validator((input: { natal: SkyNatal }) => ({ natal: input.natal, tone: asTone(input.natal.tone) }))
-  .middleware([authMiddleware])
-  .handler(async ({ data }) => {
-    const { talkToSky } = await import("./desk.server");
-    const table = data.natal.bodies.map((b) => `${b.name}: ${b.note}`).join("\n");
-    const asked = `Write JSON only for this Big Three. Keys: sun, moon, asc. Each: headline (one sentence), why (one sentence), body (two short paragraphs).
-Tabulated:
-${table}
-Place: ${data.natal.place}
-When: ${data.natal.when}`;
-    const spoken = await talkToSky({ kind: "light", tone: data.tone, user: asked, extra: "" });
-    if (!spoken.ok) return { natal: { ...data.natal, bodies: seedCopy(data.natal.bodies) }, from: "bones" as const };
-    return { natal: parseJsonBodies(spoken.text, data.natal), from: "machine" as const };
-  });
-
 export const sitWithTheSky = createServerFn({ method: "POST" })
   .validator((input: { natal: SkyNatal }) => ({ natal: input.natal, tone: asTone(input.natal.tone) }))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     const rows = await sql<{ last_deep_at: string | null; entitlement: string }>`
       select last_deep_at, entitlement from sky_pass where user_id = ${context.userId}
@@ -233,24 +273,59 @@ When: ${data.natal.when}`;
   });
 
 export const askTheSky = createServerFn({ method: "POST" })
-  .validator((input: { natal: SkyNatal; question: string; focus?: string; history?: { role: "user" | "vault"; text: string }[] }) => {
+  .validator((input: {
+    natal: SkyNatal | AskSkyNatal;
+    question: string;
+    focus?: string;
+    history?: { role: "user" | "vault"; text: string }[];
+    notes?: string[];
+  }) => {
     const question = (input.question ?? "").trim().slice(0, 500);
     if (question.length < 2) throw new Error("Ask something the bones can answer.");
+    const notes = Array.isArray(input.notes)
+      ? input.notes.filter((n) => typeof n === "string").map((n) => n.slice(0, 8000)).slice(-12)
+      : [];
     return {
-      natal: input.natal,
+      natal: trimNatalForAsk(input.natal),
       question,
       focus: (input.focus ?? "").trim().slice(0, 80),
       history: Array.isArray(input.history) ? input.history.slice(-8) : [],
+      notes,
     };
   })
   .middleware([authMiddleware])
   .handler(async ({ data }) => {
-    const bones = answerFromSky(data.natal, data.question, data.focus);
+    // answerFromSky expects SkyNatal-shaped bodies; trimmed note fields are enough for bones.
+    const bonesNatal = {
+      depth: "three" as const,
+      tone: data.natal.tone,
+      when: data.natal.when,
+      place: data.natal.place,
+      lat: 0,
+      lon: 0,
+      timeZone: "UTC",
+      bodies: data.natal.bodies.map((b) => ({
+        ...b,
+        headline: "",
+        why: "",
+        body: [] as string[],
+      })),
+      writtenAt: null,
+    };
+    const bones = answerFromSky(bonesNatal, data.question, data.focus);
     const { talkToSky } = await import("./desk.server");
-    const table = data.natal.bodies.map((b) => `${b.name}: ${b.note}\n${b.headline}\n${b.body.join(" ")}`).join("\n\n");
+    const table = data.natal.bodies.map((b) => `${b.name}: ${b.note}`).join("\n");
     const hist = data.history.map((h) => `${h.role}: ${h.text}`).join("\n").slice(0, 2500);
-    const user = `${data.focus ? `Looking at ${data.focus}.\n` : ""}Question: ${data.question}\n\nTabulated Big Three:\n${table}\n${hist ? `\nEarlier:\n${hist}` : ""}`;
-    const spoken = await talkToSky({ kind: "light", tone: data.natal.tone, user, extra: "Answer the question. Two to five short paragraphs. Quote positions exactly." });
+    const field = data.notes.length
+      ? `\nField notes:\n${data.notes.map((n, i) => `${i + 1}. ${n}`).join("\n").slice(0, 6000)}`
+      : "";
+    const user = `${data.focus ? `Looking at ${data.focus}.\n` : ""}Question: ${data.question}\n\nTabulated Big Three:\n${table}\nPlace: ${data.natal.place}\nWhen: ${data.natal.when}${field}${hist ? `\nEarlier:\n${hist}` : ""}`;
+    const spoken = await talkToSky({
+      kind: "light",
+      tone: data.natal.tone,
+      user,
+      extra: "Answer the question. Two to five short paragraphs. Quote positions exactly. Field notes are additional canon.",
+    });
     return { ok: true as const, text: spoken.ok ? spoken.text : bones, from: spoken.ok ? ("machine" as const) : ("bones" as const) };
   });
 
@@ -286,6 +361,7 @@ export const grantSkyPass = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const desk = await import("./desk.server");
     await desk.assertOwner(context.userId);
+    const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
     await sql`
       insert into sky_pass (user_id, entitlement, updated_at)

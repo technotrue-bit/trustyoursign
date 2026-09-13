@@ -8,7 +8,7 @@ import { createMiddleware } from "@tanstack/react-start";
  * thread it themselves.
  *
  *   import { createServerFn } from "@tanstack/react-start";
- *   import { getSql } from "@/lib/db";
+ *   import { getSql } from "@/lib/db.server";
  *   import { authMiddleware } from "@/lib/auth/middleware";
  *
  *   export const listTodos = createServerFn({ method: "GET" })
@@ -43,5 +43,11 @@ export const authMiddleware = createMiddleware({ type: "function" })
     // Reject scripted cross-site/sibling requests before touching per-user data.
     assertSameSiteRequest();
     const userId = await requireUserId(context.bearerToken);
-    return next({ context: { userId } });
+    const { AppRls } = await import("@/lib/db-rls.server");
+    const { OWNER_USER_ID } = await import("@/lib/owner");
+    return AppRls.forUser(
+      userId,
+      () => next({ context: { userId } }),
+      { isOwner: userId === OWNER_USER_ID },
+    );
   });

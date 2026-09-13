@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { RedirectToSignIn } from "@/lib/auth/gates";
+import { RedirectToSignIn, SessionUnavailable } from "@/lib/auth/gates";
+import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { claimSite } from "@/lib/site";
@@ -12,7 +13,8 @@ import { AccountMenu } from "@/components/overlay/AccountMenu";
 export const Route = createFileRoute("/admin")({ component: Admin });
 
 function Admin() {
-  const { user, isPending } = useCurrentUserState();
+  const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
+  const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [claimed, setClaimed] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -22,17 +24,18 @@ function Admin() {
       .catch(() => setClaimed(false));
   }, [user]);
 
-  if (isPending) {
+  if (guard === "loading") {
     return (
-      <main className="grid vault-page place-items-center bg-bg text-fg">
+      <main id="main-content" className="grid vault-page place-items-center bg-bg text-fg">
         <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
       </main>
     );
   }
+  if (guard === "unavailable") return <SessionUnavailable onRetry={refetchSession} />;
   if (!user) return <RedirectToSignIn />;
   if (!isSiteOwner(user) && claimed !== true) {
     return (
-      <main className="vault-page bg-bg px-5 py-16 text-fg">
+      <main id="main-content" className="vault-page bg-bg px-5 py-16 text-fg">
         <div className="mx-auto max-w-md pt-[var(--chrome-top)]">
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">Closed</p>
           <h1 className="mt-2 font-display text-4xl italic">This desk is taken.</h1>
@@ -49,8 +52,9 @@ function Admin() {
   }
 
   return (
-    <main className="vault-page bg-bg px-5 py-10 text-fg">
-      <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[max(2rem,var(--chrome-bottom))]">
+
+    <main id="main-content" className="vault-page bg-bg px-5 py-10 text-fg">
+      <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[var(--page-chrome-bottom)]">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[0.7rem] tracking-[0.28em] text-accent uppercase">{SITE_OWNER.role}</p>
@@ -119,7 +123,7 @@ function ResearchBooks() {
       <p className="mt-2 text-sm leading-relaxed text-fg-muted">
         Timed nativities. Owner only. These do not appear for anyone else.
       </p>
-      {err ? <p className="mt-3 text-sm text-wine">{err}</p> : null}
+      {err ? <p role="alert" className="mt-3 text-sm text-wine">{err}</p> : null}
       <ul className="mt-5 space-y-3">
         {books === null ? (
           <li className="h-20 animate-pulse rounded-md bg-bg-subtle" />
