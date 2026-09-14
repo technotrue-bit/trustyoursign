@@ -1,7 +1,9 @@
 import { getSql } from "@/lib/db.server";
 import { AppRls } from "@/lib/db-rls.server";
+import { getRequest } from "@tanstack/react-start/server";
 import { assertSiteOwner } from "./owner.server";
 import { SITE_OWNER, OWNER_USER_ID } from "./owner";
+import { isPreviewHost } from "./auth/preview";
 
 class OwnerPassword {
   static readonly COMPROMISED = "True";
@@ -11,7 +13,7 @@ class OwnerPassword {
     if (!value) return undefined;
     if (value === OwnerPassword.COMPROMISED) {
       console.error(
-        "[owner] OWNER_PASSWORD is the compromised legacy value \"True\" — ignoring it. " +
+        '[owner] OWNER_PASSWORD is the compromised legacy value "True" — ignoring it. ' +
           "Set a new password in the host environment, or owner sign-in stays off.",
       );
       return undefined;
@@ -127,7 +129,14 @@ void OwnerAccount.bootstrap();
 function previewDeskOpen() {
   if (process.env.VERCEL) return false;
   if (process.env.GROK_AUTH_CLIENT_SECRET && process.env.DATABASE_URL) return false;
-  return true;
+  // The last line of defence, and the only one that does not rest on a platform
+  // env var being absent. The preview desk is a convenience for the live-preview
+  // sandbox and local dev, so require the request to have actually come from one
+  // of those hosts — otherwise any host that merely lacks `VERCEL` (a self-host,
+  // a bare Node deploy) would mint an owner session for whoever loaded the page.
+  const headers = getRequest()?.headers;
+  const forwarded = headers?.get("x-forwarded-host")?.split(",")[0]?.trim();
+  return isPreviewHost(forwarded || headers?.get("host"));
 }
 
 export async function bindOwnerPreviewImpl() {
