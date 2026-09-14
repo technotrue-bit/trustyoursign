@@ -122,7 +122,24 @@ export const authConfigured = !authDisabled && Boolean(grokClientId && grokClien
 // it derives the origin per-request from the (proxied) host, validated against the
 // preview allowlist, which makes the OAuth `redirect_uri` the concrete preview URL
 // the broker's preview client accepts.
-const explicitBaseURL = env("BETTER_AUTH_URL");
+/**
+ * The deployment's own public origin, as Vercel reports it: the stable
+ * production domain when there is one, otherwise this deployment's host.
+ *
+ * A hosted app MUST resolve to this. `BETTER_AUTH_URL` is expected to be
+ * injected, but when it is missing Better Auth silently falls back to the
+ * localhost dev origin — which is how a sign-in link mailed from production
+ * arrives pointing at `localhost` and dies in the recipient's hand. Preferring
+ * Vercel's own host removes that dependency entirely.
+ */
+function platformOrigin(): string | undefined {
+  const host = (env("VERCEL_PROJECT_PRODUCTION_URL") ?? env("VERCEL_URL"))?.trim();
+  if (!host) return undefined;
+  const bare = host.replace(/\/+$/, "");
+  return bare ? (/^https?:\/\//i.test(bare) ? bare : `https://${bare}`) : undefined;
+}
+
+const explicitBaseURL = env("BETTER_AUTH_URL") ?? platformOrigin();
 // Explicit `string[]` (not a readonly tuple) — Better Auth's DynamicBaseURLConfig
 // requires a mutable `allowedHosts: string[]`.
 const previewAllowedHosts: string[] = [...PREVIEW_ALLOWED_HOSTS];
