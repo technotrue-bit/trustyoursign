@@ -15,7 +15,7 @@ import {
   cooldownSecondsLeft,
   isCompleteOtp,
   normalizeOtpInput,
-  emailOtpAvailable,
+  emailOtpStatus,
 } from "@/lib/auth/email-otp";
 import { MIN_AGE } from "@/lib/legal";
 import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
@@ -65,6 +65,7 @@ function Login() {
   // Offered only when the host can actually deliver mail, so the button never
   // appears as a path that cannot finish.
   const [otpAvailable, setOtpAvailable] = useState(false);
+  const [otpSandbox, setOtpSandbox] = useState(false);
   const [otpStage, setOtpStage] = useState<"idle" | "code" | "sent">("idle");
   const [otp, setOtp] = useState("");
   const [codeSentTo, setCodeSentTo] = useState("");
@@ -73,9 +74,11 @@ function Login() {
 
   useEffect(() => {
     let cancelled = false;
-    emailOtpAvailable()
-      .then((ok) => {
-        if (!cancelled) setOtpAvailable(ok === true);
+    emailOtpStatus()
+      .then((status) => {
+        if (cancelled) return;
+        setOtpAvailable(status.available);
+        setOtpSandbox(status.sandbox);
       })
       .catch(() => {
         /* leave it hidden rather than offer a path that may not work */
@@ -498,6 +501,17 @@ function Login() {
               </div>
             ) : null}
             {turnstileSiteKey() ? <TurnstileWidget /> : null}
+            {/* A host can be configured to send mail and still be unable to reach
+                anyone but the owner (a provider sandbox sender). Saying so beats
+                letting a visitor wait for a code that will never arrive. */}
+            {otpSandbox &&
+            email.trim() &&
+            email.trim().toLowerCase() !== SITE_OWNER.email.toLowerCase() ? (
+              <p className="text-xs leading-relaxed text-fg-muted">
+                Mail on this host is still in trial mode, so only the owner's address can receive a
+                code right now. Signing in with Google or X works as usual.
+              </p>
+            ) : null}
             {error ? (
               <p role="alert" className="text-sm text-wine">
                 {error}
