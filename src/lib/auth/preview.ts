@@ -23,6 +23,30 @@ export const GROK_ISSUER_DEFAULT = "https://auth.grok.me";
  */
 export const PREVIEW_ALLOWED_HOSTS = ["*.grok-sandbox.com"] as const;
 
+/** Loopback hosts, exactly as a `host` header can spell them. */
+const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]", "::1"] as const;
+
+/**
+ * True when a request's host belongs to a live preview (sandbox) or loopback —
+ * the only hosts where the owner preview desk may bind a session. Accepts a raw
+ * `host` header value (a `:port` suffix is ignored) and wildcard-matches
+ * `PREVIEW_ALLOWED_HOSTS`.
+ *
+ * This exists so that decision never rests on "a platform env var happened to be
+ * absent": `previewDeskOpen` requires it, which keeps a stray self-host from
+ * handing an owner session to whoever loads the page.
+ */
+export function isPreviewHost(host: string | null | undefined): boolean {
+  if (!host) return false;
+  const raw = host.trim().toLowerCase();
+  if ((LOOPBACK_HOSTS as readonly string[]).includes(raw)) return true;
+  const bare = raw.replace(/:\d{1,5}$/, "");
+  if ((LOOPBACK_HOSTS as readonly string[]).includes(bare)) return true;
+  return PREVIEW_ALLOWED_HOSTS.some((pattern) =>
+    pattern.startsWith("*.") ? bare.endsWith(pattern.slice(1)) : bare === pattern,
+  );
+}
+
 /**
  * Preview OAuth client secret from env only. Returns undefined when unset.
  * Does not fall back to any hardcoded value.
@@ -30,8 +54,7 @@ export const PREVIEW_ALLOWED_HOSTS = ["*.grok-sandbox.com"] as const;
 export class PreviewOAuthSecret {
   static read(): string | undefined {
     const value =
-      process.env.GROK_PREVIEW_CLIENT_SECRET?.trim() ||
-      process.env.PREVIEW_CLIENT_SECRET?.trim();
+      process.env.GROK_PREVIEW_CLIENT_SECRET?.trim() || process.env.PREVIEW_CLIENT_SECRET?.trim();
     return value || undefined;
   }
 }
