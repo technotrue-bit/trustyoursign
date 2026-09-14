@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 /**
  * One-time-code sign-in — the availability probe, plus re-exports of the shared
- * constants (`./otp-code`) so callers have one import.
+ * constants (`./otp-code`, `./sign-in-link`) so callers have one import.
  *
  * The sign-in UI offers this path only when the host can actually deliver mail,
  * so nobody is shown a button that cannot complete. The answer comes from the
@@ -18,6 +18,8 @@ export {
   isCompleteOtp,
   normalizeOtpInput,
 } from "./otp-code";
+
+export { SIGN_IN_LINK_CALLBACK_PATH, SIGN_IN_LINK_EXPIRES_SECONDS } from "./sign-in-link";
 
 /** True when the host has email delivery configured. */
 export const emailOtpAvailable = createServerFn({ method: "GET" }).handler(async () => {

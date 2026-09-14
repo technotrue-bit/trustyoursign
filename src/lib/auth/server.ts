@@ -30,13 +30,18 @@
  * a verified id via `@/lib/auth/middleware`.
  */
 import { betterAuth } from "better-auth";
-import { bearer, genericOAuth, captcha } from "better-auth/plugins";
+import { bearer, genericOAuth, captcha, magicLink } from "better-auth/plugins";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import { getCookie } from "@tanstack/react-start/server";
+import { getCookie, getRequest } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { ensureDbReady, getNeonPool, getPglite } from "../db.server";
-import { emailDeliveryConfigured, sendOtpEmail } from "../email/send.server";
+import { emailDeliveryConfigured, sendOtpEmail, sendSignInLinkEmail } from "../email/send.server";
+import {
+  createSignInLinkRelay,
+  SIGN_IN_LINK_CALLBACK_PATH,
+  SIGN_IN_LINK_EXPIRES_SECONDS,
+} from "./sign-in-link";
 import { OTP_EXPIRES_SECONDS, OTP_LENGTH } from "./otp-code";
 import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
@@ -109,8 +114,7 @@ const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? PREVIEW_CLIENT_ID;
 const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PreviewOAuthSecret.read();
 
 /** True when federated sign-in is active (real auth is enforced). */
-export const authConfigured =
-  !authDisabled && Boolean(grokClientId && grokClientSecret);
+export const authConfigured = !authDisabled && Boolean(grokClientId && grokClientSecret);
 
 // This app's own Better Auth origin. When deployed the deployer injects the
 // public URL. In the sandbox live preview there's no fixed URL (each preview gets
@@ -205,6 +209,42 @@ const grokOAuthPlugin = authConfigured
     })
   : null;
 
+/**
+ * The sign-in link a code email can carry. This relay keeps the plugin's URL and
+ * the code email in step: the send opens a claim for that address, the plugin's
+ * `sendMagicLink` offers the URL here instead of mailing a second message, and
+ * anything left unclaimed still becomes an email of its own.
+ */
+const signInLinks = createSignInLinkRelay();
+
+/**
+ * Mint a one-tap sign-in link for `email` and return its URL — or `undefined`
+ * when it cannot be built (no request context, mail not configured, or the mint
+ * failed). The code alone still goes out: the nicer path must never be the
+ * reason a visitor cannot sign in.
+ */
+async function createSignInLink(email: string): Promise<string | undefined> {
+  const headers = getRequest()?.headers;
+  if (!headers) return undefined;
+
+  let url: string | undefined = undefined;
+  signInLinks.absorb(email, (value) => {
+    url = value;
+  });
+  try {
+    await auth.api.signInMagicLink({
+      body: { email, callbackURL: SIGN_IN_LINK_CALLBACK_PATH },
+      headers,
+    });
+  } catch (err) {
+    console.error("[auth] could not mint a sign-in link; sending the code alone", err);
+    return undefined;
+  } finally {
+    signInLinks.release();
+  }
+  return url;
+}
+
 export const auth = betterAuth({
   baseURL,
   // Deployed apps inject BETTER_AUTH_SECRET. Preview: process-stable secret on
@@ -227,10 +267,7 @@ export const auth = betterAuth({
     encryptOAuthTokens: true,
     accountLinking: {
       enabled: true,
-      trustedProviders: [
-        ...GROK_PROVIDERS.map((p) => p.providerId),
-        GATE_PROVIDER_ID,
-      ],
+      trustedProviders: [...GROK_PROVIDERS.map((p) => p.providerId), GATE_PROVIDER_ID],
       // X's synthetic email is never "verified", so don't gate linking on the
       // local user's email-verified state.
       requireLocalEmailVerified: false,
@@ -295,24 +332,45 @@ export const auth = betterAuth({
         ]
       : []),
 
-    // One-time-code sign-in by email. Registered only when the host can actually
-    // deliver mail (RESEND_API_KEY + EMAIL_FROM), mirroring the captcha spread
-    // above: an unreachable endpoint beats a half-configured one, and the sign-in
-    // UI hides the option whenever this is absent (see `emailOtpAvailable`).
+    // One-time-code sign-in by email, with a tap-to-sign-in link in the same
+    // message. Registered only when the host can actually deliver mail
+    // (RESEND_API_KEY + EMAIL_FROM), mirroring the captcha spread above: an
+    // unreachable endpoint beats a half-configured one, and the sign-in UI hides
+    // the option whenever this is absent (see `emailOtpAvailable`).
     //
     // `disableSignUp` stays false on purpose — this is the easy path for someone
-    // with an iCloud address and no password, so a first-time code creates the
-    // account. Codes are stored hashed, so the verification table never holds a
-    // usable code.
+    // with an iCloud address and no password, so a first-time code (or link)
+    // creates the account. Codes and link tokens are both stored hashed, so the
+    // verification table never holds a usable credential.
     ...(emailDeliveryConfigured()
       ? [
+          magicLink({
+            expiresIn: SIGN_IN_LINK_EXPIRES_SECONDS,
+            storeToken: "hashed",
+            async sendMagicLink({ email, url }) {
+              // A code sign-in claims this URL and mails it with the code; any
+              // other caller gets the link on its own.
+              if (signInLinks.offer(email, url)) return;
+              await sendSignInLinkEmail({ email, url });
+            },
+          }),
+
           emailOTP({
             otpLength: OTP_LENGTH,
             expiresIn: OTP_EXPIRES_SECONDS,
             allowedAttempts: 5,
             storeOTP: "hashed",
             async sendVerificationOTP({ email, otp, type }) {
-              await sendOtpEmail({ email, otp, type, expiresInSeconds: OTP_EXPIRES_SECONDS });
+              // Only a sign-in carries the link — a reset or verification code
+              // has nothing to sign in to.
+              const signInUrl = type === "sign-in" ? await createSignInLink(email) : undefined;
+              await sendOtpEmail({
+                email,
+                otp,
+                type,
+                expiresInSeconds: OTP_EXPIRES_SECONDS,
+                signInUrl,
+              });
             },
           }),
         ]

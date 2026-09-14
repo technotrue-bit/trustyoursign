@@ -1,4 +1,13 @@
-import { otpHtml, otpSubject, otpText, type OtpPurpose } from "./otp-message";
+import {
+  otpHtml,
+  otpSubject,
+  otpText,
+  signInLinkHtml,
+  signInLinkSubject,
+  signInLinkText,
+  type OtpPurpose,
+} from "./otp-message";
+import { SIGN_IN_LINK_EXPIRES_SECONDS } from "../auth/sign-in-link";
 
 /**
  * Outbound email for sign-in codes (server-only).
@@ -64,7 +73,9 @@ export function parseEmailConfig(env: Record<string, string | undefined>): Email
 }
 
 /** True when one-time-code delivery can actually happen. */
-export function emailDeliveryConfigured(env: Record<string, string | undefined> = process.env): boolean {
+export function emailDeliveryConfigured(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
   return parseEmailConfig(env) !== null;
 }
 
@@ -121,12 +132,33 @@ export async function sendOtpEmail(opts: {
   otp: string;
   type: OtpPurpose;
   expiresInSeconds: number;
+  /** When present, the same message also carries a one-tap sign-in button. */
+  signInUrl?: string;
 }): Promise<void> {
-  const input = { otp: opts.otp, purpose: opts.type, expiresInSeconds: opts.expiresInSeconds };
+  const input = {
+    otp: opts.otp,
+    purpose: opts.type,
+    expiresInSeconds: opts.expiresInSeconds,
+    signInUrl: opts.signInUrl,
+  };
   await sendEmail({
     to: opts.email,
     subject: otpSubject(input.purpose),
     text: otpText(input),
     html: otpHtml(input),
+  });
+}
+
+/**
+ * A sign-in link with no code — the message for a link minted outside a code
+ * sign-in (a direct call to `/sign-in/magic-link`).
+ */
+export async function sendSignInLinkEmail(opts: { email: string; url: string }): Promise<void> {
+  const input = { url: opts.url, expiresInSeconds: SIGN_IN_LINK_EXPIRES_SECONDS };
+  await sendEmail({
+    to: opts.email,
+    subject: signInLinkSubject(),
+    text: signInLinkText(input),
+    html: signInLinkHtml(input),
   });
 }
