@@ -1,0 +1,4 @@
+# Closed beta — nothing here should be indexed while the product is still private.
+# When the beta opens, replace this with the normal allow rules and add a sitemap.
+User-agent: *
+Disallow: /
