@@ -17,12 +17,15 @@ function Admin() {
   const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [claimed, setClaimed] = useState<boolean | null>(null);
 
+  const owner = Boolean(user && isSiteOwner(user));
+  // Depend on the flag, not the object: the session hook rebuilds `user` on every
+  // render, so a `[user]` dependency re-runs this effect (and `claimSite`) forever.
   useEffect(() => {
-    if (!user || !isSiteOwner(user)) return;
+    if (!owner) return;
     claimSite()
       .then((r) => setClaimed(r.owner))
       .catch(() => setClaimed(false));
-  }, [user]);
+  }, [owner]);
 
   if (guard === "loading") {
     return (
@@ -40,8 +43,8 @@ function Admin() {
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">Closed</p>
           <h1 className="mt-2 font-display text-4xl italic">This desk is taken.</h1>
           <p className="mt-4 text-sm leading-relaxed text-fg-muted">
-            {SITE_OWNER.name} keeps The Vault. Sign in with the Google or X account that carries that name, or the
-            handle {SITE_OWNER.handle}.
+            {SITE_OWNER.name} keeps The Vault. Sign in with the Google or X account that carries
+            that name, or the handle {SITE_OWNER.handle}.
           </p>
           <Link to="/" className="mt-6 inline-flex min-h-11 text-xs tracking-[0.18em] uppercase">
             Back to the sky
@@ -52,20 +55,21 @@ function Admin() {
   }
 
   return (
-
     <main id="main-content" className="vault-page bg-bg px-5 py-10 text-fg">
       <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[var(--page-chrome-bottom)]">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[0.7rem] tracking-[0.28em] text-accent uppercase">{SITE_OWNER.role}</p>
+            <p className="text-[0.7rem] tracking-[0.28em] text-accent uppercase">
+              {SITE_OWNER.role}
+            </p>
             <h1 className="mt-2 font-display text-4xl tracking-tight italic">{SITE_OWNER.name}</h1>
             <p className="mt-1 text-sm text-fg-muted">{CONTACT_HANDLE}</p>
           </div>
           <AccountMenu />
         </div>
         <p className="mt-6 text-sm leading-relaxed text-fg-muted">
-          This is your vault. Charts people save stay on their own accounts — you do not get a dump of their birth
-          dates. That is the privacy we promised them.
+          This is your vault. Charts people save stay on their own accounts — you do not get a dump
+          of their birth dates. That is the privacy we promised them.
         </p>
         <dl className="mt-8 space-y-3 text-sm">
           <div className="flex justify-between gap-4 border-b border-border py-2">
@@ -123,7 +127,11 @@ function ResearchBooks() {
       <p className="mt-2 text-sm leading-relaxed text-fg-muted">
         Timed nativities. Owner only. These do not appear for anyone else.
       </p>
-      {err ? <p role="alert" className="mt-3 text-sm text-wine">{err}</p> : null}
+      {err ? (
+        <p role="alert" className="mt-3 text-sm text-wine">
+          {err}
+        </p>
+      ) : null}
       <ul className="mt-5 space-y-3">
         {books === null ? (
           <li className="h-20 animate-pulse rounded-md bg-bg-subtle" />
@@ -147,7 +155,8 @@ function ResearchBooks() {
           <div className="rounded-md border border-dashed border-border px-4 py-4">
             <p className="font-display text-xl tracking-tight text-fg italic">The third</p>
             <p className="mt-1 text-sm text-fg-muted">
-              Sealed until we want to see it all come together. The natal data is not being rewritten.
+              Sealed until we want to see it all come together. The natal data is not being
+              rewritten.
             </p>
           </div>
         </li>
@@ -210,14 +219,22 @@ function AiDeskForm() {
       }}
     >
       <p className="text-[0.7rem] tracking-[0.22em] text-accent uppercase">Machine (owner only)</p>
-      <p className="text-sm text-fg-muted">Visitors never see these names. They see a cut, or a rest.</p>
+      <p className="text-sm text-fg-muted">
+        Visitors never see these names. They see a cut, or a rest.
+      </p>
       <label className="flex min-h-11 items-center gap-2 text-sm">
-        <input type="checkbox" checked={desk.kill} onChange={(e) => setDesk({ ...desk, kill: e.target.checked })} />
+        <input
+          type="checkbox"
+          checked={desk.kill}
+          onChange={(e) => setDesk({ ...desk, kill: e.target.checked })}
+        />
         Rest the machine
       </label>
       <div className="grid gap-3 md:grid-cols-2">
         <label className="block text-sm">
-          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">Light model</span>
+          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">
+            Light model
+          </span>
           <input
             className="min-h-11 w-full rounded-md border border-border bg-bg-elevated px-3"
             value={desk.lightModel}
@@ -225,7 +242,9 @@ function AiDeskForm() {
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">Light effort</span>
+          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">
+            Light effort
+          </span>
           <select
             className="min-h-11 w-full rounded-md border border-border bg-bg-elevated px-3"
             value={desk.lightEffort}
@@ -239,7 +258,9 @@ function AiDeskForm() {
           </select>
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">Deep model</span>
+          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">
+            Deep model
+          </span>
           <input
             className="min-h-11 w-full rounded-md border border-border bg-bg-elevated px-3"
             value={desk.deepModel}
@@ -247,7 +268,9 @@ function AiDeskForm() {
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">Deep effort</span>
+          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">
+            Deep effort
+          </span>
           <select
             className="min-h-11 w-full rounded-md border border-border bg-bg-elevated px-3"
             value={desk.deepEffort}
@@ -261,7 +284,9 @@ function AiDeskForm() {
           </select>
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">Light tokens</span>
+          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">
+            Light tokens
+          </span>
           <input
             type="number"
             className="min-h-11 w-full rounded-md border border-border bg-bg-elevated px-3"
@@ -270,7 +295,9 @@ function AiDeskForm() {
           />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">Deep tokens</span>
+          <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">
+            Deep tokens
+          </span>
           <input
             type="number"
             className="min-h-11 w-full rounded-md border border-border bg-bg-elevated px-3"
@@ -280,7 +307,9 @@ function AiDeskForm() {
         </label>
       </div>
       <label className="block text-sm">
-        <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">Vault system</span>
+        <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">
+          Vault system
+        </span>
         <textarea
           className="min-h-32 w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm"
           value={desk.systemVault}
@@ -288,14 +317,19 @@ function AiDeskForm() {
         />
       </label>
       <label className="block text-sm">
-        <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">Warm system</span>
+        <span className="mb-1 block text-xs tracking-[0.16em] text-fg-subtle uppercase">
+          Warm system
+        </span>
         <textarea
           className="min-h-32 w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm"
           value={desk.systemWarm}
           onChange={(e) => setDesk({ ...desk, systemWarm: e.target.value })}
         />
       </label>
-      <button type="submit" className="min-h-11 rounded-md bg-accent px-4 text-xs tracking-[0.2em] text-accent-fg uppercase">
+      <button
+        type="submit"
+        className="min-h-11 rounded-md bg-accent px-4 text-xs tracking-[0.2em] text-accent-fg uppercase"
+      >
         Save machine
       </button>
       <div className="pt-6">

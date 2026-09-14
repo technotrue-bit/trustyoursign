@@ -100,15 +100,18 @@ function Intro() {
 function SavedShelf() {
   const user = useCurrentUser();
   const [rows, setRows] = useState<SavedChart[] | null>(null);
+  const userId = user?.id ?? null;
+  // Depend on the id, not the object: the session hook rebuilds `user` on every
+  // render, so a `[user]` dependency re-fetches in a loop (fetch → setState → render).
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setRows(null);
       return;
     }
     listCharts()
       .then(setRows)
       .catch(() => setRows([]));
-  }, [user]);
+  }, [userId]);
   if (!user) {
     return (
       <p className="mt-6 text-sm text-fg-muted">
