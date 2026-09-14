@@ -79,6 +79,38 @@ export function emailDeliveryConfigured(
   return parseEmailConfig(env) !== null;
 }
 
+/**
+ * Sender domains that are a provider's SANDBOX: the mail is accepted but only
+ * deliverable to the provider account's own address. Resend's `resend.dev` is
+ * one, and a host configured with it can promise nobody else a code — every
+ * other recipient is refused.
+ */
+const SANDBOX_SENDER_DOMAINS = ["resend.dev"] as const;
+
+/** The bare address out of an `EMAIL_FROM` value (`Name <a@b.c>` or `a@b.c`). */
+function senderAddress(from: string): string {
+  const bracketed = from.match(/<([^>]+)>/);
+  return (bracketed ? bracketed[1] : from).trim().toLowerCase();
+}
+
+/**
+ * True when configured delivery can only reach the provider account's own
+ * address. The sign-in UI must not tell a visitor a code is on its way when the
+ * host cannot deliver it — that is exactly how a one-line misconfiguration
+ * becomes a silent product outage.
+ */
+export function emailSenderIsSandbox(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  const config = parseEmailConfig(env);
+  if (!config) return false;
+  const address = senderAddress(config.from);
+  const domain = address.slice(address.lastIndexOf("@") + 1);
+  return SANDBOX_SENDER_DOMAINS.some(
+    (sandbox) => domain === sandbox || domain.endsWith(`.${sandbox}`),
+  );
+}
+
 const SEND_TIMEOUT_MS = 10_000;
 
 /**

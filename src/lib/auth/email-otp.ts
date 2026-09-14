@@ -21,8 +21,24 @@ export {
 
 export { SIGN_IN_LINK_CALLBACK_PATH, SIGN_IN_LINK_EXPIRES_SECONDS } from "./sign-in-link";
 
-/** True when the host has email delivery configured. */
-export const emailOtpAvailable = createServerFn({ method: "GET" }).handler(async () => {
-  const { emailDeliveryConfigured } = await import("@/lib/email/send.server");
-  return emailDeliveryConfigured();
-});
+/** What the sign-in UI needs to know about the code path on this host. */
+export type EmailOtpStatus = {
+  /** Mail delivery is configured at all. */
+  available: boolean;
+  /**
+   * Configured, but the sender is a provider SANDBOX domain, so delivery only
+   * reaches the provider account's own address. The UI must say so rather than
+   * promise a visitor a code the provider is going to refuse.
+   */
+  sandbox: boolean;
+};
+
+/** Whether this host can deliver a code, and whether it can deliver it to anyone. */
+export const emailOtpStatus = createServerFn({ method: "GET" }).handler(
+  async (): Promise<EmailOtpStatus> => {
+    const { emailDeliveryConfigured, emailSenderIsSandbox } =
+      await import("@/lib/email/send.server");
+    const available = emailDeliveryConfigured();
+    return { available, sandbox: available && emailSenderIsSandbox() };
+  },
+);

@@ -12,6 +12,7 @@ import {
 import {
   DEFAULT_EMAIL_ENDPOINT,
   emailDeliveryConfigured,
+  emailSenderIsSandbox,
   parseEmailConfig,
 } from "./send.server.ts";
 
@@ -195,5 +196,37 @@ describe("the sign-in link the code email can carry", () => {
     assert.match(signInLinkSubject(), /link/);
     assert.match(signInLinkText({ url: link, expiresInSeconds: 900 }), /expires in 15 minutes/);
     assert.match(signInLinkHtml({ url: link, expiresInSeconds: 900 }), /Sign in to The Vault/);
+  });
+});
+
+describe("detecting a sandbox sender", () => {
+  const base = { RESEND_API_KEY: "re_x" };
+
+  it("spots the provider's sandbox domain, however EMAIL_FROM is written", () => {
+    assert.equal(emailSenderIsSandbox({ ...base, EMAIL_FROM: "onboarding@resend.dev" }), true);
+    assert.equal(
+      emailSenderIsSandbox({ ...base, EMAIL_FROM: "The Vault <onboarding@resend.dev>" }),
+      true,
+    );
+    assert.equal(emailSenderIsSandbox({ ...base, EMAIL_FROM: "MAIL@SEND.RESEND.DEV" }), true);
+  });
+
+  it("treats a domain of your own as real delivery", () => {
+    assert.equal(emailSenderIsSandbox({ ...base, EMAIL_FROM: "vault@trustyoursign.com" }), false);
+    assert.equal(
+      emailSenderIsSandbox({ ...base, EMAIL_FROM: "The Vault <vault@trustyoursign.com>" }),
+      false,
+      "a display name never changes the answer",
+    );
+    assert.equal(emailSenderIsSandbox({ ...base, EMAIL_FROM: "vault@notresend.dev" }), false);
+  });
+
+  it("is false when delivery is not configured at all", () => {
+    assert.equal(emailSenderIsSandbox({}), false);
+    assert.equal(
+      emailSenderIsSandbox({ EMAIL_FROM: "onboarding@resend.dev" }),
+      false,
+      "a from-address alone cannot deliver anything",
+    );
   });
 });
