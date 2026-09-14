@@ -5,17 +5,8 @@ import { useNativity } from "@/lib/chart/nativity";
 import { formatBirth, formatClock } from "@/lib/chart/sun";
 import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { signAtLon } from "@/lib/chart/signs";
-import type {
-  ChakraId,
-  GateId,
-  PlanetId,
-  ReadingId,
-} from "@/lib/chart/types";
-import {
-  useSession,
-  useSessionMode,
-  useSessionSelection,
-} from "@/lib/chart/session/hooks";
+import type { ChakraId, GateId, PlanetId, ReadingId } from "@/lib/chart/types";
+import { useSession, useSessionMode, useSessionSelection } from "@/lib/chart/session/hooks";
 import { useSessionStore } from "@/lib/chart/session/store";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { getSkyPass, persistNatal, saveChartTone, sitWithTheSky } from "@/lib/chart/sky";
@@ -76,15 +67,18 @@ function ShelfPanel() {
   const [deepLeft, setDeepLeft] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const userId = user?.id ?? null;
+  // Depend on the id, not the object: the session hook rebuilds `user` on every
+  // render, so a `[user]` dependency re-fetches in a loop (fetch → setState → render).
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setDeepLeft(null);
       return;
     }
     getSkyPass()
       .then((p) => setDeepLeft(p.remainingDeep))
       .catch(() => setDeepLeft(null));
-  }, [user]);
+  }, [userId]);
   if (!shelf) return null;
   const sign = TEMPLE_SIGNS.find((s) => s.id === shelf.signId);
   const natal = shelf.skyNatal;
@@ -95,7 +89,9 @@ function ShelfPanel() {
         <Title>{shelf.label}</Title>
         <p className="mt-2 text-sm text-fg-muted">
           {formatBirth(shelf.birth.month, shelf.birth.day, shelf.birth.year)}
-          {shelf.birth.hour != null && shelf.birth.minute != null ? ` · ${formatClock(shelf.birth.hour, shelf.birth.minute)}` : ""}
+          {shelf.birth.hour != null && shelf.birth.minute != null
+            ? ` · ${formatClock(shelf.birth.hour, shelf.birth.minute)}`
+            : ""}
           {shelf.birth.place ? ` · ${shelf.birth.place}` : ""} · {sign?.name ?? shelf.signId}
         </p>
         {natal ? (
@@ -119,7 +115,10 @@ function ShelfPanel() {
             className={cn("min-h-11", shelf.tone === "vault" ? "text-fg" : "text-fg-subtle")}
             onClick={() => {
               setTone("vault");
-              if (user && shelf.id) void saveChartTone({ data: { chartId: shelf.savedId ?? shelf.id, tone: "vault" } }).catch(() => {});
+              if (user && shelf.id)
+                void saveChartTone({
+                  data: { chartId: shelf.savedId ?? shelf.id, tone: "vault" },
+                }).catch(() => {});
             }}
           >
             Vault
@@ -129,13 +128,18 @@ function ShelfPanel() {
             className={cn("min-h-11", shelf.tone === "warm" ? "text-fg" : "text-fg-subtle")}
             onClick={() => {
               setTone("warm");
-              if (user && shelf.id) void saveChartTone({ data: { chartId: shelf.savedId ?? shelf.id, tone: "warm" } }).catch(() => {});
+              if (user && shelf.id)
+                void saveChartTone({
+                  data: { chartId: shelf.savedId ?? shelf.id, tone: "warm" },
+                }).catch(() => {});
             }}
           >
             Warm
           </button>
         </div>
-        <p className="mt-1 text-xs text-fg-subtle">How this chart speaks. The rest of the vault keeps its mouth.</p>
+        <p className="mt-1 text-xs text-fg-subtle">
+          How this chart speaks. The rest of the vault keeps its mouth.
+        </p>
         {natal && user ? (
           <button
             type="button"
@@ -148,7 +152,10 @@ function ShelfPanel() {
                 const r = await sitWithTheSky({ data: { natal } });
                 setNatal(r.natal);
                 setDeepLeft(0);
-                if (shelf.id) void persistNatal({ data: { chartId: shelf.savedId ?? shelf.id, natal: r.natal } }).catch(() => {});
+                if (shelf.id)
+                  void persistNatal({
+                    data: { chartId: shelf.savedId ?? shelf.id, natal: r.natal },
+                  }).catch(() => {});
               } catch (e) {
                 setErr(e instanceof Error ? e.message : "The deep cut is resting.");
               } finally {
@@ -156,12 +163,22 @@ function ShelfPanel() {
               }
             }}
           >
-            {deepLeft === 0 ? "Deep cut rests this week" : busy ? "Sitting with the sky…" : "Sit with the whole sky"}
+            {deepLeft === 0
+              ? "Deep cut rests this week"
+              : busy
+                ? "Sitting with the sky…"
+                : "Sit with the whole sky"}
           </button>
         ) : natal && !user ? (
-          <p className="mt-3 text-xs text-fg-subtle">Sign in to ask the machine, and for one deep cut a week.</p>
+          <p className="mt-3 text-xs text-fg-subtle">
+            Sign in to ask the machine, and for one deep cut a week.
+          </p>
         ) : null}
-        {err ? <p role="alert" className="mt-2 text-sm text-wine">{err}</p> : null}
+        {err ? (
+          <p role="alert" className="mt-2 text-sm text-wine">
+            {err}
+          </p>
+        ) : null}
       </div>
     </ChartSheet>
   );
@@ -391,7 +408,8 @@ function SkyIndex() {
     <ListPanel kicker="The sky" title={nat.meta.oneCut}>
       {session?.kind === "visitor" ? (
         <p className="mb-3 text-xs leading-relaxed text-fg-subtle">
-          {nat.meta.zodiac} · {nat.meta.houses} · {nat.meta.zone} · {nat.meta.engine}. Entertainment, not advice.
+          {nat.meta.zodiac} · {nat.meta.houses} · {nat.meta.zone} · {nat.meta.engine}.
+          Entertainment, not advice.
         </p>
       ) : null}
       <ul className="grid grid-cols-2 gap-1 md:grid-cols-1">
@@ -538,7 +556,8 @@ function BonesPanel() {
       </p>
       {session?.kind === "visitor" ? (
         <p className="mt-2 max-w-2xl text-xs leading-relaxed text-fg-subtle">
-          {nat.meta.engine} · timezone from birth place · degrees before meaning. This is not medical or legal advice.
+          {nat.meta.engine} · timezone from birth place · degrees before meaning. This is not
+          medical or legal advice.
         </p>
       ) : null}
       <div className="mt-5 overflow-x-auto">

@@ -3,7 +3,14 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { RedirectToSignIn, SessionUnavailable } from "@/lib/auth/gates";
 import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { acceptLegal, deleteAllMyData, deleteChart, listCharts, upsertChart, type SavedChart } from "@/lib/charts";
+import {
+  acceptLegal,
+  deleteAllMyData,
+  deleteChart,
+  listCharts,
+  upsertChart,
+  type SavedChart,
+} from "@/lib/charts";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { daysForSign, monthsForSign } from "@/lib/chart/sun";
 import type { SignId } from "@/lib/chart/types";
@@ -44,12 +51,18 @@ function Account() {
       .catch(() => setCharts([]));
   };
 
+  const userId = user?.id ?? null;
+  const owner = Boolean(user && isSiteOwner(user));
+
+  // Depend on identity, not on the object: the session hook rebuilds `user` on
+  // every render, so a `[user]` dependency re-runs this effect forever
+  // (fetch → setState → render → fetch) — and it would re-run `claimSite` with it.
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     load();
     void acceptLegal().catch(() => undefined);
-    if (isSiteOwner(user)) void claimSite().catch(() => undefined);
-  }, [user]);
+    if (owner) void claimSite().catch(() => undefined);
+  }, [userId, owner]);
 
   if (guard === "loading") {
     return (
@@ -65,7 +78,6 @@ function Account() {
   const others = charts?.filter((c) => c.relation === "other") ?? [];
 
   return (
-
     <main id="main-content" className="vault-page bg-bg px-5 py-10 text-fg">
       <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[var(--page-chrome-bottom)]">
         <div className="flex items-start justify-between gap-4">
@@ -112,14 +124,20 @@ function Account() {
           onError={setError}
         />
 
-        {error ? <p role="alert" className="mt-4 text-sm text-wine">{error}</p> : null}
+        {error ? (
+          <p role="alert" className="mt-4 text-sm text-wine">
+            {error}
+          </p>
+        ) : null}
 
         <section id="charts" className="mt-10 scroll-mt-24">
           <h2 className="font-display text-2xl text-fg italic">Your chart</h2>
           {charts === null ? (
             <div className="mt-3 h-16 animate-pulse rounded-md bg-bg-subtle" />
           ) : mine.length === 0 ? (
-            <p className="mt-3 text-sm text-fg-muted">None saved yet. Lock a sign in the sky, or add one below.</p>
+            <p className="mt-3 text-sm text-fg-muted">
+              None saved yet. Lock a sign in the sky, or add one below.
+            </p>
           ) : (
             <ul className="mt-3 space-y-2">
               {mine.map((c) => (
@@ -146,15 +164,20 @@ function Account() {
         <section className="mt-12 border-t border-border pt-6">
           <h2 className="font-display text-xl text-fg italic">Your data</h2>
           <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-            You can erase every chart and Ask conversation we hold for this account. That cannot be undone. Session
-            cookies are only for staying signed in.
+            You can erase every chart and Ask conversation we hold for this account. That cannot be
+            undone. Session cookies are only for staying signed in.
           </p>
           <button
             type="button"
             disabled={busy}
             className="mt-4 min-h-12 text-xs tracking-[0.18em] text-wine uppercase"
             onClick={async () => {
-              if (!window.confirm("Delete every saved chart, Ask thread, and legal record on this account?")) return;
+              if (
+                !window.confirm(
+                  "Delete every saved chart, Ask thread, and legal record on this account?",
+                )
+              )
+                return;
               setBusy(true);
               try {
                 await deleteAllMyData();
@@ -279,16 +302,26 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
     >
       <p className="font-display text-xl text-fg italic">Save a chart</p>
       <div className="flex gap-2 text-xs tracking-[0.16em] uppercase">
-        <button type="button" className={cn("min-h-11", relation === "self" ? "text-fg" : "text-fg-muted")} onClick={() => setRelation("self")}>
+        <button
+          type="button"
+          className={cn("min-h-11", relation === "self" ? "text-fg" : "text-fg-muted")}
+          onClick={() => setRelation("self")}
+        >
           Mine
         </button>
-        <button type="button" className={cn("min-h-11", relation === "other" ? "text-fg" : "text-fg-muted")} onClick={() => setRelation("other")}>
+        <button
+          type="button"
+          className={cn("min-h-11", relation === "other" ? "text-fg" : "text-fg-muted")}
+          onClick={() => setRelation("other")}
+        >
           Someone else
         </button>
       </div>
       {relation === "other" ? (
         <label className="block">
-          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Their name</span>
+          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+            Their name
+          </span>
           <input
             required
             value={personName}
@@ -299,7 +332,9 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
         </label>
       ) : null}
       <label className="block">
-        <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Sign</span>
+        <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+          Sign
+        </span>
         <select
           value={signId}
           onChange={(e) => setSignId(e.target.value as SignId)}
@@ -314,8 +349,15 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
       </label>
       <div className="grid grid-cols-3 gap-2">
         <label className="block">
-          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Month</span>
-          <select value={month} onChange={(e) => setMonth(e.target.value)} className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg" required>
+          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+            Month
+          </span>
+          <select
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
+            required
+          >
             <option value="">—</option>
             {signMonths.map((m) => (
               <option key={m} value={m}>
@@ -325,8 +367,16 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Day</span>
-          <select value={day} onChange={(e) => setDay(e.target.value)} className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg" required disabled={!monthN}>
+          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+            Day
+          </span>
+          <select
+            value={day}
+            onChange={(e) => setDay(e.target.value)}
+            className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
+            required
+            disabled={!monthN}
+          >
             <option value="">—</option>
             {signDays.map((d) => (
               <option key={d} value={d}>
@@ -336,8 +386,15 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Year</span>
-          <select value={year} onChange={(e) => setYear(e.target.value)} className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg" required>
+          <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+            Year
+          </span>
+          <select
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
+            required
+          >
             <option value="">—</option>
             {years.map((y) => (
               <option key={y} value={y}>
@@ -348,16 +405,30 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
         </label>
       </div>
       <label className="flex min-h-11 items-start gap-2 text-sm text-fg-muted">
-        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1" />
+        <input
+          type="checkbox"
+          checked={consent}
+          onChange={(e) => setConsent(e.target.checked)}
+          className="mt-1"
+        />
         <span>I consent to storing this birth date on my account.</span>
       </label>
       {relation === "other" ? (
         <label className="flex min-h-11 items-start gap-2 text-sm text-fg-muted">
-          <input type="checkbox" checked={permission} onChange={(e) => setPermission(e.target.checked)} className="mt-1" />
+          <input
+            type="checkbox"
+            checked={permission}
+            onChange={(e) => setPermission(e.target.checked)}
+            className="mt-1"
+          />
           <span>I have this person’s permission to keep their birth date.</span>
         </label>
       ) : null}
-      <button type="submit" disabled={busy} className="min-h-12 w-full rounded-md bg-accent text-xs tracking-[0.22em] text-accent-fg uppercase disabled:opacity-50">
+      <button
+        type="submit"
+        disabled={busy}
+        className="min-h-12 w-full rounded-md bg-accent text-xs tracking-[0.22em] text-accent-fg uppercase disabled:opacity-50"
+      >
         Save to my vault
       </button>
     </form>
