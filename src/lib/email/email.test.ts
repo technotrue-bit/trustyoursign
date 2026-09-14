@@ -1,7 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { expiryWording, otpHtml, otpSubject, otpText } from "./otp-message.ts";
-import { DEFAULT_EMAIL_ENDPOINT, emailDeliveryConfigured, parseEmailConfig } from "./send.server.ts";
+import {
+  expiryWording,
+  otpHtml,
+  otpSubject,
+  otpText,
+  signInLinkHtml,
+  signInLinkSubject,
+  signInLinkText,
+} from "./otp-message.ts";
+import {
+  DEFAULT_EMAIL_ENDPOINT,
+  emailDeliveryConfigured,
+  parseEmailConfig,
+} from "./send.server.ts";
 
 describe("mail settings survive a dashboard's casing", () => {
   it("accepts a lowercased key and from (the Vercel footgun)", () => {
@@ -79,7 +91,11 @@ describe("the code email", () => {
   it("escapes markup so a hostile address cannot inject into the body", () => {
     // The address is not interpolated into the body today; this pins the helper
     // that guards it if it ever is.
-    const html = otpHtml({ otp: '<img src=x onerror="alert(1)">', purpose: "sign-in", expiresInSeconds: 300 });
+    const html = otpHtml({
+      otp: '<img src=x onerror="alert(1)">',
+      purpose: "sign-in",
+      expiresInSeconds: 300,
+    });
     assert.equal(html.includes("<img src=x"), false);
     assert.match(html, /&lt;img src=x/);
   });
@@ -97,7 +113,10 @@ describe("delivery configuration", () => {
   });
 
   it("treats blank or whitespace values as unset (deploy UIs make these easy to misconfigure)", () => {
-    assert.equal(emailDeliveryConfigured({ RESEND_API_KEY: "   ", EMAIL_FROM: "vault@example.com" }), false);
+    assert.equal(
+      emailDeliveryConfigured({ RESEND_API_KEY: "   ", EMAIL_FROM: "vault@example.com" }),
+      false,
+    );
     assert.equal(emailDeliveryConfigured({ RESEND_API_KEY: "re_x", EMAIL_FROM: "  " }), false);
   });
 
@@ -122,5 +141,59 @@ describe("delivery configuration", () => {
       })?.endpoint,
       "http://127.0.0.1:9099/emails",
     );
+  });
+});
+
+describe("the sign-in link the code email can carry", () => {
+  const link =
+    "https://trustyoursign.vercel.app/api/auth/magic-link/verify?token=abc&callbackURL=/account";
+
+  it("rides in the same message as the code, in both bodies", () => {
+    const text = otpText({
+      otp: "481920",
+      purpose: "sign-in",
+      expiresInSeconds: 300,
+      signInUrl: link,
+    });
+    assert.match(text, /481920/, "the code is still there to type");
+    assert.match(text, /lasts 15 minutes/, "a tap gets longer than a code");
+
+    const html = otpHtml({
+      otp: "481920",
+      purpose: "sign-in",
+      expiresInSeconds: 300,
+      signInUrl: link,
+    });
+    assert.match(html, /481920/);
+    assert.match(
+      html,
+      /href="https:\/\/trustyoursign\.vercel\.app\/api\/auth\/magic-link\/verify\?token=abc&amp;callbackURL=\/account"/,
+      "the button points straight at the verify endpoint",
+    );
+  });
+
+  it("is simply absent when no link could be minted — never a dead button", () => {
+    const html = otpHtml({ otp: "481920", purpose: "sign-in", expiresInSeconds: 300 });
+    const text = otpText({ otp: "481920", purpose: "sign-in", expiresInSeconds: 300 });
+    assert.equal(html.includes("magic-link"), false);
+    assert.equal(html.includes("Sign in to The Vault"), false);
+    assert.equal(text.includes("Open this link"), false);
+  });
+
+  it("escapes a hostile URL in the button and the paste-this line alike", () => {
+    const html = otpHtml({
+      otp: "1",
+      purpose: "sign-in",
+      expiresInSeconds: 300,
+      signInUrl: 'https://x.test/"><script>alert(1)</script>',
+    });
+    assert.equal(html.includes("<script>"), false);
+    assert.match(html, /&quot;&gt;&lt;script&gt;/);
+  });
+
+  it("stands alone when it is the whole message", () => {
+    assert.match(signInLinkSubject(), /link/);
+    assert.match(signInLinkText({ url: link, expiresInSeconds: 900 }), /expires in 15 minutes/);
+    assert.match(signInLinkHtml({ url: link, expiresInSeconds: 900 }), /Sign in to The Vault/);
   });
 });

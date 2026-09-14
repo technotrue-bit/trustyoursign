@@ -11,6 +11,7 @@ import {
   OTP_EXPIRES_SECONDS,
   OTP_LENGTH,
   OTP_RESEND_COOLDOWN_SECONDS,
+  SIGN_IN_LINK_EXPIRES_SECONDS,
   cooldownSecondsLeft,
   isCompleteOtp,
   normalizeOtpInput,
@@ -28,12 +29,18 @@ export const Route = createFileRoute("/login")({
   // intent instead of dropping the visitor on the sign-in form.
   validateSearch: (search: Record<string, unknown>): { create?: true } => ({
     create:
-      search.create === true || search.create === "1" || search.create === "true" ? true : undefined,
+      search.create === true || search.create === "1" || search.create === "true"
+        ? true
+        : undefined,
   }),
 });
 
 function Login() {
-  const { user, isPending: sessionPending, isReadFailed: sessionReadFailed } = useCurrentUserState();
+  const {
+    user,
+    isPending: sessionPending,
+    isReadFailed: sessionReadFailed,
+  } = useCurrentUserState();
   const alreadySignedIn =
     resolveSessionGuardState({
       isPending: sessionPending,
@@ -41,9 +48,9 @@ function Login() {
       hasUser: user !== null,
     }) === "signed_in";
   const navigate = useNavigate();
-    // The route search picks the opening tab; switching tabs after that is local.
-    const { create } = Route.useSearch();
-    const [mode, setMode] = useState<"in" | "up">(create ? "up" : "in");
+  // The route search picks the opening tab; switching tabs after that is local.
+  const { create } = Route.useSearch();
+  const [mode, setMode] = useState<"in" | "up">(create ? "up" : "in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -268,11 +275,13 @@ function Login() {
   return (
     <main id="main-content" className="vault-page bg-bg px-5 text-fg">
       <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[max(2.5rem,var(--chrome-bottom))]">
-        <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">The Vault · {SITE_OWNER.name}</p>
+        <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">
+          The Vault · {SITE_OWNER.name}
+        </p>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Keep the sky.</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-          Sign in to save your chart, and the charts of people who gave you permission. This house belongs to{" "}
-          {SITE_OWNER.name} ({SITE_OWNER.handle}).
+          Sign in to save your chart, and the charts of people who gave you permission. This house
+          belongs to {SITE_OWNER.name} ({SITE_OWNER.handle}).
         </p>
 
         {authEnabled ? (
@@ -353,13 +362,19 @@ function Login() {
           <form
             className="relative mt-4 space-y-3"
             onSubmit={(e) => {
-                          e.preventDefault();
-                          void (otpStage === "sent" ? verifyCode() : otpStage === "code" ? sendCode() : emailAuth());
-                        }}
+              e.preventDefault();
+              void (otpStage === "sent"
+                ? verifyCode()
+                : otpStage === "code"
+                  ? sendCode()
+                  : emailAuth());
+            }}
           >
             {mode === "up" ? (
               <label className="block">
-                <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Name</span>
+                <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+                  Name
+                </span>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -399,43 +414,44 @@ function Login() {
               />
             </label>
             {otpStage === "sent" ? (
-                          <label className="block">
-                            <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
-                              Code
-                            </span>
-                            <input
-                              value={otp}
-                              onChange={(e) => setOtp(normalizeOtpInput(e.target.value))}
-                              className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-center font-mono text-xl tracking-[0.35em] text-fg"
-                              inputMode="numeric"
-                              autoComplete="one-time-code"
-                              autoCapitalize="none"
-                              autoCorrect="off"
-                              spellCheck={false}
-                              maxLength={OTP_LENGTH}
-                              aria-label={`${OTP_LENGTH}-digit code sent to ${codeSentTo}`}
-                            />
-                            <span className="mt-2 block text-xs leading-relaxed text-fg-subtle">
-                              {OTP_LENGTH} digits, sent to {codeSentTo}. It expires in{" "}
-                              {Math.round(OTP_EXPIRES_SECONDS / 60)} minutes.
-                            </span>
-                          </label>
-                        ) : otpStage === "idle" ? (
-                          <label className="block">
-                            <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
-                              Password
-                            </span>
-                            <input
-                              type="password"
-                              required
-                              value={password}
-                              onChange={(e) => setPassword(e.target.value)}
-                              className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
-                              autoComplete={mode === "up" ? "new-password" : "current-password"}
-                              minLength={mode === "up" ? 8 : 1}
-                            />
-                          </label>
-                        ) : null}
+              <label className="block">
+                <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+                  Code
+                </span>
+                <input
+                  value={otp}
+                  onChange={(e) => setOtp(normalizeOtpInput(e.target.value))}
+                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-center font-mono text-xl tracking-[0.35em] text-fg"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  maxLength={OTP_LENGTH}
+                  aria-label={`${OTP_LENGTH}-digit code sent to ${codeSentTo}`}
+                />
+                <span className="mt-2 block text-xs leading-relaxed text-fg-subtle">
+                  {OTP_LENGTH} digits, sent to {codeSentTo} — or tap the button in that email. The
+                  code expires in {Math.round(OTP_EXPIRES_SECONDS / 60)} minutes; the button lasts{" "}
+                  {Math.round(SIGN_IN_LINK_EXPIRES_SECONDS / 60)}.
+                </span>
+              </label>
+            ) : otpStage === "idle" ? (
+              <label className="block">
+                <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+                  Password
+                </span>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
+                  autoComplete={mode === "up" ? "new-password" : "current-password"}
+                  minLength={mode === "up" ? 8 : 1}
+                />
+              </label>
+            ) : null}
             <label className="absolute -left-[9999px] h-0 w-0 overflow-hidden" aria-hidden="true">
               <span>Company</span>
               <input
@@ -449,14 +465,24 @@ function Login() {
             {/* Shown for anything that can create an account: the Create-account tab, and
                             the code path at any time (a first-time code signs the visitor up).
                             Hidden once a code is out, since acceptance was required to send it. */}
-                        {(mode === "up" || otpStage === "code") && otpStage !== "sent" ? (
-                          <div className="space-y-2 pt-1 text-sm text-fg-muted">
+            {(mode === "up" || otpStage === "code") && otpStage !== "sent" ? (
+              <div className="space-y-2 pt-1 text-sm text-fg-muted">
                 <label className="flex min-h-11 items-start gap-2">
-                  <input type="checkbox" checked={ageOk} onChange={(e) => setAgeOk(e.target.checked)} className="mt-1" />
+                  <input
+                    type="checkbox"
+                    checked={ageOk}
+                    onChange={(e) => setAgeOk(e.target.checked)}
+                    className="mt-1"
+                  />
                   <span>I am {MIN_AGE} or older.</span>
                 </label>
                 <label className="flex min-h-11 items-start gap-2">
-                  <input type="checkbox" checked={legalOk} onChange={(e) => setLegalOk(e.target.checked)} className="mt-1" />
+                  <input
+                    type="checkbox"
+                    checked={legalOk}
+                    onChange={(e) => setLegalOk(e.target.checked)}
+                    className="mt-1"
+                  />
                   <span>
                     I agree to the{" "}
                     <Link to="/terms" className="text-fg underline">
@@ -472,74 +498,78 @@ function Login() {
               </div>
             ) : null}
             {turnstileSiteKey() ? <TurnstileWidget /> : null}
-                        {error ? <p role="alert" className="text-sm text-wine">{error}</p> : null}
-                        <button
-                          type="submit"
-                          disabled={busy || !authEnabled}
-                          className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase disabled:opacity-50"
-                        >
-                          {otpStage === "sent"
-                                                      ? "Sign in with code"
-                                                      : otpStage === "code"
-                                                        ? "Email me a code"
-                                                        : mode === "up"
-                                                          ? "Create account"
-                                                          : "Sign in with email"}
-                        </button>
+            {error ? (
+              <p role="alert" className="text-sm text-wine">
+                {error}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={busy || !authEnabled}
+              className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase disabled:opacity-50"
+            >
+              {otpStage === "sent"
+                ? "Sign in with code"
+                : otpStage === "code"
+                  ? "Email me a code"
+                  : mode === "up"
+                    ? "Create account"
+                    : "Sign in with email"}
+            </button>
 
-                        {/* The password-free path. Only rendered when the host can actually
+            {/* The password-free path. Only rendered when the host can actually
                             send mail, so it is never a button that cannot finish. */}
-                        {otpAvailable ? (
-                          otpStage === "sent" ? (
-                            <>
-                              <button
-                                type="button"
-                                disabled={busy || cooldownLeft > 0}
-                                onClick={() => void sendCode()}
-                                className="min-h-11 w-full rounded-md border border-border px-4 text-xs tracking-[0.18em] text-fg-muted uppercase hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
-                              >
-                                {cooldownLeft > 0 ? `Another code in ${cooldownLeft}s` : "Send another code"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOtpStage("idle");
-                                  setOtp("");
-                                  setError(null);
-                                }}
-                                className="min-h-11 w-full px-4 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
-                              >
-                                Use a password instead
-                              </button>
-                            </>
-                          ) : otpStage === "code" ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOtpStage("idle");
-                                setError(null);
-                              }}
-                              className="min-h-11 w-full px-4 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
-                            >
-                              Use a password instead
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => startCodeSignIn({ sendNow: true })}
-                              className="min-h-11 w-full rounded-md border border-border px-4 text-xs tracking-[0.18em] text-fg-muted uppercase hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
-                            >
-                              Email me a code instead
-                            </button>
-                          )
-                        ) : null}
+            {otpAvailable ? (
+              otpStage === "sent" ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy || cooldownLeft > 0}
+                    onClick={() => void sendCode()}
+                    className="min-h-11 w-full rounded-md border border-border px-4 text-xs tracking-[0.18em] text-fg-muted uppercase hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+                  >
+                    {cooldownLeft > 0 ? `Another code in ${cooldownLeft}s` : "Send another code"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpStage("idle");
+                      setOtp("");
+                      setError(null);
+                    }}
+                    className="min-h-11 w-full px-4 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+                  >
+                    Use a password instead
+                  </button>
+                </>
+              ) : otpStage === "code" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOtpStage("idle");
+                    setError(null);
+                  }}
+                  className="min-h-11 w-full px-4 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+                >
+                  Use a password instead
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => startCodeSignIn({ sendNow: true })}
+                  className="min-h-11 w-full rounded-md border border-border px-4 text-xs tracking-[0.18em] text-fg-muted uppercase hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+                >
+                  Email me a code instead
+                </button>
+              )
+            ) : null}
           </form>
         </div>
 
         <p className="mt-8 text-xs leading-relaxed text-fg-muted">
-          Birth dates are personal data. We store them only on your account, never sell them, and delete them when you
-          ask.{" "}
+          Birth dates are personal data. We store them only on your account, never sell them, and
+          delete them when you ask.{" "}
           <Link to="/privacy" className="text-fg underline">
             Privacy
           </Link>
