@@ -1,8 +1,13 @@
 import { CONSTELLATIONS } from "./galaxy/constellations";
 import { ASK, introPlaying, skipIntro, templeIntro } from "./galaxy/intro";
 import { galaxyTravel, enterSignGalaxy, seekSign, skipEnterGalaxy } from "./galaxy/travel";
+import { getSignGalaxy } from "./galaxy/signGalaxy";
+import { getSignVolume } from "./galaxy/signVolume";
+import { primeSignArt } from "./galaxy/signArt";
+import { galaxyFigureBox, getFigureMatch, paintedFigureBox } from "./galaxy/signAlign";
 import { useGalaxy } from "./galaxy/store";
 import { stationT } from "./galaxy/temple";
+import type { SignId } from "./chart/types";
 
 /**
  * Dev-only QA hooks (`scripts/qa/enter-capture.mjs`).
@@ -69,6 +74,27 @@ export function installQaHooks() {
     },
     signIndex(id: string) {
       return CONSTELLATIONS.findIndex((c) => c.id === id);
+    },
+    /** Boxes + alignment transform for a sign — how the live figure is laid over the plate. */
+    align(id: string) {
+      const signId = id as SignId;
+      const galaxy = getSignGalaxy(signId);
+      const vol = getSignVolume(signId);
+      return {
+        field: galaxyFigureBox(galaxy.stars),
+        painted: vol ? paintedFigureBox(vol) : null,
+        match: getFigureMatch(signId, galaxy),
+      };
+    },
+    /** Warm a sign's plate PNG + alpha grid (the alignment needs both measured). */
+    preload(id: string) {
+      const signId = id as SignId;
+      primeSignArt(signId);
+      const kick = () => {
+        if (!getSignVolume(signId)) window.setTimeout(kick, 250);
+      };
+      kick();
+      return true;
     },
     state(): QaState {
       return {

@@ -102,15 +102,78 @@ Tests: window endpoints, guarantees (`plateFade(0.42) < 0.05`, `galaxyForm(0.42)
 
 ### Next polish pass (found while reviewing the finished frames)
 
-1. **Plate → live-figure hand-off seam** (`p ≈ 0.25–0.4`): the two drawings are
-   different sizes (the field's animal spans ~1.4× the painted figure's width,
-   ~1.9× its height), so the crossfade can read as a small jump. Fix by matching
-   the field's figure box to the painted figure's box (x 0.72, y 0.53, offset
-   `(-0.29, +0.21)` in plate units) or by pushing the hand-off into a faster
-   part of the rush.
-2. **Frames 5–8 are still thin** — add a dust/star volume through the middle of
-   the dive (the station cloud is a thin slab at the plate, so between the plate
-   and the hub there is little to fly past).
+1. ~~**Plate → live-figure hand-off seam**~~ — **fixed** (see Round 2 below).
+2. ~~**Frames 5–8 are still thin**~~ — **fixed** (see Round 2 below).
 3. **Post-land HUD pop**: the hub copy/CTA fades in over 350 ms as soon as
    `p = 1`. Consider a slightly longer, softer rise for the first beat inside.
    (Pre-existing behaviour, not introduced here.)
+
+---
+
+## Round 2 — the two art-side fixes + the 12-sign sweep
+
+### 1. Hand-off seam: the live figure is laid on the painted one
+
+`src/lib/galaxy/signAlign.ts` measures both drawings and returns the transform
+that puts the live star-figure exactly over the painted plate, then blends back to
+the galaxy frame as the figure grows into the form you fly through:
+
+- painted box: scan the plate's alpha grid (`signVolume`), top row = `+y`;
+- live box: min/max of the galaxy's animal stars;
+- `fieldFrame(form, match)` — match at `form ≤ 0.10`, hand-over complete by
+  `form = 0.70`, and **exactly** the old galaxy frame at `form = 1` (a unit test
+  pins that, so the landing geometry cannot drift).
+
+Measured per sign (all 12 resolve a match): the live figure is 17–21 galaxy units
+wide against painted boxes of 9–14 plate units, so `x` shrinks 0.38–0.82× and `y`
+0.46–1.00× before growing back to 1.05 at land.
+
+### 2. The thin middle: flight dust
+
+`src/lib/galaxy/flightDust.ts` adds a deterministic ring of ~900 faint dust
+points around the flight axis (`z` 2 → 12.5 station-local, radius 1.7 → 12.5,
+y squashed to 0.78), with a clear channel through the centre so the core still
+reads. Its own shader gives per-point size/twinkle, a round `gl_PointCoord`
+falloff, and opacity that rises with the live figure and eases back inside (0.34)
+so close dust never becomes noise around the hub.
+
+### 3. Sweep — all 12 signs, verification only (no per-sign art)
+
+`node scripts/qa/sign-sweep.mjs` at 960×540: park on each sign, measure the
+alignment, dive, capture a mid frame and a landed frame, read the probe.
+
+| result | value |
+| --- | --- |
+| signs reaching `inside` | **12 / 12** |
+| alignment resolved (match computed) | **12 / 12** |
+| console/page errors across the sweep | **0** |
+| camera→hub at land | 2.62 – 2.82 units (target 2.60) |
+| landed centre-lit | 39.8 – 60.2 % (median ≈ 45) |
+| landed centre-bright | 4.2 – 8.2 % |
+
+Frames: `screenshots/sweep/sweep-mid.png`, `sweep-landed.png`.
+
+### Findings from the sweep (not fixed — they need a decision)
+
+1. **Libra lands with a bright vertical beam through the frame centre.** Not a
+   render bug: Libra's figure *is* a balance, with a centred post (lines 6→7 and
+   7→8 at `x = 0`, spanning 7.5 galaxy units) and the hub star sits **on** that
+   post, so the landing looks straight down it (column luma 147 vs ~73 for the
+   brightest neighbouring columns — a hard vertical line). A shared fix would nudge
+   the landing yaw a few degrees off any long segment, or offset the hub look
+   horizontally by a small deterministic amount. **Do not fix per sign.**
+2. **Core centring varies by sign** — NDC `x` within ±0.18 for most, but `y` runs
+   to −0.55 (cancer) and −0.61 (libra), because each sign's hub star sits at a
+   different place in its figure. A single global look-bias correction would
+   tighten all 12.
+3. **On short viewports (960×540) the copy block sits over the hottest part of
+   the core.** At 1280×720 it sits below it. Worth a responsive nudge to the
+   standoff or the HUD block on short screens.
+4. **Scorpio's landing is the dimmest** (centre-lit 21 % vs 40–60 elsewhere) —
+   its palette accent is dark red, so its core is inherently dimmer.
+
+### QA tooling added this round
+
+`scripts/qa/sign-sweep.mjs` (12-sign verification), `scripts/qa/montage.py`
+(ffmpeg-free labelled grids — ffmpeg's glob demuxer is not in every Windows
+build), plus `align()` / `preload()` on the dev QA hooks.

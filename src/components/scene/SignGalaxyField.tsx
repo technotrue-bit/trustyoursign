@@ -8,6 +8,7 @@ import {
   Group,
   LineBasicMaterial,
   PointsMaterial,
+  ShaderMaterial,
   Sprite,
   SpriteMaterial,
   Vector3,
@@ -20,9 +21,12 @@ import {
   coreSwell,
   getSignCore,
 } from "@/lib/galaxy/signCore";
+import { fieldFrame, getFigureMatch } from "@/lib/galaxy/signAlign";
+import { buildFlightDust, dustOpacity, makeDustMaterial } from "@/lib/galaxy/flightDust";
 import { starSpikeSprite, starSprite } from "@/lib/galaxy/starSprite";
 import { galaxyTravel, seekGalaxyPoint } from "@/lib/galaxy/travel";
 import { PLATE_WIDE, type TempleSign } from "@/lib/galaxy/temple";
+import { isSmallGpu } from "@/lib/gpu";
 
 function noopRaycast() {
   /* ambient field never steals picks */
@@ -31,10 +35,15 @@ function noopRaycast() {
 /**
  * Animal-figure galaxy that blooms as the camera dives into a selected sign.
  *
- * Three pieces, in the order the eye reads them: the connector lines (plus a
- * faint halo pass so they glow), the figure's stars and travel nodes as round
- * sprites, and the galaxy core at the hub — the light source you land on.
- * Travel points sit on major animal stars and stay clickable once inside.
+ * Layers, in the order the eye reads them: connector lines (plus a faint halo
+ * pass so they glow), the figure's stars and travel nodes as round sprites, the
+ * galaxy core at the hub (the light source you land on), and flight dust filling
+ * the corridor the camera travels through.
+ *
+ * The figure is laid *exactly* over the painted plate while the two are visible
+ * together (`signAlign`), then grows into the galaxy frame as it becomes the
+ * thing you fly into — so the hand-off from painting to stars is seamless, and
+ * the geometry you land on is untouched.
  */
 export function SignGalaxyField({
   sign,
@@ -45,6 +54,7 @@ export function SignGalaxyField({
 }) {
   const group = useRef<Group>(null);
   const haloGroup = useRef<Group>(null);
+  const dustGroup = useRef<Group>(null);
   const coreRef = useRef<Sprite>(null);
   const coreMat = useRef<SpriteMaterial>(null);
   const glowMat = useRef<LineBasicMaterial>(null);
@@ -56,6 +66,11 @@ export function SignGalaxyField({
   const lineGeo = useMemo(() => buildLineGeo(galaxy), [galaxy]);
   const starGeo = useMemo(() => buildStarGeo(galaxy), [galaxy]);
   const pointGeo = useMemo(() => buildPointGeo(galaxy), [galaxy]);
+  const dustGeo = useMemo(() => buildFlightDust(isSmallGpu() ? 420 : 900), []);
+  const dustShader = useMemo(
+    () => makeDustMaterial(sign.palette.chest, isSmallGpu() ? 0.85 : 1),
+    [sign.palette.chest],
+  );
   const coreTex = useMemo(() => getSignCore(sign.id), [sign.id]);
   const tint = useMemo(() => new Color(sign.palette.particle), [sign.palette.particle]);
   const accent = useMemo(() => new Color(sign.palette.accent), [sign.palette.accent]);
@@ -68,8 +83,17 @@ export function SignGalaxyField({
       lineGeo.dispose();
       starGeo.dispose();
       pointGeo.dispose();
+      dustGeo.dispose();
+      dustShader.dispose();
     },
-    [lineGeo, starGeo, pointGeo],
+    [lineGeo, starGeo, pointGeo, dustGeo, dustShader],
+  );
+
+  useEffect(
+    () => () => {
+      coreMat.current?.dispose();
+    },
+    [],
   );
 
   useFrame((state) => {
@@ -79,11 +103,24 @@ export function SignGalaxyField({
       galaxyTravel.exploreSignIndex === index && galaxyTravel.explorePhase !== "idle";
     const inside = exploring && galaxyTravel.explorePhase === "inside";
     const form = exploring ? galaxyTravel.galaxyForm : 0;
+
+    // Flight dust owns its own group: the corridor is never squashed by the
+    // figure alignment.
+    const dust = dustGroup.current;
+    if (dust) {
+      const op = exploring ? dustOpacity(form, inside) : 0;
+      dust.visible = op > 0.005;
+      dustShader.uniforms.uOpacity!.value = op;
+      dustShader.uniforms.uTime!.value = state.clock.elapsedTime;
+    }
+
     // Keep the painted plate as the dive hero early; bloom the field as we settle into the hub.
     g.visible = form > 0.12 || inside;
     if (!g.visible) return;
-    const span = (PLATE_WIDE / GALAXY_SPAN) * (1.05 + form * 0.35);
-    g.scale.setScalar(span);
+
+    const frame = fieldFrame(form, getFigureMatch(sign.id, galaxy));
+    g.scale.set(frame.sx, frame.sy, frame.sxScale);
+    g.position.set(frame.ox, frame.oy, frame.oz);
     if (haloGroup.current) haloGroup.current.scale.setScalar(1.018 + form * 0.006);
 
     const fieldReveal = Math.max(0, (form - 0.18) / 0.82);
@@ -115,102 +152,100 @@ export function SignGalaxyField({
     }
   });
 
-  useEffect(
-    () => () => {
-      coreMat.current?.dispose();
-    },
-    [],
-  );
-
   return (
-    <group ref={group} visible={false} position={[0, 0.05, 0.35]}>
-      <group ref={haloGroup}>
+    <>
+      <group ref={dustGroup} visible={false} position={[0, 0.05, 0.35]}>
+        <points geometry={dustGeo} material={dustShader} frustumCulled={false} raycast={noopRaycast} />
+      </group>
+      <group ref={group} visible={false} position={[0, 0.05, 0.35]}>
+        <group ref={haloGroup}>
+          <lineSegments geometry={lineGeo} frustumCulled={false} raycast={noopRaycast}>
+            <lineBasicMaterial
+              ref={glowMat}
+              color={sign.palette.accent}
+              transparent
+              opacity={0}
+              depthWrite={false}
+              toneMapped={false}
+              blending={AdditiveBlending}
+            />
+          </lineSegments>
+        </group>
         <lineSegments geometry={lineGeo} frustumCulled={false} raycast={noopRaycast}>
           <lineBasicMaterial
-            ref={glowMat}
-            color={sign.palette.accent}
+            ref={lineMat}
+            color={sign.palette.chest}
             transparent
             opacity={0}
             depthWrite={false}
             toneMapped={false}
-            blending={AdditiveBlending}
           />
         </lineSegments>
-      </group>
-      <lineSegments geometry={lineGeo} frustumCulled={false} raycast={noopRaycast}>
-        <lineBasicMaterial
-          ref={lineMat}
-          color={sign.palette.chest}
-          transparent
-          opacity={0}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </lineSegments>
-      <points geometry={starGeo} frustumCulled={false} raycast={noopRaycast}>
-        <pointsMaterial
-          ref={starMat}
-          map={softStar}
-          color={sign.palette.chest}
-          size={0.3}
-          sizeAttenuation
-          transparent
-          opacity={0}
-          depthWrite={false}
-          toneMapped={false}
-          blending={AdditiveBlending}
-        />
-      </points>
-      <points geometry={pointGeo} frustumCulled={false} raycast={noopRaycast}>
-        <pointsMaterial
-          ref={pointMat}
-          map={brightStar}
-          color={sign.palette.accent}
-          size={0.7}
-          sizeAttenuation
-          transparent
-          opacity={0}
-          depthWrite={false}
-          toneMapped={false}
-          blending={AdditiveBlending}
-        />
-      </points>
-      {coreTex && hub ? (
-        <sprite
-          ref={coreRef}
-          renderOrder={6}
-          position={[hub.x, hub.y, hub.z]}
-          visible={false}
-          raycast={noopRaycast}
-        >
-          <spriteMaterial
-            ref={coreMat}
-            map={coreTex}
-            color="#ffffff"
+        <points geometry={starGeo} frustumCulled={false} raycast={noopRaycast}>
+          <pointsMaterial
+            ref={starMat}
+            map={softStar}
+            color={sign.palette.chest}
+            size={0.3}
+            sizeAttenuation
             transparent
             opacity={0}
             depthWrite={false}
-            depthTest={false}
             toneMapped={false}
             blending={AdditiveBlending}
           />
-        </sprite>
-      ) : null}
-      {galaxy.points.map((p, pi) => (
-        <mesh
-          key={p.id}
-          position={[p.x, p.y, p.z]}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (galaxyTravel.explorePhase !== "inside") return;
-            seekGalaxyPoint(pi);
-          }}
-        >
-          <sphereGeometry args={[p.isHub ? 0.72 : 0.52, 16, 14]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
-        </mesh>
-      ))}
-    </group>
+        </points>
+        <points geometry={pointGeo} frustumCulled={false} raycast={noopRaycast}>
+          <pointsMaterial
+            ref={pointMat}
+            map={brightStar}
+            color={sign.palette.accent}
+            size={0.7}
+            sizeAttenuation
+            transparent
+            opacity={0}
+            depthWrite={false}
+            toneMapped={false}
+            blending={AdditiveBlending}
+          />
+        </points>
+        {coreTex && hub ? (
+          <sprite
+            ref={coreRef}
+            renderOrder={6}
+            position={[hub.x, hub.y, hub.z]}
+            visible={false}
+            raycast={noopRaycast}
+          >
+            <spriteMaterial
+              ref={coreMat}
+              map={coreTex}
+              color="#ffffff"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              depthTest={false}
+              toneMapped={false}
+              blending={AdditiveBlending}
+            />
+          </sprite>
+        ) : null}
+        {galaxy.points.map((p, pi) => (
+          <mesh
+            key={p.id}
+            position={[p.x, p.y, p.z]}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (galaxyTravel.explorePhase !== "inside") return;
+              seekGalaxyPoint(pi);
+            }}
+          >
+            <sphereGeometry args={[p.isHub ? 0.72 : 0.52, 16, 14]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+          </mesh>
+        ))}
+      </group>
+    </>
   );
 }
 
@@ -259,12 +294,18 @@ function buildLineGeo(galaxy: SignGalaxy) {
   return g;
 }
 
-/** Station-local offset for the active travel point (nodes live inside the galaxy volume). */
+/**
+ * Station-local offset for the active travel point (nodes live inside the galaxy
+ * volume, laid out with the same transform the figure uses, so the camera always
+ * looks at the node the eye sees).
+ */
 export function pointLocalOffset(galaxy: SignGalaxy, pointIndex: number, form: number) {
   const p = galaxy.points[pointIndex] ?? galaxy.points[0];
   if (!p) return new Vector3(0, 0, 0);
-  const span = (PLATE_WIDE / GALAXY_SPAN) * (1.05 + form * 0.35);
-  // Stronger Z so the camera enters the portal and moves between interior nodes,
-  // not along the flat plate face.
-  return new Vector3(p.x * span, p.y * span + 0.05, p.z * span * 0.62 + 0.85 * form);
+  const frame = fieldFrame(form, getFigureMatch(galaxy.signId, galaxy));
+  return new Vector3(
+    p.x * frame.sx + frame.ox,
+    p.y * frame.sy + frame.oy,
+    p.z * frame.sxScale * 0.62 + 0.85 * form,
+  );
 }
