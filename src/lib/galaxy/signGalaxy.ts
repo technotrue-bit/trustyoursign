@@ -1,6 +1,7 @@
 import type { SignId } from "@/lib/chart/types";
 import { CONSTELLATIONS, type Figure, type StarPt } from "./constellations";
 import { insightsForSign, type InsightTone } from "./signInsights";
+import { burstDissolve, burstIgnition, burstImpulse, burstPulse, burstPulseReduced, DISSOLVE_END } from "./signBurst";
 import { TEMPLE_SIGNS, type TempleSign } from "./temple";
 
 export type ExplorePhase = "idle" | "fading" | "diving" | "inside" | "exiting";
@@ -250,30 +251,98 @@ export function clearSignGalaxyCache() {
 
 /**
  * Ease helpers for the enter choreography (single p clock; overlapping windows).
- * Plate stays readable while the camera dives into the hub star on the figure;
- * galaxy bloom overlays the form instead of replacing an empty frame.
+ *
+ * Three beats: the painted figure holds the frame, the camera accelerates
+ * through the live figure, then the shot lands inside the galaxy on its core.
+ * See docs/superpowers/specs/2026-09-14-sign-enter-flythrough-design.md.
  */
 export function enterWorldFade(progress: number) {
-  return 1 - smooth01(Math.min(1, progress / 0.22));
+  return 1 - smooth01(Math.min(1, progress / 0.2));
 }
 
+/**
+ * Plate opacity through the enter (M11).
+ *
+ * This clock does NOT kill the painting — the erode mask does (`dissolveMaskDistance`
+ * / the plate shader). The plate holds fully opaque through the whole burst ramp and
+ * peak, which is what the reference does: the ram stays solid and readable until the
+ * light arrives inside it, and is then eaten outward from the hub. Only once the front
+ * has passed the frame (DISSOLVE_END) does this channel let go, so its death is caused
+ * by the blast rather than by a fade that finished first. Seen from the other side, no
+ * painted wall can reach the lens: from DISSOLVE_END on, every plate pixel is masked.
+ */
+export const PLATE_HOLD_TO = DISSOLVE_END + 0.02;
+/** Wholly transparent by here — after the hand-off, well before the landing. */
+export const PLATE_GONE_BY = 0.7;
+
 export function enterPlateFade(progress: number) {
-  // Keep the animal plate until the dive is deep into the hub star.
-  return 1 - smooth01(Math.max(0, Math.min(1, (progress - 0.42) / (0.78 - 0.42))));
+  const p = Math.max(0, Math.min(1, progress));
+  return 1 - smooth01((p - PLATE_HOLD_TO) / (PLATE_GONE_BY - PLATE_HOLD_TO));
 }
 
 export function enterGalaxyForm(progress: number) {
-  // Bloom on top of the still-visible figure, then take over as plate dies.
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.22) / (0.9 - 0.22))));
+  // Live figure takes over as the plate dies, so the middle beat is never black.
+  // Fully formed just past halfway: by the time the plate is gone the star-figure
+  // already owns the frame.
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.06) / (0.56 - 0.06))));
 }
 
 export function enterDive(progress: number) {
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.05) / (0.82 - 0.05))));
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.03) / (0.86 - 0.03))));
+}
+
+/** Extra travel in the back half — the surge that carries you through the form. */
+export function enterRush(progress: number) {
+  const u = smooth01(Math.max(0, Math.min(1, (progress - 0.3) / (1 - 0.3))));
+  return Math.pow(u, 1.35);
+}
+
+/** How far the galaxy core has swelled into the hero of the shot. */
+export function enterCoreReveal(progress: number) {
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.34) / (1 - 0.34))));
 }
 
 /** Look/approach bias toward the hub star — starts early so the dive reads as "into that star". */
 export function enterHubSettle(progress: number) {
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.12) / (1 - 0.12))));
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.6) / (1 - 0.6))));
+}
+
+/**
+ * The ignition hand-off — a new pulse on the same clock, centred on the crossfade
+ * that used to be a dark hole. The painted figure lights (ignition), the blast
+ * consumes it from within (dissolve), and the burst itself carries the shot
+ * (burst) while the debris rides the shock front (impulse). Under reduced motion
+ * the pulse degrades to a slow brighten: no flash, no spike.
+ *
+ * See docs/superpowers/specs/2026-09-15-aries-ignition-handoff-design.md.
+ */
+export function enterBurst(progress: number, reduced = false) {
+  const p = Math.min(1, Math.max(0, progress));
+  return reduced ? burstPulseReduced(p) : burstPulse(p);
+}
+
+/** Figure brighten: the body lights up before the blast consumes it. */
+export function enterBurstIgnition(progress: number, reduced = false) {
+  const p = Math.min(1, Math.max(0, progress));
+  // Reduced motion: a slower brighten that still clears before the landing.
+  if (reduced) {
+    if (p <= 0.08) return 0;
+    if (p < 0.5) return smooth01((p - 0.08) / 0.42);
+    return 1 - smooth01((p - 0.5) / 0.45);
+  }
+  return burstIgnition(p);
+}
+
+/** 0 → 1 as the painted plate is eaten away outward from the hub. */
+export function enterBurstDissolve(progress: number) {
+  return burstDissolve(Math.min(1, Math.max(0, progress)));
+}
+
+/** Radial push the shock front hands the flight dust. */
+export function enterBurstImpulse(progress: number, reduced = false) {
+  const p = Math.min(1, Math.max(0, progress));
+  if (reduced) return burstPulseReduced(p) * 0.5;
+  return burstImpulse(p);
 }
 
 /** Corridor leftovers (disk, corners, station cloud, plate) hard-off after land. */

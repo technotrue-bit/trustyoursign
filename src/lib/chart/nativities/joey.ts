@@ -487,6 +487,8 @@ const GATES: GateDef[] = [
     name: "Rising",
     kicker: "2° Gemini 14′",
     headline: "The face, the nervous system, the first move.",
+    street:
+      "Rising is the body at the door. Gemini: talk, hands, two channels, allergic to a dead room. People meet the messenger long before they meet the pilgrim.",
     body: [
       "People meet the messenger long before they meet the pilgrim or the rebel. Fast intake. Allergic to a dead room.",
       "Neptune trine 0.3°. You can seem mythic. The cost is disappearing into other people’s version of you.",
@@ -498,6 +500,8 @@ const GATES: GateDef[] = [
     name: "Sun",
     kicker: "21° Sagittarius 25′ · 7th · domicile",
     headline: "Who you are when nobody is performing.",
+    street:
+      "The Sun is the will. Sagittarius in the 7th, at home: a life that means something, found in the field between you and someone.",
     body: [
       "The Sun wants a life that means something — truth, range, a bigger map. In the 7th, identity runs through the other.",
       "Partile Lilith. Raw honesty about desire and belief. The work is to aim it.",
@@ -509,6 +513,8 @@ const GATES: GateDef[] = [
     name: "Moon",
     kicker: "26° Aquarius 20′ · 9th",
     headline: "What you need before you can be kind to yourself.",
+    street:
+      "The Moon is the feeling-body. Aquarius in the 9th: understood, not handled. Space, principle, a future. Not fusion.",
     body: [
       "The Moon wants a life that does not trap you — space, principle, the future, not being owned.",
       "Friends who are equals. Space inside love. A future to point at. That is lunar food.",
@@ -586,6 +592,34 @@ const READINGS: ReadingDef[] = [
       "North Node Leo 3rd conjunct Fortune: down and in. From the network to the near. Leo: heart, courage, visible sincerity. 3rd house: talk, write, teach small, be heard in the room you’re in.",
       "When security, desire, and lightning lock, the way through is not a fourth explosion. It is a courageous, personal word. Put your name on it. Stay in the room after you say it.",
       "You are not here to look like a CEO of endurance. You are here to think in public, bind for real, and build what doesn’t exist yet — without abandoning the heart that has to live in the building. That is the chart. It will still be true at 80.",
+    ],
+  },
+  {
+    id: "body",
+    name: "Body",
+    headline: "A talker’s nervous system. A pilgrim’s will. Do not redline the vehicle.",
+    street:
+      "Gemini rising: hands, mouth, lungs, two channels. Aquarius Moon: a dry feeling-body that wants sky, not fusion. Saturn in Taurus in the 12th: the slow bodily class. Attention map, not a diagnosis.",
+    body: [
+      "Gemini rising at 2° is undiluted: fast intake, hands and mouth busy, allergic to a dead room. Neptune trine 0.3°: people project. The cost is disappearing into their version of you. The body is a messenger. Dead rooms make it sick.",
+      "Aquarius Moon in the 9th: you feel first as a thought. Unnamed sadness looks like restlessness or a redesign. Travel, study, a night drive, a conversation until the map changes — those regulate better than “talk about your feelings” in a small room.",
+      "Mars–Uranus on the midheaven: you charge when the idea is live. Out-of-sect Mars: the strike can be earlier than the situation warrants. When there is no real problem, the body will manufacture crisis so there is something to push.",
+      "Venus in Scorpio in the 6th: the daily body is how love behaves. Craft, service, usefulness. Saturn Rx Taurus 12th: money that lasts, a body that is not treated like a vehicle you can redline. The 20-year class is staying.",
+      "North Node Leo 3rd: the medicine is the next sentence, said warm, in the room you are in. Voice is a body system here. This is not medical advice.",
+    ],
+  },
+  {
+    id: "clothes",
+    name: "Clothes",
+    headline: "You appear flexible. You are not. Dress the mountain, not only the weather.",
+    street:
+      "Gemini rising wants motion and a free mouth. Venus in Scorpio will not do lukewarm cloth. The midheaven is Aquarius: original force, not a well-behaved costume.",
+    body: [
+      "People meet the messenger. Clothes that freeze you into a still photograph fight the rising. Hands free. Something you can talk in. Two modes that share a language — work and the other — because Mercury on the descendant means identity is relational.",
+      "Venus in Scorpio, detriment, opposite Saturn: all-in or out. Lukewarm cloth is the same insult as lukewarm affection. Usefulness is erotic. Competence is trust. 6th house: the work clothes and the love clothes are not two planets.",
+      "Do not dress Capricorn endurance. A noon chart once gave you that mask. It was never yours. Midheaven Aquarius with Mars–Uranus: public, original, high-voltage. A dry schematic will not feed you. A pretty myth with no engine will not either. Engine plus myth.",
+      "Sun conjunct Lilith in Sagittarius 7th: something that will not be made polite. Shame attaches here — too much truth. Aim it. Do not shrink it into nice-guy cloth.",
+      "North Node Leo 3rd conjunct Fortune: ease is not in becoming more unique. You are already unique. Ease is letting the unique thing be warm and specific. Saturn 12th: a private layer no one claps for. Floor before lightning.",
     ],
   },
   {
@@ -713,5 +747,5 @@ It is not a prediction that a specific person will leave, a specific business wi
 Keep the intensity, drop the test. Keep the lightning, pour a floor. Keep the freedom, make it a home you can actually sleep in. That is the whole assignment. The calendar is just so you don't have to guess when it comes due.
 The chart does not end.`,
   machineTitle: "How you decide.",
-  readingsTitle: "Love, work, shadow, the wire, the return.",
+  readingsTitle: "Love, work, body, clothes, shadow, the wire, the return.",
 };

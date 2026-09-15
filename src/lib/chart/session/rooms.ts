@@ -19,7 +19,7 @@ export const ROOM_CATALOG: readonly RoomDef[] = [
 
 const ALLOWED: Record<SessionKind, readonly AppMode[]> = {
   research: ROOM_CATALOG.map((r) => r.id),
-  visitor: ["sky", "body", "bones", "ask"],
+  visitor: ["sky", "body", "gates", "machine", "readings", "bones", "ask"],
   shelf: ["sky", "ask"],
 };
 

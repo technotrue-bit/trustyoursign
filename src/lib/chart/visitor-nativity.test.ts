@@ -40,7 +40,10 @@ describe("visitor natal cast", () => {
     assert.ok(nat.planetById.sun);
     assert.equal(nat.houses.length, 12);
     assert.equal(nat.chakras.length, 7);
-    assert.equal(nat.gates.length, 0);
+    assert.equal(nat.gates.length, 3);
+    assert.ok(nat.readings.some((r) => r.id === "body"));
+    assert.ok(nat.readings.some((r) => r.id === "clothes"));
+    assert.match(nat.planetById.sun!.why, /will|Leo|Sun/i);
     assert.match(nat.meta.oneCut, /Sun in Leo/);
 
     const sky = skyNatalFromCast(cast, "26 Jul 2004 · 6:21 pm");
