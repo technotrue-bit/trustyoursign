@@ -12,7 +12,6 @@ import { TEMPLE_CURVE } from "./temple";
 import { isSmallGpu } from "@/lib/gpu";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
-const BULGE_N = SMALL ? 900 : 1600;
 const ARM_N = SMALL ? 4200 : 8000;
 const FIELD_N = SMALL ? 1400 : 2400;
 const CLEAR = 50;
@@ -184,25 +183,12 @@ function fill(
   return geo;
 }
 
+/**
+ * Far-field galaxy layers (arms + spherical field).
+ * The warm gold bulge core was removed from the live sky; recipe preserved in
+ * `.cursor/skills/celestial-galaxy-bulge/SKILL.md` for refinement / restore.
+ */
 export function buildGalaxy() {
-  const bulge = fill(
-    BULGE_N,
-    (i) => {
-      const a = hash(i, 1) * Math.PI * 2;
-      const r = Math.pow(hash(i, 2), 0.55) * 14.5;
-      const z = (hash(i, 3) - 0.5) * 3.2 * (1 - r / 15);
-      const x = Math.cos(a) * r;
-      const y = Math.sin(a) * r;
-      return { x, y, z, ok: acceptLocal(x, y, z) };
-    },
-    (_i, o, col) => {
-      col[o] = 1;
-      col[o + 1] = 0.85;
-      col[o + 2] = 0.627;
-    },
-    8,
-  );
-
   const arms = fill(
     ARM_N,
     (i) => {
@@ -261,7 +247,7 @@ export function buildGalaxy() {
     true,
   );
 
-  return { bulge, arms, field };
+  return { arms, field };
 }
 
 export const GALAXY_ORIGIN = GALAXY_POS;

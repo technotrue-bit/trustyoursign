@@ -9,7 +9,7 @@ import {
   makeHazeSprite,
   makeStarSprite,
 } from "@/lib/galaxy/celestial";
-import { introArms, introBulge, introField, introHaze } from "@/lib/galaxy/intro";
+import { introArms, introField, introHaze } from "@/lib/galaxy/intro";
 import { buildNearSky, makeNearSkyMaterial } from "@/lib/galaxy/nearSky";
 import { TEMPLE_STATIONS, stationFromT } from "@/lib/galaxy/temple";
 import { galaxyLayerName } from "@/lib/galaxy/layers";
@@ -24,7 +24,6 @@ export function CelestialSky() {
   const group = useRef<import("three").Group>(null);
   const hazeMesh = useRef<import("three").Mesh>(null);
   const discMesh = useRef<import("three").Mesh>(null);
-  const bulgePts = useRef<import("three").Points>(null);
   const armPts = useRef<import("three").Points>(null);
   const fieldPts = useRef<import("three").Points>(null);
   const nearPts = useRef<import("three").Points>(null);
@@ -32,12 +31,11 @@ export function CelestialSky() {
   const haze = useMemo(() => makeHazeSprite(), []);
   const layers = useMemo(() => buildGalaxy(), []);
   const nearGeo = useMemo(() => buildNearSky(), []);
-  const matBulge = useMemo(() => makeGalaxyMaterial(tex, 0.95), [tex]);
   const matArms = useMemo(() => makeGalaxyMaterial(tex, 0.78), [tex]);
   const matField = useMemo(() => makeGalaxyMaterial(tex, 0.7), [tex]);
   const matNear = useMemo(() => makeNearSkyMaterial(tex, 0.48), [tex]);
   const mats = useRef<ShaderMaterial[]>([]);
-  mats.current = [matBulge, matArms, matField, matNear];
+  mats.current = [matArms, matField, matNear];
 
   useEffect(() => {
     const pin = () => {
@@ -50,16 +48,14 @@ export function CelestialSky() {
     return () => {
       tex.dispose();
       haze.dispose();
-      layers.bulge.dispose();
       layers.arms.dispose();
       layers.field.dispose();
       nearGeo.dispose();
-      matBulge.dispose();
       matArms.dispose();
       matField.dispose();
       matNear.dispose();
     };
-  }, [camera, tex, haze, layers, nearGeo, matBulge, matArms, matField, matNear]);
+  }, [camera, tex, haze, layers, nearGeo, matArms, matField, matNear]);
 
   useFrame(({ clock }) => {
     if (camera instanceof PerspectiveCamera && camera.far !== 2500) {
@@ -71,22 +67,15 @@ export function CelestialSky() {
     const world = exploringSign() ? galaxyTravel.worldFade : 1;
     const field = introField() * world;
     const haze = introHaze() * world;
-    const bulge = introBulge() * world;
     const arms = introArms() * world;
     matField.uniforms.uOpacity.value = 0.7 * field;
     matNear.uniforms.uOpacity.value = 0.5 * field;
-    matBulge.uniforms.uOpacity.value = 0.95 * bulge;
     matArms.uniforms.uOpacity.value = 0.78 * arms;
     if (fieldPts.current) fieldPts.current.visible = field > 0.02;
     if (nearPts.current) {
       nearPts.current.visible = field > 0.02;
       const sit = TEMPLE_STATIONS[stationFromT(galaxyTravel.t)] ?? TEMPLE_STATIONS[0]!;
       nearPts.current.position.lerp(sit, 0.07);
-    }
-    if (bulgePts.current) {
-      bulgePts.current.visible = bulge > 0.02;
-      const s = 0.72 + bulge * 0.28;
-      bulgePts.current.scale.setScalar(s);
     }
     if (armPts.current) {
       armPts.current.visible = arms > 0.02;
@@ -135,7 +124,6 @@ export function CelestialSky() {
             side={DoubleSide}
           />
         </mesh>
-        <points ref={bulgePts} geometry={layers.bulge} material={matBulge} frustumCulled={false} renderOrder={-1} raycast={noopRaycast} />
         <points ref={armPts} geometry={layers.arms} material={matArms} frustumCulled={false} renderOrder={-1} raycast={noopRaycast} />
       </group>
       <points

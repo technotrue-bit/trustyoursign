@@ -100,6 +100,7 @@ export function introHaze() {
   return windowOut(templeIntro.t, 3.4, 5.8);
 }
 
+/** Kept for restoring the far galaxy bulge — see `.cursor/skills/celestial-galaxy-bulge`. */
 export function introBulge() {
   if (templeIntro.seen || templeIntro.done) return 1;
   return windowOut(templeIntro.t, 3.6, 6.0);

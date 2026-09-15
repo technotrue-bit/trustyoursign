@@ -181,7 +181,8 @@ export function pointLocalOffset(galaxy: SignGalaxy, pointIndex: number, form: n
   const p = galaxy.points[pointIndex] ?? galaxy.points[0];
   if (!p) return new Vector3(0, 0, 0);
   const span = (PLATE_WIDE / GALAXY_SPAN) * (1.05 + form * 0.35);
-  // Stronger Z so the camera enters the portal and moves between interior nodes,
-  // not along the flat plate face.
-  return new Vector3(p.x * span, p.y * span + 0.05, p.z * span * 0.62 + 0.85 * form);
+  // Dampen XY so default framing keeps neighbors + lines in view; zoom pushes in from here.
+  // Soft Z still tracks portal depth without sticking the camera to a single junction.
+  const xy = 0.7;
+  return new Vector3(p.x * span * xy, p.y * span * xy + 0.04, p.z * span * 0.48 + 0.55 * form);
 }

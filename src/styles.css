@@ -353,6 +353,203 @@
     0 0 16px rgba(8, 7, 6, 0.48);
 }
 
+/* Soft warm hover/focus glow for chrome Back controls */
+.chrome-glow,
+.back-to-sky {
+  color: var(--color-fg-subtle);
+  text-shadow: none;
+  transition:
+    color 0.22s ease-out,
+    text-shadow 0.22s ease-out;
+}
+
+.chrome-glow:hover,
+.chrome-glow:focus-visible,
+.back-to-sky:hover,
+.back-to-sky:focus-visible {
+  color: #f5efe3;
+  text-shadow:
+    0 0 10px color-mix(in oklab, #f5efe3 42%, transparent),
+    0 0 22px color-mix(in oklab, #c9a15b 28%, transparent),
+    0 0 36px color-mix(in oklab, #c9a15b 14%, transparent);
+}
+
+/* Sign-galaxy HUD star dots — spaced, floating, liquid sweep */
+.sign-galaxy-dots {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 0.35rem 0.5rem 0.55rem;
+}
+
+.sign-galaxy-dots::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+  inset: -0.35rem -1.25rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 38%,
+    color-mix(in oklab, #f5efe3 18%, transparent) 48%,
+    color-mix(in oklab, #c9a15b 22%, transparent) 52%,
+    color-mix(in oklab, #f5efe3 12%, transparent) 56%,
+    transparent 68%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  animation: sign-galaxy-dot-sweep 10s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.sign-galaxy-dot {
+  --i: 0;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-width: 2.6rem;
+  min-height: 2.6rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  color: var(--color-fg-subtle);
+  text-shadow: 0 0 8px rgba(8, 7, 6, 0.55);
+  transition:
+    color 0.22s ease-out,
+    text-shadow 0.22s ease-out,
+    background-color 0.22s ease-out,
+    box-shadow 0.22s ease-out;
+  animation: sign-galaxy-dot-float 5.2s ease-in-out infinite;
+  animation-delay: calc(var(--i) * -0.42s);
+}
+
+.sign-galaxy-dot--hub {
+  color: color-mix(in oklab, #efe8dc 78%, var(--color-fg-muted));
+  text-shadow:
+    0 0 8px rgba(8, 7, 6, 0.6),
+    0 0 14px color-mix(in oklab, #c9a15b 18%, transparent);
+}
+
+.sign-galaxy-dot--open {
+  color: color-mix(in oklab, var(--color-fg-muted) 70%, #efe8dc);
+}
+
+.sign-galaxy-dot--sealed {
+  color: color-mix(in oklab, var(--color-fg-subtle) 55%, transparent);
+  text-shadow: none;
+  opacity: 0.72;
+}
+
+.sign-galaxy-dot:hover,
+.sign-galaxy-dot:focus-visible {
+  color: #efe8dc;
+}
+
+.sign-galaxy-dot--sealed:hover,
+.sign-galaxy-dot--sealed:focus-visible {
+  color: var(--color-fg-muted);
+  opacity: 0.9;
+}
+
+.sign-galaxy-dot--active {
+  color: #f5efe3;
+  background: color-mix(in oklab, var(--color-fg) 10%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, #c9a15b 22%, transparent),
+    0 0 14px color-mix(in oklab, #c9a15b 20%, transparent),
+    0 0 28px color-mix(in oklab, #f5efe3 10%, transparent);
+  text-shadow:
+    0 0 10px color-mix(in oklab, #f5efe3 36%, transparent),
+    0 0 20px color-mix(in oklab, #c9a15b 24%, transparent);
+  animation: none;
+  transform: none;
+}
+
+.sign-galaxy-dot--active.sign-galaxy-dot--sealed {
+  opacity: 0.85;
+  color: color-mix(in oklab, #efe8dc 70%, var(--color-fg-muted));
+}
+
+.sign-galaxy-dot:focus-visible {
+  outline: 1px solid color-mix(in oklab, var(--color-fg) 28%, transparent);
+  outline-offset: 3px;
+}
+
+@keyframes sign-galaxy-dot-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes sign-galaxy-dot-sweep {
+  0% {
+    background-position: 120% 50%;
+    opacity: 0.2;
+  }
+  18% {
+    opacity: 0.55;
+  }
+  50% {
+    background-position: -20% 50%;
+    opacity: 0.45;
+  }
+  68% {
+    opacity: 0.15;
+  }
+  100% {
+    background-position: -20% 50%;
+    opacity: 0.12;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome-glow,
+  .back-to-sky {
+    transition: color 0.01ms !important;
+  }
+
+  .chrome-glow:hover,
+  .chrome-glow:focus-visible,
+  .back-to-sky:hover,
+  .back-to-sky:focus-visible {
+    text-shadow:
+      0 0 8px color-mix(in oklab, #f5efe3 28%, transparent),
+      0 0 14px color-mix(in oklab, #c9a15b 16%, transparent);
+  }
+
+  .sign-galaxy-dots::after {
+    animation: none;
+    background: radial-gradient(
+      ellipse 70% 80% at 50% 50%,
+      color-mix(in oklab, #c9a15b 12%, transparent),
+      transparent 72%
+    );
+    background-size: 100% 100%;
+    opacity: 0.35;
+  }
+
+  .sign-galaxy-dot {
+    animation: none;
+    transform: none;
+  }
+}
+
 .sign-claim {
   position: relative;
   isolation: isolate;

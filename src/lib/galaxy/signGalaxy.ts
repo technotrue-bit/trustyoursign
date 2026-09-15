@@ -106,12 +106,12 @@ export function pickMajorStarIndices(figure: Figure, maxPoints = 10): number[] {
   for (const row of scored) {
     if (picked.length >= maxPoints) break;
     if (used.has(row.i)) continue;
-    // Prefer spatial spread so points aren't stacked.
+    // Prefer spatial spread so travel nodes stay readable when framed.
     const star = figure.stars[row.i]!;
     let ok = true;
     for (const j of picked) {
       const o = figure.stars[j]!;
-      if (Math.hypot(star.x - o.x, star.y - o.y) < 0.42) {
+      if (Math.hypot(star.x - o.x, star.y - o.y) < 0.58) {
         ok = false;
         break;
       }
@@ -197,13 +197,15 @@ function assignPurposes(
     const z = isHub
       ? NODE_DEPTH_NEAR
       : NODE_DEPTH_NEAR + depthT * (NODE_DEPTH_FAR - NODE_DEPTH_NEAR);
+    // Slight radial expand on non-hub XY so majors breathe without leaving the form.
+    const radial = isHub ? 0.35 : 1.14;
     points.push({
       id: `${signId}-${starIndex}`,
       starIndex,
       // Keep XY from the animal layout so nodes sit *within* the silhouette,
       // but push Z so they live inside the galaxy volume past the plate face.
-      x: isHub ? g.x * 0.35 : g.x,
-      y: isHub ? g.y * 0.35 : g.y,
+      x: g.x * radial,
+      y: g.y * radial,
       z,
       mag: g.mag,
       purpose,

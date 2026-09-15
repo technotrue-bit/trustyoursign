@@ -22,6 +22,8 @@ import {
 import { isSmallGpu } from "@/lib/gpu";
 import { CONSTELLATIONS, ELEMENT_TINT, pairFigures } from "@/lib/galaxy/constellations";
 import {
+  EXPLORE_ZOOM_MAX,
+  EXPLORE_ZOOM_MIN,
   HOLD_FLY,
   aimedIndex,
   ensureAutoClock,
@@ -1030,7 +1032,12 @@ function TempleRig() {
     const shelfOn = state.session?.kind === "shelf";
     const well = chatting || shelfOn ? { top: 0.12, bottom: 0.48 } : { top: 0.15, bottom: 0.24 };
     const frame = heroFrame(aspect, arriving ? introCam() : 1, plateA, PLATE_WIDE, well);
-    const zoom = arriving ? 1 : Math.max(1, galaxyTravel.zoom);
+    // Inside: allow pull-back below 1 so the silhouette stays readable; corridor floors at 1.
+    const zoom = arriving
+      ? 1
+      : exploring
+        ? Math.min(EXPLORE_ZOOM_MAX, Math.max(EXPLORE_ZOOM_MIN, galaxyTravel.zoom))
+        : Math.max(1, galaxyTravel.zoom);
     const pull = 1 - introCam();
     _cam.copy(_chest);
     _cam.z += frame.z / zoom;
@@ -1092,18 +1099,22 @@ function TempleRig() {
       _look.copy(sit);
       _look.addScaledVector(_camRight, local.x);
       _look.addScaledVector(_camUp, local.y);
-      _look.z += local.z * 0.15;
+      _look.z += local.z * 0.12;
       const settle =
         galaxyTravel.explorePhase === "inside"
           ? 1
           : Math.max(enterHubSettle(galaxyTravel.exploreProgress), dive);
       if (settle > 0.001) {
-        // Ease toward the hub star on the figure while the plate is still filling the frame.
-        const pull = 0.025 + settle * 0.1;
+        // Ease toward the travel node; inside uses a softer pull so multiple nodes stay framed.
+        const pull =
+          galaxyTravel.explorePhase === "inside"
+            ? 0.016 + settle * 0.055
+            : 0.025 + settle * 0.1;
         _cam.x += (_look.x - _cam.x) * pull;
         _cam.y += (_look.y - _cam.y) * (pull * 0.85);
         if (galaxyTravel.explorePhase === "inside") {
-          _look.lerp(_chest, 0.35);
+          // Bias look toward the chest so the silhouette (not one junction) fills the frame.
+          _look.lerp(_chest, 0.5);
           const lx = galaxyTravel.exploreLookX;
           const ly = galaxyTravel.exploreLookY;
           if (lx !== 0 || ly !== 0) {
