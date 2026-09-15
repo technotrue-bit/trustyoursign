@@ -99,3 +99,18 @@ Tests: window endpoints, guarantees (`plateFade(0.42) < 0.05`, `galaxyForm(0.42)
 - **12-sign sweep**: the pipeline is shared and data-driven (verified on
   Sagittarius + Aries), but the painted plate, palette and animal figure differ
   per sign — worth a per-sign capture pass before beta.
+
+### Next polish pass (found while reviewing the finished frames)
+
+1. **Plate → live-figure hand-off seam** (`p ≈ 0.25–0.4`): the two drawings are
+   different sizes (the field's animal spans ~1.4× the painted figure's width,
+   ~1.9× its height), so the crossfade can read as a small jump. Fix by matching
+   the field's figure box to the painted figure's box (x 0.72, y 0.53, offset
+   `(-0.29, +0.21)` in plate units) or by pushing the hand-off into a faster
+   part of the rush.
+2. **Frames 5–8 are still thin** — add a dust/star volume through the middle of
+   the dive (the station cloud is a thin slab at the plate, so between the plate
+   and the hub there is little to fly past).
+3. **Post-land HUD pop**: the hub copy/CTA fades in over 350 ms as soon as
+   `p = 1`. Consider a slightly longer, softer rise for the first beat inside.
+   (Pre-existing behaviour, not introduced here.)
