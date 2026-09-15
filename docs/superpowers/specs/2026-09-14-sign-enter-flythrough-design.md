@@ -187,3 +187,31 @@ p = 1  hub land  →  existing claim / auth / lore gate (unchanged)
   bright dot.
 - The dive is **measured against the actual camera→hub gap**, not a fixed
   distance, so it holds its landing on any aspect ratio.
+
+## Round 4 — the three flagged items
+
+**1. The seam, finished (Libra).** The round-3 turn left Libra's balance post crossing the
+frame centre at ~11.6° off vertical: turning further would have visibly skewed the figure.
+The drawing (lines + stars) now slides sideways at landing — `landingShift()` — while the
+travel nodes and the core stay anchored to the hub, so the camera keeps aiming at the star
+you see and the core keeps its framing.
+
+The direction is *searched*, not fixed: each seam is pushed to a clearance boundary on both
+sides (`SEAM_CLEAR_LOCAL = 0.8` figure-local units), every candidate is scored by the margin
+it leaves between the hub's axis and the *nearest* seam, and the best margin wins (smallest
+move on a tie), capped at `MAX_LANDING_SHIFT = 1.6`. The first implementation always shifted
++x and made Aquarius *worse* — it had a seam left of the hub that got pushed toward it. The
+unit test caught that; that is the reason to score by margin rather than assume a direction.
+
+The slide ramps in with the same hand-over as the turn (`fieldFrame(..., rollTarget, shiftTarget)`),
+so the live figure still lands exactly on the painting while the painting is visible.
+
+**2. Short viewports (copy over the core).** The landing bias — how far above centre the hub
+is framed — is now a function of viewport height: `landingBiasNdc(viewHeight)`, base 0.12 on a
+760px+ frame, rising to a cap of 0.30 by ~540px. Phone portrait (844) is unchanged; the HUD
+copy block can no longer climb into the core on a short desktop window.
+
+**3. Scorpio's dim landing.** Its palette accent (`#8a3030`) is too dark to carry the core's
+arms and halo. `coreAccent()` lifts any accent below `CORE_DARK_LUMA = 0.35` toward the sign's
+chest tone by 45% (brighter accents get 12%), so the fix is data-driven rather than a Scorpio
+special case, and it is unit-tested to (a) lift Scorpio measurably, (b) barely touch Sagittarius.

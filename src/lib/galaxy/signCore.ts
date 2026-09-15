@@ -73,11 +73,41 @@ function rgbaOf(c: { r: number; g: number; b: number }, a: number) {
   return `rgba(${c.r},${c.g},${c.b},${a})`;
 }
 
+function toHex(c: { r: number; g: number; b: number }) {
+  const h = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  return `#${h(c.r)}${h(c.g)}${h(c.b)}`;
+}
+
+/** Relative luminance of a colour token (0–1). */
+export function hexLuma(hex: string): number {
+  const { r, g, b } = hexToRgb(hex);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
+/** Below this luminance an accent cannot carry the core's arms. */
+export const CORE_DARK_LUMA = 0.35;
+/** Lift applied to a dark accent, and the small one applied to every core. */
+export const CORE_LIFT_DARK = 0.45;
+export const CORE_LIFT_NORMAL = 0.12;
+
+/**
+ * Accent used to paint the core. Dark palette accents (Scorpio's near-wine red)
+ * leave the landing with nothing to look at, so they are lifted toward the sign's
+ * chest tone; brighter accents only get a touch of separation. Data-driven, so no
+ * per-sign special-casing.
+ */
+export function coreAccent(palette: { accent: string; chest: string }): string {
+  const t = hexLuma(palette.accent) < CORE_DARK_LUMA ? CORE_LIFT_DARK : CORE_LIFT_NORMAL;
+  return toHex(mixRgb(palette.accent, palette.chest, t));
+}
+
 function paintCore(ctx: CanvasRenderingContext2D, s: number, palette: Palette, seed: number) {
   const c = s / 2;
   const rnd = rng(seed);
   const armCount = 2;
   const turns = 2.35;
+  // Dark accents get lifted so the core always has something to read.
+  const accent = coreAccent(palette);
 
   ctx.save();
   ctx.translate(c, c);
@@ -85,7 +115,7 @@ function paintCore(ctx: CanvasRenderingContext2D, s: number, palette: Palette, s
   // 1 — wide halo: the glow you see before the disk resolves.
   const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, c);
   halo.addColorStop(0, rgba(palette.chest, 0.5));
-  halo.addColorStop(0.16, rgba(palette.accent, 0.3));
+  halo.addColorStop(0.16, rgba(accent, 0.34));
   halo.addColorStop(0.42, rgba(palette.particle, 0.13));
   halo.addColorStop(1, rgba(palette.particle, 0));
   ctx.fillStyle = halo;
@@ -107,7 +137,7 @@ function paintCore(ctx: CanvasRenderingContext2D, s: number, palette: Palette, s
       const y = Math.sin(ang) * r + jitter;
       const edge = r / c;
       const alpha = (1 - edge) * (0.1 + rnd() * 0.42) * (0.35 + 0.65 * Math.pow(1 - edge, 1.6));
-      const tint = mixRgb(palette.accent, palette.particle, Math.min(1, edge * 1.15));
+      const tint = mixRgb(accent, palette.particle, Math.min(1, edge * 1.15));
       ctx.fillStyle = rgbaOf(tint, alpha);
       const size = 0.6 + rnd() * (edge < 0.4 ? 1.9 : 1.1);
       ctx.beginPath();
@@ -150,8 +180,8 @@ function paintCore(ctx: CanvasRenderingContext2D, s: number, palette: Palette, s
   const hot = ctx.createRadialGradient(0, 0, 0, 0, 0, c * 0.2);
   hot.addColorStop(0, "rgba(255,252,244,1)");
   hot.addColorStop(0.22, rgba(palette.chest, 0.95));
-  hot.addColorStop(0.5, rgba(palette.accent, 0.6));
-  hot.addColorStop(1, rgba(palette.accent, 0));
+  hot.addColorStop(0.5, rgba(accent, 0.6));
+  hot.addColorStop(1, rgba(accent, 0));
   ctx.fillStyle = hot;
   ctx.beginPath();
   ctx.arc(0, 0, c * 0.2, 0, Math.PI * 2);

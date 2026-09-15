@@ -44,6 +44,11 @@ export type FieldFrame = {
    * the figure itself has to turn.
    */
   roll: number;
+  /**
+   * Lateral slide of the drawing layers (figure-local units) — moves a seam off
+   * the hub's axis without moving the core or the travel nodes.
+   */
+  shift: number;
 };
 
 /** Fraction of the painted pixels that count as "figure" (the plate has glow fringes). */
@@ -251,6 +256,84 @@ export function clearLandingRollCache() {
   rolls.clear();
 }
 
+/** Clearance target: a seam must end up at least this far (figure-local units) off the hub's axis. */
+export const SEAM_CLEAR_LOCAL = 0.8;
+/** The lateral move is capped so a figure can never be shoved noticeably off-centre. */
+export const MAX_LANDING_SHIFT = 1.6;
+
+/** x of a beam's line where it crosses the hub's height (figure-local units). */
+function beamXAtHubY(hubY: number, ax: number, ay: number, bx: number, by: number) {
+  const dy = by - ay;
+  if (Math.abs(dy) < 1e-6) return (ax + bx) / 2;
+  return ax + ((bx - ax) * (hubY - ay)) / dy;
+}
+
+const shifts = new Map<SignId, number>();
+
+/**
+ * How far to slide the *drawing* (lines + stars) sideways at landing so no seam
+ * segment crosses the hub, and therefore the frame centre. Nodes and the core stay
+ * on the hub — the camera keeps aiming at the star you see, and the core keeps its
+ * framing. Zero for signs with no such seam.
+ *
+ * Chosen by search, not by a fixed direction: a seam sitting left of the hub must
+ * be pushed further left, one on the right further right, and when a sign has seams
+ * on both sides one move has to satisfy both. Every candidate is scored by the
+ * margin it leaves between the hub's axis and the *nearest* seam, so the pick is
+ * the best available clearance, favouring the smallest move on a tie.
+ *
+ * Libra is the case that needed it: turning the figure alone leaves its balance post
+ * and a 23° diagonal trading off at ~11.6°, so the post still crossed the middle.
+ */
+export function landingShift(signId: SignId, galaxy: SignGalaxy): number {
+  const hit = shifts.get(signId);
+  if (hit != null) return hit;
+  const hub = galaxy.points[0];
+  let chosen = 0;
+  if (hub) {
+    // Per seam: the displacement that would put it exactly through the hub.
+    const centres = seamBeams(galaxy).map(
+      (bm) => hub.x - beamXAtHubY(hub.y, bm.ax, bm.ay, bm.bx, bm.by),
+    );
+    const marginAt = (d: number) => Math.min(...centres.map((c) => Math.abs(d - c)));
+    const clampShift = (d: number) => Math.max(-MAX_LANDING_SHIFT, Math.min(MAX_LANDING_SHIFT, d));
+    let best = marginAt(0);
+    for (const c of centres) {
+      for (const d of [c - SEAM_CLEAR_LOCAL, c + SEAM_CLEAR_LOCAL]) {
+        const clamped = clampShift(d);
+        const margin = marginAt(clamped);
+        const better = margin > best + 1e-9;
+        const tie = Math.abs(margin - best) <= 1e-9 && Math.abs(clamped) < Math.abs(chosen) - 1e-9;
+        if (better || tie) {
+          chosen = clamped;
+          best = margin;
+        }
+      }
+    }
+  }
+  shifts.set(signId, chosen);
+  return chosen;
+}
+
+export function clearLandingShiftCache() {
+  shifts.clear();
+}
+
+/** Viewport height the landing composition is tuned for; shorter frames need more lift. */
+export const LANDING_BIAS_REF_HEIGHT = 760;
+/** Base lift on a normal-height frame: the core sits a touch above centre. */
+export const LANDING_BIAS_BASE = 0.12;
+
+/**
+ * Composition bias for the landing pose, in NDC y: how far above centre the hub
+ * is framed. The HUD copy block is pinned to the bottom, so on a short viewport
+ * it climbs into the core — lift the core further the shorter the frame is.
+ */
+export function landingBiasNdc(viewHeight: number, base = LANDING_BIAS_BASE) {
+  const lift = (LANDING_BIAS_REF_HEIGHT - viewHeight) / 1100;
+  return Math.min(0.3, Math.max(base, base + lift));
+}
+
 /** The galaxy's own frame at this progress — what the field used before alignment. */
 export function galaxyFrameScale(form: number) {
   return (PLATE_WIDE / GALAXY_SPAN) * (1.05 + clamp01(form) * 0.35);
@@ -262,7 +345,12 @@ export function galaxyFrameScale(form: number) {
  * grows into the form you fly through. At `form = 1` this equals the galaxy
  * frame exactly, so the landing geometry is untouched.
  */
-export function fieldFrame(form: number, match: FigureMatch | null, rollTarget = 0): FieldFrame {
+export function fieldFrame(
+  form: number,
+  match: FigureMatch | null,
+  rollTarget = 0,
+  shiftTarget = 0,
+): FieldFrame {
   const deck = galaxyFrameScale(form);
   const ramp = smooth01((clamp01(form) - MATCH_HOLD) / (MATCH_DONE - MATCH_HOLD));
   const sx = match ? match.sx + (deck - match.sx) * ramp : deck;
@@ -272,10 +360,11 @@ export function fieldFrame(form: number, match: FigureMatch | null, rollTarget =
   // Depth also starts on the painted plate's plane, so the two drawings project to
   // the *same* screen box during the hand-off (a 0.4-unit z gap was worth ~4% scale).
   const oz = match ? PLATE_OFFSET_Z + (FIELD_OFFSET_Z - PLATE_OFFSET_Z) * ramp : FIELD_OFFSET_Z;
-  // The turn ramps in with the same hand-over: the figure matches the painting while
-  // the painting is visible, then rotates as it becomes the form you fly into.
+  // The turn and the slide ramp in with the same hand-over: the figure matches the
+  // painting while the painting is visible, then moves as it becomes the form you fly into.
   const roll = rollTarget * ramp;
-  return { sx, sy, sxScale: deck, ox, oy, oz, roll };
+  const shift = shiftTarget * ramp;
+  return { sx, sy, sxScale: deck, ox, oy, oz, roll, shift };
 }
 
 const matches = new Map<SignId, FigureMatch>();

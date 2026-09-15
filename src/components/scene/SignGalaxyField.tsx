@@ -21,7 +21,7 @@ import {
   coreSwell,
   getSignCore,
 } from "@/lib/galaxy/signCore";
-import { fieldFrame, getFigureMatch, landingRoll, rotatedPoint } from "@/lib/galaxy/signAlign";
+import { fieldFrame, getFigureMatch, landingRoll, landingShift, rotatedPoint } from "@/lib/galaxy/signAlign";
 import { buildFlightDust, dustOpacity, makeDustMaterial } from "@/lib/galaxy/flightDust";
 import { starSpikeSprite, starSprite } from "@/lib/galaxy/starSprite";
 import { galaxyTravel, seekGalaxyPoint } from "@/lib/galaxy/travel";
@@ -47,6 +47,7 @@ function noopRaycast() {
  */
 export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: number }) {
   const group = useRef<Group>(null);
+  const figureGroup = useRef<Group>(null);
   const haloGroup = useRef<Group>(null);
   const dustGroup = useRef<Group>(null);
   const coreRef = useRef<Sprite>(null);
@@ -112,12 +113,18 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
     g.visible = form > 0.12 || inside;
     if (!g.visible) return;
 
-    const frame = fieldFrame(form, getFigureMatch(sign.id, galaxy), landingRoll(sign.id, galaxy));
+    const frame = fieldFrame(
+      form,
+      getFigureMatch(sign.id, galaxy),
+      landingRoll(sign.id, galaxy),
+      landingShift(sign.id, galaxy),
+    );
     g.scale.set(frame.sx, frame.sy, frame.sxScale);
     g.position.set(frame.ox, frame.oy, frame.oz);
     // The figure turns about the view axis. Rolling the camera instead would do
     // nothing: the station is billboarded to it, so the billboard would follow.
     g.rotation.z = frame.roll;
+    if (figureGroup.current) figureGroup.current.position.x = frame.shift;
     if (haloGroup.current) haloGroup.current.scale.setScalar(1.018 + form * 0.006);
 
     const fieldReveal = Math.max(0, (form - 0.18) / 0.82);
@@ -160,43 +167,48 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
         />
       </group>
       <group ref={group} visible={false} position={[0, 0.05, 0.35]}>
-        <group ref={haloGroup}>
+        {/* Drawing layers only: the seam-clearance slide moves lines + stars off the
+            hub's axis, while nodes and the core stay anchored to the hub (the camera
+            keeps aiming at the star you see). */}
+        <group ref={figureGroup} position={[0, 0, 0]}>
+          <group ref={haloGroup}>
+            <lineSegments geometry={lineGeo} frustumCulled={false} raycast={noopRaycast}>
+              <lineBasicMaterial
+                ref={glowMat}
+                color={sign.palette.accent}
+                transparent
+                opacity={0}
+                depthWrite={false}
+                toneMapped={false}
+                blending={AdditiveBlending}
+              />
+            </lineSegments>
+          </group>
           <lineSegments geometry={lineGeo} frustumCulled={false} raycast={noopRaycast}>
             <lineBasicMaterial
-              ref={glowMat}
-              color={sign.palette.accent}
+              ref={lineMat}
+              color={sign.palette.chest}
+              transparent
+              opacity={0}
+              depthWrite={false}
+              toneMapped={false}
+            />
+          </lineSegments>
+          <points geometry={starGeo} frustumCulled={false} raycast={noopRaycast}>
+            <pointsMaterial
+              ref={starMat}
+              map={softStar}
+              color={sign.palette.chest}
+              size={0.3}
+              sizeAttenuation
               transparent
               opacity={0}
               depthWrite={false}
               toneMapped={false}
               blending={AdditiveBlending}
             />
-          </lineSegments>
+          </points>
         </group>
-        <lineSegments geometry={lineGeo} frustumCulled={false} raycast={noopRaycast}>
-          <lineBasicMaterial
-            ref={lineMat}
-            color={sign.palette.chest}
-            transparent
-            opacity={0}
-            depthWrite={false}
-            toneMapped={false}
-          />
-        </lineSegments>
-        <points geometry={starGeo} frustumCulled={false} raycast={noopRaycast}>
-          <pointsMaterial
-            ref={starMat}
-            map={softStar}
-            color={sign.palette.chest}
-            size={0.3}
-            sizeAttenuation
-            transparent
-            opacity={0}
-            depthWrite={false}
-            toneMapped={false}
-            blending={AdditiveBlending}
-          />
-        </points>
         <points geometry={pointGeo} frustumCulled={false} raycast={noopRaycast}>
           <pointsMaterial
             ref={pointMat}

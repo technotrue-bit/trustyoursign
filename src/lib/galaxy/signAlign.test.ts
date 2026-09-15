@@ -2,22 +2,28 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   BEAM_CLEAR_ANGLE,
+  LANDING_BIAS_BASE,
   MATCH_DONE,
   MATCH_HOLD,
   MAX_LANDING_ROLL,
+  MAX_LANDING_SHIFT,
+  SEAM_CLEAR_LOCAL,
   axisAngle,
   boxOfPoints,
   clearLandingRollCache,
+  clearLandingShiftCache,
   fieldFrame,
   figureMatchTransform,
   galaxyFrameScale,
   galaxyFigureBox,
+  landingBiasNdc,
   landingRoll,
+  landingShift,
   seamBeams,
   paintedFigureBox,
   rotatedPoint,
 } from "./signAlign";
-import { CONSTELLATIONS } from "./constellations";
+import { CALENDAR_SIGN_ORDER, CONSTELLATIONS } from "./constellations";
 import { getSignGalaxy } from "./signGalaxy";
 import type { SignVolume } from "./signVolume";
 
@@ -198,5 +204,61 @@ describe("landingRoll keeps long segments off the frame centre", () => {
     assert.ok(seamBeams(libra).length >= 1, "libra should have a seam to clear");
     const roll = landingRoll("libra", libra);
     assert.ok(Math.abs(roll) > 0.15, `expected a real tilt for libra, got ${roll}`);
+  });
+
+  /** Horizontal distance between the hub and a beam's line, in figure-local units. */
+  function gapToHub(
+    hub: { x: number; y: number },
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+  ) {
+    const dy = by - ay;
+    if (Math.abs(dy) < 1e-6) return Math.abs((ax + bx) / 2 - hub.x);
+    return Math.abs(ax + ((bx - ax) * (hub.y - ay)) / dy - hub.x);
+  }
+
+  it("slides the drawing off the hub's axis wherever a seam crosses it", () => {
+    clearLandingShiftCache();
+    let moved = 0;
+    for (const id of CALENDAR_SIGN_ORDER) {
+      const galaxy = getSignGalaxy(id);
+      const shift = landingShift(id, galaxy);
+      assert.ok(Number.isFinite(shift), `${id}: shift must be finite`);
+      assert.ok(Math.abs(shift) <= MAX_LANDING_SHIFT + 1e-9, `${id}: shift over cap`);
+      assert.equal(landingShift(id, galaxy), shift, `${id}: must be deterministic`);
+
+      const hub = galaxy.points[0];
+      if (!hub) continue;
+      for (const bm of seamBeams(galaxy)) {
+        if (shift === 0) {
+          // Nothing moved for this sign, so its seam must already clear the hub.
+          assert.ok(
+            gapToHub(hub, bm.ax, bm.ay, bm.bx, bm.by) > SEAM_CLEAR_LOCAL - 1e-9,
+            `${id}: seam crosses the hub but the drawing was not moved`,
+          );
+          continue;
+        }
+        moved++;
+        // The slide is applied to the drawing before the figure's turn, and for a
+        // near-vertical beam that displacement is perpendicular to it, so it adds
+        // straight onto the beam's distance from the hub.
+        const gap = gapToHub(hub, bm.ax + shift, bm.ay, bm.bx + shift, bm.by);
+        assert.ok(gap >= SEAM_CLEAR_LOCAL * 0.9, `${id}: seam still crosses the hub (gap ${gap})`);
+      }
+    }
+    assert.ok(moved >= 1, "at least one sign (libra) should be moved");
+  });
+
+  it("frames the core higher the shorter the viewport, within bounds", () => {
+    assert.equal(landingBiasNdc(900), LANDING_BIAS_BASE);
+    assert.equal(landingBiasNdc(844), LANDING_BIAS_BASE);
+    assert.ok(landingBiasNdc(540) > landingBiasNdc(720));
+    for (let h = 300; h <= 1400; h += 20) {
+      const v = landingBiasNdc(h);
+      assert.ok(v >= LANDING_BIAS_BASE - 1e-9, `bias under base at h=${h}`);
+      assert.ok(v <= 0.3 + 1e-9, `bias over cap at h=${h}`);
+    }
   });
 });

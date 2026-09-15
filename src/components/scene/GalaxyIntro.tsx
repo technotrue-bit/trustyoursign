@@ -121,6 +121,7 @@ import { CelestialSky } from "./CelestialSky";
 import { CornerGalaxies } from "./CornerGalaxies";
 import { SignShell } from "./SignShell";
 import { SignGalaxyField, pointLocalOffset } from "./SignGalaxyField";
+import { landingBiasNdc } from "@/lib/galaxy/signAlign";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const DUST_N = SMALL ? 180 : 320;
@@ -141,16 +142,16 @@ const _hubNdc = new Vector3();
 
 /** Enter flythrough: where the camera comes to rest relative to the hub star. */
 export const HUB_STANDOFF = 2.6;
-/**
- * Where the hub core sits in the frame when you land: horizontally centred, a
- * touch above centre so the copy block keeps the lower half. Applied by dropping
- * the aim point, never by pushing the core off-centre.
- */
-export const LANDING_CORE_NDC_Y = 0.12;
 
 function cssViewWidth() {
   if (typeof window === "undefined") return 1280;
   return window.visualViewport?.width ?? window.innerWidth;
+}
+
+/** CSS viewport height — short frames need the core framed higher (see landingBiasNdc). */
+function cssViewHeight() {
+  if (typeof window === "undefined") return 900;
+  return window.visualViewport?.height ?? window.innerHeight;
 }
 
 function noopRaycast() {
@@ -1151,9 +1152,13 @@ function TempleRig() {
         // fights the pull — which is why the landing drifted sign to sign. Setting
         // the pose directly makes every sign and viewport land the same way.
         const fovNow = camera instanceof PerspectiveCamera ? camera.fov : 50;
-        const bias = LANDING_CORE_NDC_Y * HUB_STANDOFF * Math.tan((fovNow * Math.PI) / 360);
-        _look.copy(_hub);
-        _cam.set(_hub.x, _hub.y - bias, _hub.z + HUB_STANDOFF);
+        // Drop the *aim* below the hub: aiming at the hub centres it exactly, which
+        // is why a camera-height bias alone did nothing measurable (hubNdcY stayed
+        // 0.000 at every viewport). Aiming low frames the core above centre, and the
+        // amount is a pure function of viewport height, so nothing can drift per sign.
+        const lift = landingBiasNdc(cssViewHeight()) * HUB_STANDOFF * Math.tan((fovNow * Math.PI) / 360);
+        _look.set(_hub.x, _hub.y - lift, _hub.z);
+        _cam.set(_hub.x, _hub.y, _hub.z + HUB_STANDOFF);
         {
           const lx = galaxyTravel.exploreLookX;
           const ly = galaxyTravel.exploreLookY;

@@ -190,3 +190,33 @@ Frames: `screenshots/sweep/sweep-mid.png`, `sweep-landed.png`.
 `scripts/qa/sign-sweep.mjs` (12-sign verification), `scripts/qa/montage.py`
 (ffmpeg-free labelled grids — ffmpeg's glob demuxer is not in every Windows
 build), plus `align()` / `preload()` on the dev QA hooks.
+
+## Round 4 (all three flagged items)
+
+- `landingShift()` in `signAlign.ts` + `figureGroup` in `SignGalaxyField.tsx`: the drawing
+  slides off the hub's axis; nodes + core do not move. Direction chosen by margin search
+  (see spec) — a fixed +x direction made Aquarius worse.
+- `landingBiasNdc(viewHeight)` in `signAlign.ts`, used by `GalaxyIntro`: core framed higher
+  the shorter the viewport (base 0.12, cap 0.30).
+- `coreAccent()` in `signCore.ts`: dark accents lifted toward chest (Scorpio), bright ones
+  nudged 12%.
+- Tests: signAlign (seam clearance for all 12 signs, bias bounds) and signCore (lift + token
+  shape). `npm test` 173 pass / 0 fail; `npm run typecheck` clean.
+- Verified after: 12-sign sweep at 960x540 and 390x844 — landed NDC, centre-lit and the
+  brightest-pixel-per-row seam probe; see the sweep output referenced from the PR.
+
+### Round 4 — measured
+
+| check | before | after |
+|---|---|---|
+| hub NDC y @960x540 | 0.000 | **+0.299** |
+| hub NDC y @1280x720 | 0.000 | **+0.155** |
+| hub NDC y @390x844 (phone) | 0.000 | **+0.113** |
+| copy band (rows 62-100%) mean luma @540 | 36.6 | **12.0** |
+| copy band mean luma @720 | 38.3 | **15.4** |
+| scorpio landed centre-lit @720 | ~21% | **28.7%** |
+
+The bias is exact: `hubNdcY` lands on `landingBiasNdc(height)` at every size tested
+(0.30 / 0.156 / 0.12 targets). The seam clearance is proven in geometry by the unit
+test; the pixel probe agrees in direction (Libra's median bright column 474 -> 436)
+but is noisy, because stars outshine the line in the centre band.

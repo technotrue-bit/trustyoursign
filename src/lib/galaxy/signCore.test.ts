@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { CORE_LOCAL_SIZE, coreOpacity, coreSwell, coreSpin } from "./signCore";
+import { CORE_LOCAL_SIZE, coreAccent, coreOpacity, coreSwell, coreSpin, hexLuma } from "./signCore";
 
 describe("signCore", () => {
   it("swells from first light to full size, monotonic and bounded", () => {
@@ -35,5 +35,31 @@ describe("signCore", () => {
 
   it("has a positive rest size for every sign's sprite", () => {
     assert.ok(CORE_LOCAL_SIZE > 0.5);
+  });
+
+  it("lifts a dark accent (scorpio) so the core stays readable", () => {
+    // Scorpio's palette accent is a near-wine red; on screen the landing had
+    // nothing to look at. It must come out measurably brighter.
+    const scorpio = { accent: "#8a3030", chest: "#e8c8c0" };
+    const lifted = coreAccent(scorpio);
+    assert.ok(
+      hexLuma(lifted) > hexLuma(scorpio.accent) + 0.15,
+      `expected a real lift, got ${lifted} (luma ${hexLuma(lifted).toFixed(2)})`,
+    );
+    assert.equal(coreAccent(scorpio), lifted, "must be deterministic");
+
+    // A bright accent (sagittarius) barely moves, so verified signs are unaffected.
+    const sag = { accent: "#c4a05a", chest: "#efe4f4" };
+    assert.ok(Math.abs(hexLuma(coreAccent(sag)) - hexLuma(sag.accent)) < 0.12);
+  });
+
+  it("never returns something that is not a colour token", () => {
+    for (const palette of [
+      { accent: "#8a3030", chest: "#e8c8c0" },
+      { accent: "#c4a05a", chest: "#efe4f4" },
+      { accent: "#7ec8d0", chest: "#e4f4f6" },
+    ]) {
+      assert.match(coreAccent(palette), /^#[0-9a-f]{6}$/);
+    }
   });
 });
