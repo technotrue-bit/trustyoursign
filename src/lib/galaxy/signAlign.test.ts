@@ -1,16 +1,27 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  BEAM_CLEAR_ANGLE,
   MATCH_DONE,
   MATCH_HOLD,
+  MAX_LANDING_ROLL,
+  axisAngle,
   boxOfPoints,
+  clearLandingRollCache,
   fieldFrame,
   figureMatchTransform,
   galaxyFrameScale,
   galaxyFigureBox,
+  landingRoll,
+  seamBeams,
   paintedFigureBox,
+  rotatedPoint,
 } from "./signAlign";
+import { CONSTELLATIONS } from "./constellations";
+import { getSignGalaxy } from "./signGalaxy";
 import type { SignVolume } from "./signVolume";
+
+const SIGNS = CONSTELLATIONS.map((c) => c.id);
 
 describe("signAlign boxes", () => {
   it("measures a point box, ignoring non-finite entries", () => {
@@ -31,7 +42,15 @@ describe("signAlign boxes", () => {
     for (let cx = 1; cx <= 5; cx++) {
       for (let cy = 0; cy < 3; cy++) alpha[cy * cols + cx] = 0.9;
     }
-    const vol = { id: "sagittarius", aspect: 2, cols, rows, alpha, depth: alpha, stars: [] } as unknown as SignVolume;
+    const vol = {
+      id: "sagittarius",
+      aspect: 2,
+      cols,
+      rows,
+      alpha,
+      depth: alpha,
+      stars: [],
+    } as unknown as SignVolume;
     const box = paintedFigureBox(vol, 10);
     assert.ok(box, "expected a box from a 15-cell figure");
     // u = cx/(cols-1) over a 10-wide plate centred on 0; plate is 10 / aspect tall.
@@ -118,5 +137,66 @@ describe("signAlign transform", () => {
     }
     assert.ok(MATCH_HOLD < MATCH_DONE);
     assert.ok(Math.abs(fieldFrame(0.5, null).sx - galaxyFrameScale(0.5)) < 1e-9);
+  });
+
+  it("ramps the seam-clearance roll in only after the hand-off", () => {
+    const m = figureMatchTransform(field, painted)!;
+    // The figure matches the painting while the painting is still visible...
+    assert.ok(Math.abs(fieldFrame(MATCH_HOLD, m, 0.3).roll) < 1e-9);
+    // ...and is fully turned by the time it is the form you fly into.
+    assert.ok(Math.abs(fieldFrame(1, m, 0.3).roll - 0.3) < 1e-9);
+    let prev = 0;
+    for (let f = 0.02; f <= 1.0001; f += 0.02) {
+      const v = fieldFrame(f, m, 0.3).roll;
+      assert.ok(v >= prev - 1e-9, `roll went backwards at form ${f.toFixed(2)}`);
+      prev = v;
+    }
+    // No roll target (most signs) leaves the figure upright.
+    assert.equal(fieldFrame(1, m).roll, 0);
+  });
+});
+
+describe("landingRoll keeps long segments off the frame centre", () => {
+  it("picks the tilt that pushes the worst seam furthest from vertical, on all 12 signs", () => {
+    clearLandingRollCache();
+    let turned = 0;
+    for (const id of SIGNS) {
+      const galaxy = getSignGalaxy(id);
+      const roll = landingRoll(id, galaxy);
+      assert.ok(Number.isFinite(roll), `${id}: roll must be finite`);
+      assert.ok(Math.abs(roll) <= MAX_LANDING_ROLL + 1e-9, `${id}: roll over cap`);
+      assert.equal(landingRoll(id, galaxy), roll, `${id}: must be deterministic`);
+      const beams = seamBeams(galaxy);
+      if (beams.length) turned++;
+      const score = (r: number) =>
+        beams.length
+          ? Math.min(
+              ...beams.map((bm) => {
+                const a = rotatedPoint(bm.ax, bm.ay, r);
+                const b = rotatedPoint(bm.bx, bm.by, r);
+                return axisAngle(a.x, a.y, b.x, b.y);
+              }),
+            )
+          : Math.PI / 2;
+      const chosen = score(roll);
+      // No candidate in the scan may do better than the one we kept.
+      for (let i = 1; i <= 24; i++) {
+        const cand = (i / 24) * MAX_LANDING_ROLL;
+        for (const sign of [1, -1]) {
+          assert.ok(
+            score(cand * sign) <= chosen + 1e-9,
+            `${id}: candidate ${((cand * sign * 180) / Math.PI).toFixed(1)}° beats the chosen ${((roll * 180) / Math.PI).toFixed(1)}°`,
+          );
+        }
+      }
+    }
+    assert.ok(turned >= 1, "at least one sign should need the tilt (libra)");
+  });
+
+  it("turns libra, whose balance post runs straight through the hub", () => {
+    const libra = getSignGalaxy("libra");
+    assert.ok(seamBeams(libra).length >= 1, "libra should have a seam to clear");
+    const roll = landingRoll("libra", libra);
+    assert.ok(Math.abs(roll) > 0.15, `expected a real tilt for libra, got ${roll}`);
   });
 });

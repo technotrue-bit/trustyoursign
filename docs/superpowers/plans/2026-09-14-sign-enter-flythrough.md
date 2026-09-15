@@ -153,24 +153,37 @@ alignment, dive, capture a mid frame and a landed frame, read the probe.
 
 Frames: `screenshots/sweep/sweep-mid.png`, `sweep-landed.png`.
 
-### Findings from the sweep (not fixed — they need a decision)
+### Findings from the sweep — 1 and 2 now fixed (Round 3)
 
-1. **Libra lands with a bright vertical beam through the frame centre.** Not a
-   render bug: Libra's figure *is* a balance, with a centred post (lines 6→7 and
-   7→8 at `x = 0`, spanning 7.5 galaxy units) and the hub star sits **on** that
-   post, so the landing looks straight down it (column luma 147 vs ~73 for the
-   brightest neighbouring columns — a hard vertical line). A shared fix would nudge
-   the landing yaw a few degrees off any long segment, or offset the hub look
-   horizontally by a small deterministic amount. **Do not fix per sign.**
-2. **Core centring varies by sign** — NDC `x` within ±0.18 for most, but `y` runs
-   to −0.55 (cancer) and −0.61 (libra), because each sign's hub star sits at a
-   different place in its figure. A single global look-bias correction would
-   tighten all 12.
-3. **On short viewports (960×540) the copy block sits over the hottest part of
-   the core.** At 1280×720 it sits below it. Worth a responsive nudge to the
-   standoff or the HUD block on short screens.
-4. **Scorpio's landing is the dimmest** (centre-lit 21 % vs 40–60 elsewhere) —
-   its palette accent is dark red, so its core is inherently dimmer.
+**Fixed — landing look (shared, no per-sign art):**
+
+1. **Libra's seam is gone.** Its figure is a balance whose post runs through the hub,
+   so the landing framed a hard vertical line down the middle (column luma 147 vs ~73
+   for neighbouring columns). The figure now *turns* at landing by a per-sign angle
+   chosen to push the worst near-hub segment furthest from vertical (`landingRoll`),
+   ramped in only after the painted-to-stars hand-off. Measured after: the brightest
+   pixel per row drifts 441→518 instead of pinning at 475, and the line reads as
+   constellation drawing rather than a seam.
+   *Mechanism note:* the station is billboarded to the camera, so rolling the **camera**
+   cancels itself out — the only thing that changes the frame is rolling the figure.
+   A canvas-vs-DOM probe (`scripts/qa/line-source.mjs`) is what proved the line was in
+   WebGL and that the camera roll had done nothing.
+2. **Centring is now deterministic.** The landing used to converge toward the look
+   target while the hero-frame lift fought the pull, leaving a per-sign residual
+   (NDC y from −0.61 to +0.35). The camera now parks explicitly at the hub at a fixed
+   standoff. Measured across all 12 signs: **NDC (0.000, 0.000)**, camera→hub
+   2.63–2.74, 0 console errors.
+
+**Still open:**
+
+3. **On short viewports (960×540) the copy block sits over the hottest part of the
+   core** — fine at 1280×720. A responsive nudge to the HUD block or the standoff
+   would settle it; it is a layout call, not a geometry one.
+4. **Scorpio's landing is the dimmest** (centre-lit 21 % vs 40–60 elsewhere) — its
+   palette accent is dark red, so its core is inherently dimmer. A palette decision.
+5. For Libra the optimiser's best achievable is ~11.6°: its post and a 23° diagonal
+   trade off against each other, so the post is tilted rather than fully off-axis.
+   Clearing it entirely needs a lateral shift of the figure's line layer only.
 
 ### QA tooling added this round
 

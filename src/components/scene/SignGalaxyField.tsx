@@ -21,7 +21,7 @@ import {
   coreSwell,
   getSignCore,
 } from "@/lib/galaxy/signCore";
-import { fieldFrame, getFigureMatch } from "@/lib/galaxy/signAlign";
+import { fieldFrame, getFigureMatch, landingRoll, rotatedPoint } from "@/lib/galaxy/signAlign";
 import { buildFlightDust, dustOpacity, makeDustMaterial } from "@/lib/galaxy/flightDust";
 import { starSpikeSprite, starSprite } from "@/lib/galaxy/starSprite";
 import { galaxyTravel, seekGalaxyPoint } from "@/lib/galaxy/travel";
@@ -45,13 +45,7 @@ function noopRaycast() {
  * thing you fly into — so the hand-off from painting to stars is seamless, and
  * the geometry you land on is untouched.
  */
-export function SignGalaxyField({
-  sign,
-  index,
-}: {
-  sign: TempleSign;
-  index: number;
-}) {
+export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: number }) {
   const group = useRef<Group>(null);
   const haloGroup = useRef<Group>(null);
   const dustGroup = useRef<Group>(null);
@@ -118,9 +112,12 @@ export function SignGalaxyField({
     g.visible = form > 0.12 || inside;
     if (!g.visible) return;
 
-    const frame = fieldFrame(form, getFigureMatch(sign.id, galaxy));
+    const frame = fieldFrame(form, getFigureMatch(sign.id, galaxy), landingRoll(sign.id, galaxy));
     g.scale.set(frame.sx, frame.sy, frame.sxScale);
     g.position.set(frame.ox, frame.oy, frame.oz);
+    // The figure turns about the view axis. Rolling the camera instead would do
+    // nothing: the station is billboarded to it, so the billboard would follow.
+    g.rotation.z = frame.roll;
     if (haloGroup.current) haloGroup.current.scale.setScalar(1.018 + form * 0.006);
 
     const fieldReveal = Math.max(0, (form - 0.18) / 0.82);
@@ -155,7 +152,12 @@ export function SignGalaxyField({
   return (
     <>
       <group ref={dustGroup} visible={false} position={[0, 0.05, 0.35]}>
-        <points geometry={dustGeo} material={dustShader} frustumCulled={false} raycast={noopRaycast} />
+        <points
+          geometry={dustGeo}
+          material={dustShader}
+          frustumCulled={false}
+          raycast={noopRaycast}
+        />
       </group>
       <group ref={group} visible={false} position={[0, 0.05, 0.35]}>
         <group ref={haloGroup}>
@@ -302,10 +304,17 @@ function buildLineGeo(galaxy: SignGalaxy) {
 export function pointLocalOffset(galaxy: SignGalaxy, pointIndex: number, form: number) {
   const p = galaxy.points[pointIndex] ?? galaxy.points[0];
   if (!p) return new Vector3(0, 0, 0);
-  const frame = fieldFrame(form, getFigureMatch(galaxy.signId, galaxy));
+  const frame = fieldFrame(
+    form,
+    getFigureMatch(galaxy.signId, galaxy),
+    landingRoll(galaxy.signId, galaxy),
+  );
+  // Mirror the group transform exactly — scale, then roll about the view axis,
+  // then translate — so the camera looks at the node the eye sees.
+  const rolled = rotatedPoint(p.x * frame.sx, p.y * frame.sy, frame.roll);
   return new Vector3(
-    p.x * frame.sx + frame.ox,
-    p.y * frame.sy + frame.oy,
+    rolled.x + frame.ox,
+    rolled.y + frame.oy,
     p.z * frame.sxScale * 0.62 + 0.85 * form,
   );
 }

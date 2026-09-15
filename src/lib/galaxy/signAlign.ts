@@ -38,6 +38,12 @@ export type FieldFrame = {
   ox: number;
   oy: number;
   oz: number;
+  /**
+   * Roll of the figure about the view axis (radians). The station is billboarded,
+   * so rolling the *camera* would rotate the billboard with it and cancel out —
+   * the figure itself has to turn.
+   */
+  roll: number;
 };
 
 /** Fraction of the painted pixels that count as "figure" (the plate has glow fringes). */
@@ -46,6 +52,25 @@ const PAINTED_CUT = 0.16;
 /** Window over `galaxyForm` where the alignment hands over to the galaxy frame. */
 export const MATCH_HOLD = 0.1;
 export const MATCH_DONE = 0.7;
+
+/** How far the figure may turn as you enter (radians, ~18°). */
+export const MAX_LANDING_ROLL = 0.32;
+
+/**
+ * A segment reads as a seam across the frame centre when it is long enough to
+ * cross the view and its line passes close to the hub star (the point the camera
+ * lands looking at). Libra is the case that forced this: its figure is a balance
+ * whose post runs exactly through the hub, so the landing framed a hard vertical
+ * line down the middle.
+ */
+const BEAM_MIN_LEN = 3;
+const BEAM_HUB_CLEAR = 1.2;
+
+/** Only near-vertical segments read as a seam down the frame; diagonals do not. */
+const BEAM_NEAR_VERTICAL = (25 * Math.PI) / 180;
+
+/** Target: no near-hub beam sits closer than this to the frame's vertical axis. */
+export const BEAM_CLEAR_ANGLE = (20 * Math.PI) / 180;
 
 /** The plate mesh sits slightly forward/up of the station origin. */
 export const PLATE_OFFSET_Y = 0.05;
@@ -143,6 +168,89 @@ export function figureMatchTransform(field: Box, painted: Box): FigureMatch | nu
   };
 }
 
+/** Rotate a figure point about the view axis by `roll` radians. */
+export function rotatedPoint(x: number, y: number, roll: number) {
+  const c = Math.cos(roll);
+  const s = Math.sin(roll);
+  return { x: x * c - y * s, y: x * s + y * c };
+}
+
+/** Angle of a segment from the frame's vertical axis: 0 = straight up/down, π/2 = flat. */
+export function axisAngle(ax: number, ay: number, bx: number, by: number) {
+  const dx = Math.abs(bx - ax);
+  const dy = Math.abs(by - ay);
+  if (dx < 1e-6 && dy < 1e-6) return Math.PI / 2;
+  return Math.min(Math.atan2(dx, dy), Math.PI - Math.atan2(dx, dy));
+}
+
+/** Perpendicular distance from a point to a segment's infinite line. */
+function lineDistance(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return Math.hypot(px - ax, py - ay);
+  return Math.abs(dy * (px - ax) - dx * (py - ay)) / len;
+}
+
+/** Long, near-vertical segments whose line passes close to the hub — the seams. */
+export function seamBeams(
+  galaxy: SignGalaxy,
+): { ax: number; ay: number; bx: number; by: number }[] {
+  const hub = galaxy.points[0];
+  if (!hub) return [];
+  const out: { ax: number; ay: number; bx: number; by: number }[] = [];
+  for (const [a, b] of galaxy.lines) {
+    const sa = galaxy.stars[a];
+    const sb = galaxy.stars[b];
+    if (!sa || !sb) continue;
+    if (Math.hypot(sb.x - sa.x, sb.y - sa.y) < BEAM_MIN_LEN) continue;
+    if (axisAngle(sa.x, sa.y, sb.x, sb.y) > BEAM_NEAR_VERTICAL) continue;
+    if (lineDistance(hub.x, hub.y, sa.x, sa.y, sb.x, sb.y) > BEAM_HUB_CLEAR) continue;
+    out.push({ ax: sa.x, ay: sa.y, bx: sb.x, by: sb.y });
+  }
+  return out;
+}
+
+const rolls = new Map<SignId, number>();
+
+/**
+ * How far to tilt the camera at landing so no near-hub segment of this sign's
+ * figure runs down the frame's centre. Zero when the figure has no such segment
+ * (most signs), so only the signs that need it move. Deterministic and cached.
+ * The camera tilts, so the core stays exactly where it was aimed.
+ */
+export function landingRoll(signId: SignId, galaxy: SignGalaxy): number {
+  const hit = rolls.get(signId);
+  if (hit != null) return hit;
+  const beams = seamBeams(galaxy);
+  let best = 0;
+  let bestScore = -1;
+  if (beams.length) {
+    for (let i = 1; i <= 24; i++) {
+      const cand = (i / 24) * MAX_LANDING_ROLL;
+      for (const sign of [1, -1]) {
+        const roll = cand * sign;
+        let worst = Infinity;
+        for (const bm of beams) {
+          const a = rotatedPoint(bm.ax, bm.ay, roll);
+          const b = rotatedPoint(bm.bx, bm.by, roll);
+          worst = Math.min(worst, axisAngle(a.x, a.y, b.x, b.y));
+        }
+        if (worst > bestScore + 1e-9) {
+          bestScore = worst;
+          best = roll;
+        }
+      }
+    }
+  }
+  rolls.set(signId, best);
+  return best;
+}
+
+export function clearLandingRollCache() {
+  rolls.clear();
+}
+
 /** The galaxy's own frame at this progress — what the field used before alignment. */
 export function galaxyFrameScale(form: number) {
   return (PLATE_WIDE / GALAXY_SPAN) * (1.05 + clamp01(form) * 0.35);
@@ -154,7 +262,7 @@ export function galaxyFrameScale(form: number) {
  * grows into the form you fly through. At `form = 1` this equals the galaxy
  * frame exactly, so the landing geometry is untouched.
  */
-export function fieldFrame(form: number, match: FigureMatch | null): FieldFrame {
+export function fieldFrame(form: number, match: FigureMatch | null, rollTarget = 0): FieldFrame {
   const deck = galaxyFrameScale(form);
   const ramp = smooth01((clamp01(form) - MATCH_HOLD) / (MATCH_DONE - MATCH_HOLD));
   const sx = match ? match.sx + (deck - match.sx) * ramp : deck;
@@ -164,7 +272,10 @@ export function fieldFrame(form: number, match: FigureMatch | null): FieldFrame 
   // Depth also starts on the painted plate's plane, so the two drawings project to
   // the *same* screen box during the hand-off (a 0.4-unit z gap was worth ~4% scale).
   const oz = match ? PLATE_OFFSET_Z + (FIELD_OFFSET_Z - PLATE_OFFSET_Z) * ramp : FIELD_OFFSET_Z;
-  return { sx, sy, sxScale: deck, ox, oy, oz };
+  // The turn ramps in with the same hand-over: the figure matches the painting while
+  // the painting is visible, then rotates as it becomes the form you fly into.
+  const roll = rollTarget * ramp;
+  return { sx, sy, sxScale: deck, ox, oy, oz, roll };
 }
 
 const matches = new Map<SignId, FigureMatch>();

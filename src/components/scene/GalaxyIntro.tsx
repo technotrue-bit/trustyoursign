@@ -43,7 +43,11 @@ import {
   stepSeek,
   stepZoom,
 } from "@/lib/galaxy/travel";
-import { enterHubSettle, getSignGalaxy, insideHardGateHidesLeftovers } from "@/lib/galaxy/signGalaxy";
+import {
+  enterHubSettle,
+  getSignGalaxy,
+  insideHardGateHidesLeftovers,
+} from "@/lib/galaxy/signGalaxy";
 import {
   bootIntro,
   introCam,
@@ -137,6 +141,12 @@ const _hubNdc = new Vector3();
 
 /** Enter flythrough: where the camera comes to rest relative to the hub star. */
 export const HUB_STANDOFF = 2.6;
+/**
+ * Where the hub core sits in the frame when you land: horizontally centred, a
+ * touch above centre so the copy block keeps the lower half. Applied by dropping
+ * the aim point, never by pushing the core off-centre.
+ */
+export const LANDING_CORE_NDC_Y = 0.12;
 
 function cssViewWidth() {
   if (typeof window === "undefined") return 1280;
@@ -592,13 +602,17 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       g.visible = false;
       return;
     }
-    const fade = held || exploringHere
-      ? 1
-      : direct && index === aimedIndex()
-        ? Math.max(0.35, smooth(fieldGather(dist, 0.22)))
-        : fieldFade(fieldGather(dist)) * worldFade;
+    const fade =
+      held || exploringHere
+        ? 1
+        : direct && index === aimedIndex()
+          ? Math.max(0.35, smooth(fieldGather(dist, 0.22)))
+          : fieldFade(fieldGather(dist)) * worldFade;
     const show =
-      held || exploringHere || fieldVisible(fieldGather(dist)) || (direct && index === aimedIndex());
+      held ||
+      exploringHere ||
+      fieldVisible(fieldGather(dist)) ||
+      (direct && index === aimedIndex());
     g.visible = show;
     if (!show) {
       mesh.visible = false;
@@ -662,8 +676,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         ? Math.max(0, (arrive - 0.12) / 0.62)
         : smooth(Math.max(0, (gather - 0.52) / 0.48));
 
-    const landedHere =
-      exploringHere && insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
+    const landedHere = exploringHere && insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
 
     if (landedHere) {
       // Inside: the star volume is the room — keep it lit. The painted plate and
@@ -729,7 +742,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       const ml = morphLevel.current;
       const u = coreMat.uniforms;
       const landGain =
-        index === aimedIndex() && !exploringHere ? cloudBurstGain(signArrive.burst) : CLOUD_GAIN_IDLE;
+        index === aimedIndex() && !exploringHere
+          ? cloudBurstGain(signArrive.burst)
+          : CLOUD_GAIN_IDLE;
       u.uTime.value = clock.elapsedTime;
       u.uGather.value = gather;
       u.uWide.value = wide;
@@ -931,10 +946,7 @@ function TempleRig() {
       if (state.session) return;
       if (introPlaying()) {
         // Tab must move focus — only Escape / Enter / Space skip the intro.
-        if (
-          introCanSkip() &&
-          (e.key === "Escape" || e.key === "Enter" || e.key === " ")
-        ) {
+        if (introCanSkip() && (e.key === "Escape" || e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
           skipIntro();
           galaxyTravel.birth = 1;
@@ -951,7 +963,10 @@ function TempleRig() {
       }
       // Keys typed into a form field belong to that field, not to the sky.
       const t = e.target;
-      if (t instanceof HTMLElement && t.closest("input, textarea, select, [contenteditable=true]")) {
+      if (
+        t instanceof HTMLElement &&
+        t.closest("input, textarea, select, [contenteditable=true]")
+      ) {
         return;
       }
       // While exploring one sign's galaxy, Escape is the way out.
@@ -1124,15 +1139,22 @@ function TempleRig() {
         galaxyTravel.explorePhase === "inside"
           ? 1
           : Math.max(enterHubSettle(galaxyTravel.exploreProgress), dive);
-      if (settle > 0.001) {
+      if (galaxyTravel.explorePhase !== "inside" && settle > 0.001) {
         // Ease toward the hub star on the figure while the plate is still filling the frame.
         const pull = 0.025 + settle * 0.1;
         _cam.x += (_look.x - _cam.x) * pull;
         _cam.y += (_look.y - _cam.y) * (pull * 0.85);
-        if (galaxyTravel.explorePhase === "inside") {
-          // Land looking *at* the hub star — the core is the thing you flew into.
-          // (A heavy pull back toward the corridor pushed the core off-frame.)
-          _look.lerp(_chest, 0.12);
+      }
+      if (galaxyTravel.explorePhase === "inside") {
+        // Park explicitly at the hub star: fixed standoff, framed a touch above
+        // centre. Convergence alone left a per-sign residual — the hero-frame lift
+        // fights the pull — which is why the landing drifted sign to sign. Setting
+        // the pose directly makes every sign and viewport land the same way.
+        const fovNow = camera instanceof PerspectiveCamera ? camera.fov : 50;
+        const bias = LANDING_CORE_NDC_Y * HUB_STANDOFF * Math.tan((fovNow * Math.PI) / 360);
+        _look.copy(_hub);
+        _cam.set(_hub.x, _hub.y - bias, _hub.z + HUB_STANDOFF);
+        {
           const lx = galaxyTravel.exploreLookX;
           const ly = galaxyTravel.exploreLookY;
           if (lx !== 0 || ly !== 0) {
@@ -1165,6 +1187,9 @@ function TempleRig() {
       camera.position.lerp(_cam, ease);
       camera.lookAt(_look);
     }
+    // The seam-clearance roll lives on the *figure* (SignGalaxyField), not here:
+    // the station is billboarded to the camera, so rolling the camera would carry
+    // the billboard with it and change nothing on screen.
     if (import.meta.env.DEV && exploring && galaxyTravel.exploreSignIndex != null) {
       // Dev-only QA probe — lets scripts/qa/enter-capture.mjs measure the dive
       // (camera → hub distance, framing) instead of eyeballing it.
