@@ -125,6 +125,11 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
   }, []);
 
   useEffect(() => {
+    // Dev-only QA hooks — see scripts/qa/enter-capture.mjs (no production cost).
+    void import("@/lib/dev-qa").then((m) => m.installQaHooks());
+  }, []);
+
+  useEffect(() => {
     galaxyTravel.busy = Boolean(claiming || entered);
     galaxyTravel.claiming = Boolean(claiming);
   }, [claiming, entered]);

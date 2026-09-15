@@ -250,30 +250,46 @@ export function clearSignGalaxyCache() {
 
 /**
  * Ease helpers for the enter choreography (single p clock; overlapping windows).
- * Plate stays readable while the camera dives into the hub star on the figure;
- * galaxy bloom overlays the form instead of replacing an empty frame.
+ *
+ * Three beats: the painted figure holds the frame, the camera accelerates
+ * through the live figure, then the shot lands inside the galaxy on its core.
+ * See docs/superpowers/specs/2026-09-14-sign-enter-flythrough-design.md.
  */
 export function enterWorldFade(progress: number) {
-  return 1 - smooth01(Math.min(1, progress / 0.22));
+  return 1 - smooth01(Math.min(1, progress / 0.2));
 }
 
 export function enterPlateFade(progress: number) {
-  // Keep the animal plate until the dive is deep into the hub star.
-  return 1 - smooth01(Math.max(0, Math.min(1, (progress - 0.42) / (0.78 - 0.42))));
+  // Painted figure is the hero of the first beat and dies while the camera is
+  // still far — the plate must never reach the lens as a wall.
+  return 1 - smooth01(Math.max(0, Math.min(1, (progress - 0.06) / (0.4 - 0.06))));
 }
 
 export function enterGalaxyForm(progress: number) {
-  // Bloom on top of the still-visible figure, then take over as plate dies.
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.22) / (0.9 - 0.22))));
+  // Live figure takes over as the plate dies, so the middle beat is never black.
+  // Fully formed just past halfway: by the time the plate is gone the star-figure
+  // already owns the frame.
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.06) / (0.56 - 0.06))));
 }
 
 export function enterDive(progress: number) {
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.05) / (0.82 - 0.05))));
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.03) / (0.86 - 0.03))));
+}
+
+/** Extra travel in the back half — the surge that carries you through the form. */
+export function enterRush(progress: number) {
+  const u = smooth01(Math.max(0, Math.min(1, (progress - 0.3) / (1 - 0.3))));
+  return Math.pow(u, 1.35);
+}
+
+/** How far the galaxy core has swelled into the hero of the shot. */
+export function enterCoreReveal(progress: number) {
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.34) / (1 - 0.34))));
 }
 
 /** Look/approach bias toward the hub star — starts early so the dive reads as "into that star". */
 export function enterHubSettle(progress: number) {
-  return smooth01(Math.max(0, Math.min(1, (progress - 0.12) / (1 - 0.12))));
+  return smooth01(Math.max(0, Math.min(1, (progress - 0.6) / (1 - 0.6))));
 }
 
 /** Corridor leftovers (disk, corners, station cloud, plate) hard-off after land. */

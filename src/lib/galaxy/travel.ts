@@ -2,9 +2,11 @@
 import { CONSTELLATIONS, nearestSign, signStation, signedDelta, wrap12 } from "./constellations";
 import { primeSignArt } from "./signArt";
 import {
+  enterCoreReveal,
   enterDive,
   enterGalaxyForm,
   enterPlateFade,
+  enterRush,
   enterWorldFade,
   getSignGalaxy,
   type ExplorePhase,
@@ -138,6 +140,10 @@ export const galaxyTravel = {
   plateFade: 1,
   galaxyForm: 0,
   diveBlend: 0,
+  /** Extra travel in the back half of the enter — the surge into the galaxy. */
+  enterRush: 0,
+  /** 0 → 1 as the galaxy core swells into the hero of the shot. */
+  coreReveal: 0,
   pointIndex: 0,
   pointSeek: null as number | null,
   pointT: 0,
@@ -294,6 +300,8 @@ function applyEnterCurves(p: number) {
   galaxyTravel.plateFade = enterPlateFade(p);
   galaxyTravel.galaxyForm = enterGalaxyForm(p);
   galaxyTravel.diveBlend = enterDive(p);
+  galaxyTravel.enterRush = enterRush(p);
+  galaxyTravel.coreReveal = enterCoreReveal(p);
 }
 
 function skipDurations() {
@@ -318,6 +326,8 @@ export function resetExplore(publish = true) {
   galaxyTravel.plateFade = 1;
   galaxyTravel.galaxyForm = 0;
   galaxyTravel.diveBlend = 0;
+  galaxyTravel.enterRush = 0;
+  galaxyTravel.coreReveal = 0;
   galaxyTravel.pointIndex = 0;
   galaxyTravel.pointSeek = null;
   galaxyTravel.pointT = 0;

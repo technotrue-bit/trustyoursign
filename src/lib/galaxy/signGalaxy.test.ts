@@ -5,10 +5,12 @@ import {
   NODE_DEPTH_NEAR,
   buildSignGalaxy,
   clearSignGalaxyCache,
+  enterCoreReveal,
   enterDive,
   enterGalaxyForm,
   enterHubSettle,
   enterPlateFade,
+  enterRush,
   enterWorldFade,
   getSignGalaxy,
   insideHardGateHidesLeftovers,
@@ -58,19 +60,55 @@ describe("signGalaxy", () => {
     assert.equal(new Set(majors).size, majors.length);
   });
 
-  it("enter windows: plate stays while diving into hub star; bloom overlaps", () => {
+  it("enter windows: figure holds, then the rush carries you into the core", () => {
+    // `fade` channels run 1 → 0; the rest ramp 0 → 1. Both must be monotonic
+    // and stay in range — no channel may overshoot or walk backwards.
+    const channels: [string, (p: number) => number, "up" | "down"][] = [
+      ["worldFade", enterWorldFade, "down"],
+      ["plateFade", enterPlateFade, "down"],
+      ["form", enterGalaxyForm, "up"],
+      ["dive", enterDive, "up"],
+      ["rush", enterRush, "up"],
+      ["core", enterCoreReveal, "up"],
+      ["settle", enterHubSettle, "up"],
+    ];
+    for (const [name, fn, dir] of channels) {
+      let prev = fn(0);
+      for (let p = 0.01; p <= 1.0001; p += 0.01) {
+        const v = fn(p);
+        assert.ok(v >= 0 && v <= 1, `${name} out of range at ${p.toFixed(2)}: ${v}`);
+        if (dir === "up") {
+          assert.ok(v >= prev - 1e-9, `${name} went backwards at ${p.toFixed(2)}`);
+        } else {
+          assert.ok(v <= prev + 1e-9, `${name} crept back up at ${p.toFixed(2)}`);
+        }
+        prev = v;
+      }
+    }
+
     assert.ok(Math.abs(enterWorldFade(0) - 1) < 0.02);
-    assert.ok(enterWorldFade(0.22) < 0.05);
+    assert.ok(enterWorldFade(0.2) < 0.05);
+
+    // Beat 1: the painted figure owns the frame, no early live-figure pop.
     assert.ok(Math.abs(enterPlateFade(0) - 1) < 0.02);
-    // Mid-dive: plate still readable; bloom and dive already underway toward hub.
-    assert.ok(enterPlateFade(0.35) > 0.85);
-    assert.ok(enterGalaxyForm(0.35) > 0.05);
-    assert.ok(enterDive(0.35) > 0.2);
-    assert.ok(enterHubSettle(0.35) > 0.1);
-    // Deep dive: plate nearly gone; form and dive complete.
-    assert.ok(enterPlateFade(0.78) < 0.05);
-    assert.ok(Math.abs(enterGalaxyForm(1) - 1) < 0.02);
-    assert.ok(enterDive(0.82) > 0.98);
+    assert.ok(enterPlateFade(0.06) > 0.98);
+    assert.ok(enterGalaxyForm(0.06) < 0.02);
+    assert.ok(enterDive(0.03) < 0.02);
+
+    // Beat 2: the plate is gone before the rush is close (no painted wall), and
+    // the live figure already owns the middle of the shot.
+    assert.ok(enterPlateFade(0.42) < 0.05);
+    assert.ok(enterGalaxyForm(0.42) > 0.75);
+    assert.ok(enterRush(0.3) < 0.02);
+    assert.ok(enterRush(0.65) > 0.2 && enterRush(0.65) < 0.8);
+
+    // Beat 3: dive and rush complete, core is the hero, look settles on the hub.
+    assert.ok(enterDive(0.86) > 0.98);
+    assert.ok(Math.abs(enterRush(1) - 1) < 0.02);
+    assert.ok(enterCoreReveal(0.34) < 0.02);
+    assert.ok(enterCoreReveal(0.8) > 0.7);
+    assert.ok(Math.abs(enterCoreReveal(1) - 1) < 0.02);
+    assert.ok(enterHubSettle(0.6) < 0.02);
     assert.ok(Math.abs(enterHubSettle(1) - 1) < 0.02);
   });
 });

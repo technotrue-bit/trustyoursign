@@ -132,6 +132,11 @@ const _up = new Vector3(0, 1, 0);
 const _sitCam = new Vector3();
 const _camRight = new Vector3();
 const _camUp = new Vector3();
+const _hub = new Vector3();
+const _hubNdc = new Vector3();
+
+/** Enter flythrough: where the camera comes to rest relative to the hub star. */
+export const HUB_STANDOFF = 2.6;
 
 function cssViewWidth() {
   if (typeof window === "undefined") return 1280;
@@ -661,7 +666,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       exploringHere && insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
 
     if (landedHere) {
-      mesh.visible = false;
+      // Inside: the star volume is the room — keep it lit. The painted plate and
+      // the 3D shell are the approach shells and go away (the camera is past them).
+      mesh.visible = true;
+      setCloudDrawRange(starGeo, true);
       if (art.current) {
         art.current.visible = false;
         (art.current.material as MeshBasicMaterial).opacity = 0;
@@ -750,9 +758,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     }
 
     if (landedHere) {
+      // Settled interior light: you are inside the galaxy, surrounded by its
+      // stars — not looking at a switched-off set. Gentle drift, no swirl.
       const u = coreMat.uniforms;
-      u.uOpacity.value = 0;
-      u.uFade.value = 0;
+      u.uOpacity.value = 0.66;
+      u.uFade.value = 1;
+      u.uGather.value = 1;
+      u.uSwirl.value = prefersReducedMotion() ? 0 : 0.16;
+      u.uMorph.value = 0;
+      u.uTime.value = clock.elapsedTime;
+      u.uHover.value = 1;
     }
   });
 
@@ -1047,11 +1062,23 @@ function TempleRig() {
     // Local dive: BirthChat volume hold, or selected-sign galaxy enter.
     const heldSignId = chatting ? state.claim?.signId : shelfOn ? state.session?.signId : undefined;
     const volumeDive = heldSignId && hasVolumeSign(heldSignId) ? 0.35 * PLATE_WIDE : 0;
-    const exploreDive =
-      exploring && galaxyTravel.exploreSignIndex != null
-        ? // Stay in front of the plate while approaching the hub star — don't punch through into empty sky.
-          galaxyTravel.diveBlend * (0.65 + galaxyTravel.galaxyForm * 2.1)
-        : 0;
+    let exploreDive = 0;
+    if (exploring && galaxyTravel.exploreSignIndex != null) {
+      // Close the measured gap to the hub star instead of a fixed distance: the
+      // landing then frames the core the same way on any aspect, and the hub can
+      // never end up behind the lens (which is what left the room dark).
+      const hubGalaxy = getSignGalaxy(TEMPLE_SIGNS[galaxyTravel.exploreSignIndex]!.id);
+      const hubLocal = pointLocalOffset(hubGalaxy, 0, galaxyTravel.galaxyForm);
+      _hub.copy(TEMPLE_STATIONS[galaxyTravel.exploreSignIndex]!);
+      _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+      _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+      _hub.addScaledVector(_camRight, hubLocal.x);
+      _hub.addScaledVector(_camUp, hubLocal.y);
+      _hub.z += hubLocal.z + 0.35;
+      const gap = Math.max(1.2, _cam.distanceTo(_hub) - HUB_STANDOFF);
+      // Hold first (the figure is the subject), then the rush does the flying.
+      exploreDive = gap * (0.55 * galaxyTravel.diveBlend + 0.45 * galaxyTravel.enterRush);
+    }
     const diveTarget = Math.max(volumeDive, exploreDive);
     const snapSkipPose = galaxyTravel.enterSkip === "hold" || galaxyTravel.skipVeil > 0.5;
     // During sign-enter (not BirthChat volume-only), track the curve tightly.
@@ -1103,7 +1130,9 @@ function TempleRig() {
         _cam.x += (_look.x - _cam.x) * pull;
         _cam.y += (_look.y - _cam.y) * (pull * 0.85);
         if (galaxyTravel.explorePhase === "inside") {
-          _look.lerp(_chest, 0.35);
+          // Land looking *at* the hub star — the core is the thing you flew into.
+          // (A heavy pull back toward the corridor pushed the core off-frame.)
+          _look.lerp(_chest, 0.12);
           const lx = galaxyTravel.exploreLookX;
           const ly = galaxyTravel.exploreLookY;
           if (lx !== 0 || ly !== 0) {
@@ -1135,6 +1164,22 @@ function TempleRig() {
       const ease = exploring ? 1 - Math.exp(-d * 1.6) : k;
       camera.position.lerp(_cam, ease);
       camera.lookAt(_look);
+    }
+    if (import.meta.env.DEV && exploring && galaxyTravel.exploreSignIndex != null) {
+      // Dev-only QA probe — lets scripts/qa/enter-capture.mjs measure the dive
+      // (camera → hub distance, framing) instead of eyeballing it.
+      _hubNdc.copy(_hub).project(camera);
+      (window as unknown as { __tys?: unknown }).__tys = {
+        p: +galaxyTravel.exploreProgress.toFixed(4),
+        phase: galaxyTravel.explorePhase,
+        camZ: +camera.position.z.toFixed(3),
+        hubZ: +_hub.z.toFixed(3),
+        camToHub: +camera.position.distanceTo(_hub).toFixed(3),
+        hubNdcX: +_hubNdc.x.toFixed(3),
+        hubNdcY: +_hubNdc.y.toFixed(3),
+        dive: +diveAmount.current.toFixed(3),
+        fov: camera instanceof PerspectiveCamera ? +camera.fov.toFixed(2) : null,
+      };
     }
     if (camera instanceof PerspectiveCamera) {
       camera.far = 2500;
