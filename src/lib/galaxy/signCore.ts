@@ -1,6 +1,7 @@
 import { CanvasTexture, LinearFilter, SRGBColorSpace } from "three";
 import type { SignId } from "@/lib/chart/types";
-import { TEMPLE_SIGNS } from "./temple";
+import { burstParams, burstRayCount, type BurstParams } from "./signBurst";
+import { TEMPLE_SIGNS, type TemplePalette } from "./temple";
 
 /**
  * The galaxy core — the light source at the heart of a sign's galaxy.
@@ -228,4 +229,219 @@ export function getSignCore(id: SignId): CanvasTexture | null {
 export function clearSignCoreCache() {
   for (const tex of cache.values()) tex.dispose();
   cache.clear();
+}
+
+/* ------------------------------------------------------------------ *
+ * Ignition burst — the ray/shock-front pass of the core painter.
+ *
+ * This is the second pass of the same generator: same palette, same seeded
+ * RNG, so all twelve signs get their own burst and none of it is authored
+ * art. It is painted into its *own* canvas rather than into the landing core,
+ * because the core sprite's look is the verified landing (metric M5/M7 in
+ * docs/superpowers/specs/2026-09-15-aries-ignition-handoff-design.md) — the
+ * burst is a new, transient sprite that only exists during the hand-off.
+ * ------------------------------------------------------------------ */
+
+export const BURST_PX = 512;
+
+/** Thin, high-contrast radial rays around a soft additive shock front. */
+function paintBurst(ctx: CanvasRenderingContext2D, s: number, palette: Palette, params: BurstParams, smallGpu: boolean) {
+  const c = s / 2;
+  const rnd = rng(params.seed);
+  const accent = coreAccent(palette);
+  const halo = mixRgb(palette.particle, palette.chest, params.haloWarm);
+  const rays = burstRayCount(params, smallGpu);
+
+  ctx.save();
+  ctx.translate(c, c);
+  ctx.globalCompositeOperation = "lighter";
+
+  // 1 — the ignition halo. This is what fills the frame: the seed galaxy's light
+  //     arriving before any structure resolves.
+  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, c);
+  glow.addColorStop(0, rgbaOf(halo, params.haloAlpha + 0.22));
+  glow.addColorStop(0.12, rgba(accent, params.haloAlpha + 0.06));
+  glow.addColorStop(0.34, rgbaOf(halo, params.haloAlpha * 0.42));
+  glow.addColorStop(0.62, rgba(palette.particle, params.haloAlpha * 0.12));
+  glow.addColorStop(1, rgba(palette.particle, 0));
+  ctx.fillStyle = glow;
+  ctx.fillRect(-c, -c, s, s);
+
+  // 2 — ignition rays: thin, high contrast, radial. Hot white at the root,
+  //     the sign's accent down the length. Each spoke is a small fan of strands
+  //     at slightly different angles, lengths and weights, and every strand
+  //     tapers to a point with its colour falling away over the last third — a
+  //     rake of identical bars that stop square reads as striation, strands that
+  //     die out at their own length read as light.
+  for (let i = 0; i < rays; i++) {
+    const base = (i / rays) * Math.PI * 2;
+    // One lead strand, plus one or two flanks; the uneven count keeps the fan
+    // from marching around the circle like a comb.
+    const strands = 2 + (rnd() < 0.5 ? 1 : 0);
+    for (let k = 0; k < strands; k++) {
+      const lead = k === 0;
+      const ang = base + (rnd() - 0.5) * params.raySpread * (lead ? 1 : 2.2);
+      const reach = lead ? 1 : 0.42 + rnd() * 0.38;
+      const len =
+        c * (params.rayLenMin + rnd() * (params.rayLenMax - params.rayLenMin)) * reach;
+      const w = params.rayWidth * (0.5 + rnd() * 1.0) * (lead ? 1 : 0.55);
+      ctx.save();
+      ctx.rotate(ang);
+      const beam = ctx.createLinearGradient(0, 0, len, 0);
+      // Round-1 body levels: the feathered tip is a shape fix, not a dimmer.
+      beam.addColorStop(0, rgba(palette.chest, 0.75 + rnd() * 0.25));
+      beam.addColorStop(0.22, rgba(accent, 0.5 + rnd() * 0.3));
+      beam.addColorStop(0.62, rgba(accent, 0.16));
+      beam.addColorStop(1, rgba(palette.particle, 0));
+      ctx.fillStyle = beam;
+      // The body keeps near-full width (that is the contrast that makes a ray
+      // read) and collapses to a point only over the last quarter — so the end is
+      // a feather, not a cut. The shoulder and the flank width are jittered so no
+      // two strands end on the same arc.
+      const shoulder = len * (0.72 + rnd() * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(c * 0.04, -w * 0.5);
+      ctx.lineTo(shoulder, -w * (0.36 + rnd() * 0.12));
+      ctx.lineTo(len, 0);
+      ctx.lineTo(shoulder * (0.9 + rnd() * 0.12), w * (0.36 + rnd() * 0.12));
+      ctx.closePath();
+      ctx.fill();
+      // The hot filament in the middle of the ray, so it reads as light, not
+      // paint: bright through its body, fading out over the last third rather
+      // than stopping square.
+      const fil = len * (0.62 + rnd() * 0.24);
+      const filGrad = ctx.createLinearGradient(0, 0, fil, 0);
+      filGrad.addColorStop(0, rgba(palette.chest, 0.62 + rnd() * 0.3));
+      filGrad.addColorStop(0.68, rgba(palette.chest, 0.5 + rnd() * 0.2));
+      filGrad.addColorStop(1, rgba(palette.chest, 0));
+      ctx.fillStyle = filGrad;
+      ctx.beginPath();
+      ctx.moveTo(c * 0.05, -0.7);
+      ctx.lineTo(fil * 0.72, -0.5);
+      ctx.lineTo(fil, 0);
+      ctx.lineTo(fil * 0.72, 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // 3 — sparks thrown off the front.
+  if (params.sparkCount > 0) {
+    ctx.fillStyle = rgba(palette.chest, 0.75);
+    for (let i = 0; i < params.sparkCount; i++) {
+      const a = rnd() * Math.PI * 2;
+      const r = c * (params.rayLenMin * 0.5 + rnd() * 0.5);
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 0.7 + rnd() * 1.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // 4 — the shock front: a soft additive ring, the edge of the blast.
+  for (let band = 0; band < 3; band++) {
+    ctx.beginPath();
+    ctx.arc(0, 0, c * (params.ringRadius + band * 0.045), 0, Math.PI * 2);
+    ctx.lineWidth = params.ringWidth * (1 - band * 0.22);
+    ctx.strokeStyle = rgba(band === 0 ? palette.chest : accent, params.ringAlpha * (1 - band * 0.28));
+    ctx.stroke();
+  }
+
+  // 5 — the seed itself: what the camera then flies into.
+  const hot = ctx.createRadialGradient(0, 0, 0, 0, 0, c * 0.24);
+  hot.addColorStop(0, "rgba(255,252,244,0.98)");
+  hot.addColorStop(0.24, rgba(palette.chest, 0.8));
+  hot.addColorStop(0.6, rgba(accent, 0.36));
+  hot.addColorStop(1, rgba(accent, 0));
+  ctx.fillStyle = hot;
+  ctx.beginPath();
+  ctx.arc(0, 0, c * 0.24, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+/** The short flash: a hot radial quad with a fast falloff. */
+function paintBurstFlash(ctx: CanvasRenderingContext2D, s: number, palette: Palette, params: BurstParams) {
+  const c = s / 2;
+  ctx.save();
+  ctx.translate(c, c);
+  ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, c);
+  g.addColorStop(0, "rgba(255,255,252,1)");
+  g.addColorStop(0.08, rgba(palette.chest, 0.95));
+  g.addColorStop(0.2, rgba(palette.chest, 0.5));
+  g.addColorStop(0.42, rgba(coreAccent(palette), 0.22));
+  g.addColorStop(0.72, rgba(palette.particle, 0.06));
+  g.addColorStop(1, rgba(palette.particle, 0));
+  ctx.fillStyle = g;
+  ctx.fillRect(-c, -c, s, s);
+  // A quick four-point bloom so the flash has a shape, not just a disc.
+  for (let i = 0; i < 4; i++) {
+    ctx.save();
+    ctx.rotate((i / 4) * Math.PI * 2 + params.seed * 1e-4);
+    const beam = ctx.createLinearGradient(0, 0, c, 0);
+    beam.addColorStop(0, rgba(palette.chest, 0.55));
+    beam.addColorStop(1, rgba(palette.chest, 0));
+    ctx.fillStyle = beam;
+    ctx.fillRect(0, -2, c, 4);
+    ctx.restore();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+const burstCache = new Map<string, CanvasTexture>();
+
+function canvasTexture(size: number, paint: (ctx: CanvasRenderingContext2D) => void): CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d", { alpha: true });
+  if (!ctx) return null;
+  paint(ctx);
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  tex.minFilter = LinearFilter;
+  tex.magFilter = LinearFilter;
+  tex.generateMipmaps = false;
+  return tex;
+}
+
+function signPalette(id: SignId): TemplePalette {
+  const sign = TEMPLE_SIGNS.find((s) => s.id === id) ?? TEMPLE_SIGNS[0]!;
+  return sign.palette;
+}
+
+/** Cached per-sign burst sprite: rays + shock front, from palette + seed. */
+export function getSignBurst(id: SignId, smallGpu = false): CanvasTexture | null {
+  const key = `${id}:${smallGpu ? "small" : "full"}`;
+  const hit = burstCache.get(key);
+  if (hit) return hit;
+  const palette = signPalette(id);
+  const params = burstParams(id, palette);
+  const tex = canvasTexture(BURST_PX, (ctx) => paintBurst(ctx, BURST_PX, palette, params, smallGpu));
+  if (!tex) return null;
+  burstCache.set(key, tex);
+  return tex;
+}
+
+/** Cached per-sign flash sprite (skipped on small GPUs by the caller). */
+export function getSignBurstFlash(id: SignId): CanvasTexture | null {
+  const key = `${id}:flash`;
+  const hit = burstCache.get(key);
+  if (hit) return hit;
+  const palette = signPalette(id);
+  const params = burstParams(id, palette);
+  const tex = canvasTexture(BURST_PX, (ctx) => paintBurstFlash(ctx, BURST_PX, palette, params));
+  if (!tex) return null;
+  burstCache.set(key, tex);
+  return tex;
+}
+
+export function clearSignBurstCache() {
+  for (const tex of burstCache.values()) tex.dispose();
+  burstCache.clear();
 }

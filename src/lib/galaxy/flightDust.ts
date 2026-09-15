@@ -85,9 +85,21 @@ attribute float aPhase;
 uniform float uTime;
 uniform float uOpacity;
 uniform float uPx;
+uniform float uImpulse;
+uniform float uImpulseAmp;
+uniform float uImpulseSpan;
 varying float vAlpha;
 void main() {
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  // Ignition impulse: the shock front blows the dust ring outward as it passes,
+  // so the debris the galaxy forms from is the debris the blast threw.
+  vec3 p = position;
+  float wave = uImpulse * (0.5 + aMag);
+  if (wave > 0.0001) {
+    float r = max(0.4, length(position.xy));
+    p.xy += (position.xy / r) * wave * uImpulseAmp;
+    p.z -= wave * uImpulseAmp * uImpulseSpan;
+  }
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
   float twinkle = 0.82 + 0.18 * sin(uTime * (0.7 + mod(aPhase, 3.0) * 0.3) + aPhase);
   vAlpha = uOpacity * aMag * twinkle;
@@ -115,6 +127,10 @@ export function makeDustMaterial(tint: string, pxScale = 1) {
       uOpacity: { value: 0 },
       uPx: { value: pxScale },
       uTint: { value: new Color(tint) },
+      /** Shock-front impulse: 0 at rest, 1 at the burst peak (see signBurst). */
+      uImpulse: { value: 0 },
+      uImpulseAmp: { value: 0 },
+      uImpulseSpan: { value: 0 },
     },
     vertexShader: DUST_VERT,
     fragmentShader: DUST_FRAG,

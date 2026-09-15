@@ -17,10 +17,19 @@ import {
   PerspectiveCamera,
   Points,
   SRGBColorSpace,
+  Vector2,
   Vector3,
 } from "three";
 import { isSmallGpu } from "@/lib/gpu";
 import { CONSTELLATIONS, ELEMENT_TINT, pairFigures } from "@/lib/galaxy/constellations";
+import {
+  PLATE_DISSOLVE_GLSL,
+  burstParams,
+  plateDissolveUniforms,
+  plateHubUv,
+  type PlateDissolveUniforms,
+} from "@/lib/galaxy/signBurst";
+import type { SignId } from "@/lib/chart/types";
 import {
   HOLD_FLY,
   aimedIndex,
@@ -97,6 +106,7 @@ import {
   interiorCloud,
   primeSignVolumes,
   volumeChest,
+  type SignVolume,
 } from "@/lib/galaxy/signVolume";
 import { buildBirthNebula, makeNebulaMaterial } from "@/lib/galaxy/nebula";
 import { makeStarSprite } from "@/lib/galaxy/celestial";
@@ -121,7 +131,7 @@ import { CelestialSky } from "./CelestialSky";
 import { CornerGalaxies } from "./CornerGalaxies";
 import { SignShell } from "./SignShell";
 import { SignGalaxyField, pointLocalOffset } from "./SignGalaxyField";
-import { landingBiasNdc } from "@/lib/galaxy/signAlign";
+import { getFigureMatch, landingBiasNdc } from "@/lib/galaxy/signAlign";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const DUST_N = SMALL ? 180 : 320;
@@ -196,6 +206,26 @@ function makeCircleTexture() {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
   return finishTexture(new CanvasTexture(canvas));
+}
+
+type PlatePlan = { u: number; v: number; aspect: number };
+
+/**
+ * Where the painting ignites, in plate UV.
+ *
+ * The hub star is the seed inside the figure's body, and `figureMatch` is the
+ * transform signAlign measures at runtime to lay the live figure exactly over the
+ * painted one — so this is measured, never guessed, and it works for any sign.
+ * Called at most once per enter (the caller caches it).
+ */
+function measurePlatePlan(signId: SignId, vol: SignVolume | null): PlatePlan | null {
+  if (!vol) return null;
+  const galaxy = getSignGalaxy(signId);
+  const match = getFigureMatch(signId, galaxy);
+  const hub = galaxy.points[0];
+  if (!match || !hub) return null;
+  const uv = plateHubUv(match, hub, PLATE_WIDE, vol.aspect);
+  return { u: uv.u, v: uv.v, aspect: vol.aspect };
 }
 
 export function GalaxyIntro() {
@@ -491,6 +521,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const group = useRef<Group>(null);
   const cores = useRef<Points>(null);
   const art = useRef<Mesh>(null);
+  const plateMat = useRef<MeshBasicMaterial>(null);
+  const platePlan = useRef<PlatePlan | null>(null);
+  const plateBurst = useRef<
+    | (PlateDissolveUniforms & {
+        uDissolve: { value: number };
+        uHubUv: { value: Vector2 };
+        uAspect: { value: number };
+      })
+    | null
+  >(null);
   const shellWrap = useRef<Group>(null);
   const shown = useRef(false);
   const hydrated = useRef(false);
@@ -562,6 +602,56 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     });
     shellMats.current = mats;
   });
+
+  /**
+   * The painted plate is consumed outward from its hub during the enter. The mask
+   * is a shader pass on the existing plate material — the plate's own opacity path
+   * is untouched, this only multiplies the sampled alpha by the erode mask, so the
+   * verified plate fade still owns when the painting dies.
+   */
+  useEffect(() => {
+    const mat = plateMat.current;
+    if (!mat || plateBurst.current) return;
+    const params = burstParams(sign.id, sign.palette);
+    const uniforms = {
+      uDissolve: { value: 0 },
+      uHubUv: { value: new Vector2(0.5, 0.5) },
+      uAspect: { value: 16 / 9 },
+      // Mask numbers (and the seed derivation) come from signBurst — the same
+      // ones dissolveMaskDistance is tested with. Never hand-build these.
+      ...plateDissolveUniforms(params),
+    };
+    plateBurst.current = uniforms;
+    mat.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", "#include <common>\nvarying vec2 vTysPlateUv;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvTysPlateUv = uv;");
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          [
+            "#include <common>",
+            "varying vec2 vTysPlateUv;",
+            "uniform float uDissolve;",
+            "uniform vec2 uHubUv;",
+            "uniform float uSoft;",
+            "uniform float uNoise;",
+            "uniform float uSeed;",
+            "uniform float uRagged;",
+            "uniform float uRadius;",
+            "uniform float uAspect;",
+          ].join("\n"),
+        )
+        .replace(
+          "#include <map_fragment>",
+          ["#include <map_fragment>", "{", PLATE_DISSOLVE_GLSL, "}"].join("\n"),
+        );
+    };
+    // Only this material carries the dissolve; keep the program cache honest.
+    mat.customProgramCacheKey = () => "tys-plate-dissolve";
+    mat.needsUpdate = true;
+  }, [sign.id, sign.palette]);
 
   useFrame(({ clock, camera }, dt) => {
     const g = group.current;
@@ -679,6 +769,20 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
 
     const landedHere = exploringHere && insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
 
+    // Ignition dissolve: the painting is eaten outward from its hub. Data-driven —
+    // the hub lands in plate UV via the same measured alignment the field uses.
+    const pb = plateBurst.current;
+    if (pb) {
+      const live = exploringHere && galaxyTravel.dissolve > 0.001 ? galaxyTravel.dissolve : 0;
+      if (live > 0 && !platePlan.current) platePlan.current = measurePlatePlan(sign.id, volEarly);
+      const plan = platePlan.current;
+      if (plan) {
+        (pb.uHubUv.value as Vector2).set(plan.u, plan.v);
+        pb.uAspect.value = plan.aspect;
+      }
+      pb.uDissolve.value = live;
+    }
+
     if (landedHere) {
       // Inside: the star volume is the room — keep it lit. The painted plate and
       // the 3D shell are the approach shells and go away (the camera is past them).
@@ -688,6 +792,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         art.current.visible = false;
         (art.current.material as MeshBasicMaterial).opacity = 0;
       }
+      if (exploringHere) galaxyTravel.plateOpacity = 0;
       if (shellWrap.current) shellWrap.current.visible = false;
     } else {
       if (art.current && artTex && !useVolume) {
@@ -707,6 +812,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         art.current.visible = plateOp > 0.04;
         art.current.scale.set(wide, wide / aspect, 1);
         mat.opacity = plateOp;
+        // Measured evidence for M11: what the entered sign's plate is actually
+        // drawn at. Only the entered station publishes, so a neighbour's frame
+        // can't clobber the value the QA probe reads.
+        if (exploringHere) galaxyTravel.plateOpacity = plateOp;
         mat.map = artTex;
         mat.depthTest = false;
         mat.alphaTest = 0.04;
@@ -810,6 +919,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       >
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
+          ref={plateMat}
           map={artTex ?? undefined}
           color="#ffffff"
           transparent

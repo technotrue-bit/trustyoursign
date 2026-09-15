@@ -1,0 +1,611 @@
+f5954da fix(galaxy): lock land HUD lower-third and remove debug ingest
+996aa7d fix(galaxy): hard-gate station cloud and plate when inside
+314c198 fix(galaxy): hide SignDisk and corner galaxies when inside
+e66a043 feat(galaxy): inside hard-gate helper for land leftover hide
+
+## Stat
+
+ src/components/overlay/SignGalaxyHud.tsx | 129 +++++++++++-----------
+ src/components/scene/CornerGalaxies.tsx  |   7 +-
+ src/components/scene/GalaxyIntro.tsx     | 177 +++++++++++++++++--------------
+ src/lib/galaxy/signGalaxy.test.ts        |  11 ++
+ src/lib/galaxy/signGalaxy.ts             |   5 +
+ src/styles.css                           |  46 ++++++++
+ 6 files changed, 236 insertions(+), 139 deletions(-)
+
+## Diff
+
+diff --git a/src/components/overlay/SignGalaxyHud.tsx b/src/components/overlay/SignGalaxyHud.tsx
+index 22664aa..f6f9da6 100644
+--- a/src/components/overlay/SignGalaxyHud.tsx
++++ b/src/components/overlay/SignGalaxyHud.tsx
+@@ -71,21 +71,21 @@ export function SignGalaxyHud() {
+           <AuthSlot />
+         </div>
+       ) : null}
+ 
+       <div
+         aria-hidden={!inside}
+         inert={!inside}
+         className={cn(
+-          "absolute inset-0 flex flex-col justify-between px-4 pt-[max(1.25rem,var(--safe-top))] pb-[max(1.25rem,var(--safe-bottom))] transition-opacity duration-[350ms]",
++          "absolute inset-0 flex flex-col px-4 pt-[max(1.25rem,var(--safe-top))] pb-[max(1.25rem,var(--safe-bottom))] transition-opacity duration-[350ms]",
+           inside ? "opacity-100" : "pointer-events-none opacity-0",
+         )}
+       >
+-        <div className="relative flex items-start justify-between gap-3">
++        <div className="relative flex shrink-0 items-start justify-between gap-3">
+           <button
+             type="button"
+             onClick={() => exitSignGalaxy()}
+             className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+           >
+             Back
+           </button>
+           <div className="text-right">
+@@ -96,92 +96,99 @@ export function SignGalaxyHud() {
+           </div>
+           {!signedIn ? (
+             <div className="pointer-events-auto absolute top-0 right-0 -translate-y-1">
+               <AuthSlot />
+             </div>
+           ) : null}
+         </div>
+ 
+-        <div className="mx-auto w-full max-w-md text-center">
++        <div className="min-h-0 flex-1" aria-hidden />
++
++        <div
++          className={cn(
++            "sign-galaxy-lower flex shrink-0 flex-col items-center gap-4 transition-[transform,opacity] duration-500 ease-out",
++            inside ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0",
++          )}
++        >
+           {inside && point ? (
+-            <>
+-              <p className="text-[0.65rem] tracking-[0.28em] text-fg-subtle uppercase">
++            <div className="sign-galaxy-copy mx-auto w-full max-w-md text-center">
++              <p className="sign-galaxy-copy-kicker text-[0.65rem] tracking-[0.28em] uppercase">
+                 {point.isHub
+                   ? hubTone
+                   : lockedPoint
+                     ? "Sealed"
+                     : point.purpose.kind === "hub"
+                       ? "Star"
+                       : insightToneLabel(point.purpose.kind)}
+               </p>
+-              <h3 className="font-display mt-1 text-xl leading-snug font-medium tracking-tight text-fg italic md:text-2xl">
++              <h3 className="sign-galaxy-copy-title font-display mt-1 text-xl leading-snug font-medium tracking-tight italic md:text-2xl">
+                 {point.isHub ? hubTitle : lockedPoint ? "Still sealed" : point.purpose.title}
+               </h3>
+-              <p className="mt-2 text-sm leading-relaxed text-fg-muted md:text-base">
++              <p className="sign-galaxy-copy-body mt-2 text-sm leading-relaxed md:text-base">
+                 <Gloss card={false}>
+                   {point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}
+                 </Gloss>
+               </p>
+-            </>
+-          ) : null}
+-        </div>
+-
+-        <div className="flex flex-col items-center gap-3">
+-          {inside ? (
+-            <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-2">
+-              {galaxy.points.map((p, i) => {
+-                const locked = !p.isHub && !unlocked;
+-                return (
+-                  <button
+-                    key={p.id}
+-                    type="button"
+-                    disabled={locked}
+-                    onClick={() => {
+-                      if (locked) return;
+-                      seekGalaxyPoint(i);
+-                    }}
+-                    className={cn(
+-                      "min-h-10 min-w-10 rounded-sm px-2 text-[0.65rem] tracking-[0.14em] uppercase",
+-                      i === explore.pointIndex
+-                        ? "bg-fg/10 text-fg"
+-                        : locked
+-                          ? "text-fg-subtle/35"
+-                          : "text-fg-subtle hover:text-fg",
+-                    )}
+-                    aria-label={locked ? `${p.purpose.title} (locked)` : p.purpose.title}
+-                  >
+-                    {p.isHub ? "ΓùÅ" : locked ? "Γùî" : "Γùï"}
+-                  </button>
+-                );
+-              })}
+             </div>
+           ) : null}
+-          {inside && point?.isHub && lockReason === "auth" ? (
+-            <a
+-              href="/login"
+-              className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
+-            >
+-              Sign in / Sign up
+-            </a>
+-          ) : null}
+-          {inside && point?.isHub && lockReason === "chart" ? (
+-            <button
+-              type="button"
+-              onClick={() => openClaim(sign.id)}
+-              className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent"
+-            >
+-              Begin birth chart
+-            </button>
+-          ) : null}
+-          {inside && unlocked ? (
+-            <p className="max-w-sm px-2 text-center text-[0.7rem] tracking-wide text-fg-subtle">
+-              Your galaxy is open. Each star holds insight, spice, horror, and warning.
+-            </p>
+-          ) : null}
++
++          <div className="flex flex-col items-center gap-3">
++            {inside ? (
++              <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-2">
++                {galaxy.points.map((p, i) => {
++                  const locked = !p.isHub && !unlocked;
++                  return (
++                    <button
++                      key={p.id}
++                      type="button"
++                      disabled={locked}
++                      onClick={() => {
++                        if (locked) return;
++                        seekGalaxyPoint(i);
++                      }}
++                      className={cn(
++                        "min-h-10 min-w-10 rounded-sm px-2 text-[0.65rem] tracking-[0.14em] uppercase",
++                        i === explore.pointIndex
++                          ? "bg-fg/10 text-fg"
++                          : locked
++                            ? "text-fg-subtle/35"
++                            : "text-fg-subtle hover:text-fg",
++                      )}
++                      aria-label={locked ? `${p.purpose.title} (locked)` : p.purpose.title}
++                    >
++                      {p.isHub ? "ΓùÅ" : locked ? "Γùî" : "Γùï"}
++                    </button>
++                  );
++                })}
++              </div>
++            ) : null}
++            {inside && point?.isHub && lockReason === "auth" ? (
++              <a
++                href="/login"
++                className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
++              >
++                Sign in / Sign up
++              </a>
++            ) : null}
++            {inside && point?.isHub && lockReason === "chart" ? (
++              <button
++                type="button"
++                onClick={() => openClaim(sign.id)}
++                className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent"
++              >
++                Begin birth chart
++              </button>
++            ) : null}
++            {inside && unlocked ? (
++              <p className="sign-galaxy-copy-body max-w-sm px-2 text-center text-[0.7rem] tracking-wide">
++                Your galaxy is open. Each star holds insight, spice, horror, and warning.
++              </p>
++            ) : null}
++          </div>
+         </div>
+       </div>
+ 
+       {explore.skipVeil > 0.001 ? (
+         <div
+           aria-hidden
+           className="pointer-events-none absolute inset-0 z-[70] bg-black"
+           style={{ opacity: explore.skipVeil }}
+diff --git a/src/components/scene/CornerGalaxies.tsx b/src/components/scene/CornerGalaxies.tsx
+index dc1d6e5..502fa52 100644
+--- a/src/components/scene/CornerGalaxies.tsx
++++ b/src/components/scene/CornerGalaxies.tsx
+@@ -1,15 +1,16 @@
+ import { useEffect, useMemo, useRef } from "react";
+ import { useFrame, useThree } from "@react-three/fiber";
+ import { Color, PerspectiveCamera } from "three";
+ import { exploringSign, galaxyTravel } from "@/lib/galaxy/travel";
+ import { introPlaying, introChrome } from "@/lib/galaxy/intro";
+ import { stationFromT } from "@/lib/galaxy/temple";
+ import { buildCornerGalaxies, makeCornerMaterial, paletteForSign } from "@/lib/galaxy/corners";
++import { insideHardGateHidesLeftovers } from "@/lib/galaxy/signGalaxy";
+ 
+ function noopRaycast() {
+   /* corners never steal picks */
+ }
+ 
+ function copyPal(src: Color[], dst: Color[]) {
+   for (let i = 0; i < 4; i++) dst[i]!.copy(src[i]!);
+ }
+@@ -63,17 +64,21 @@ export function CornerGalaxies() {
+     const bArr = mat.uniforms.uColorB.value as Color[];
+     for (let k = 0; k < 4; k++) {
+       aArr[k]!.copy(fromA[k]!).lerp(pal.a[k]!, e);
+       bArr[k]!.copy(fromB[k]!).lerp(pal.b[k]!, e);
+     }
+     mat.uniforms.uMix.value = e;
+     mat.uniforms.uTime.value = clock.elapsedTime;
+     mat.uniforms.uPixelRatio.value = gl.getPixelRatio();
+-    const vis = (introPlaying() ? introChrome() : 1) * (exploringSign() ? galaxyTravel.worldFade : 1);
++    const gateOff = insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
++    const vis =
++      (introPlaying() ? introChrome() : 1) *
++      (exploringSign() ? galaxyTravel.worldFade : 1) *
++      (gateOff ? 0 : 1);
+     const fade = mat.uniforms.uFade.value as number[];
+     fade[0] = vis;
+     fade[1] = vis;
+     fade[2] = vis;
+     fade[3] = vis;
+     mat.uniforms.uMaxSize.value = 9;
+     mesh.visible = vis > 0.02;
+   });
+diff --git a/src/components/scene/GalaxyIntro.tsx b/src/components/scene/GalaxyIntro.tsx
+index fe39ea2..247dc4a 100644
+--- a/src/components/scene/GalaxyIntro.tsx
++++ b/src/components/scene/GalaxyIntro.tsx
+@@ -36,17 +36,17 @@ import {
+   publishTravel,
+   skipBirth,
+   skipEnterGalaxy,
+   stepBirth,
+   stepExplore,
+   stepSeek,
+   stepZoom,
+ } from "@/lib/galaxy/travel";
+-import { enterHubSettle, getSignGalaxy } from "@/lib/galaxy/signGalaxy";
++import { enterHubSettle, getSignGalaxy, insideHardGateHidesLeftovers } from "@/lib/galaxy/signGalaxy";
+ import {
+   bootIntro,
+   introCam,
+   introCanSkip,
+   introField,
+   introPlaying,
+   introAries,
+   skipIntro,
+@@ -259,17 +259,22 @@ function SignDisk() {
+     const dist = Math.abs(galaxyTravel.t - stationT(idx));
+     const gather = 1 - Math.min(1, dist / 0.07);
+     const intro = introPlaying() ? introAries() : 1;
+     const veil = useGalaxy.getState().introVeil;
+     const state = useSessionStore.getState();
+     const chatting = state.claim !== null && state.session === null;
+     const picked = chatting && state.claim?.signId === sign.id;
+     const world = exploringSign() ? galaxyTravel.worldFade : 1;
+-    const show = gather > 0.32 && intro > 0.4 && veil < 0.45 && world > 0.08;
++    const show =
++      gather > 0.32 &&
++      intro > 0.4 &&
++      veil < 0.45 &&
++      world > 0.08 &&
++      !insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
+     g.visible = show;
+     if (!show) {
+       sim.mat.uniforms.uFade.value = 0;
+       return;
+     }
+     const cam = camera as PerspectiveCamera;
+     _sitCam.copy(sit);
+     cam.worldToLocal(_sitCam);
+@@ -591,96 +596,114 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
+     const along = smooth(1 - Math.min(1, dist / 0.072));
+     const gather = held ? 1 : introPlaying() && index === 0 ? Math.max(0.02, arrive) : along;
+     const plateReveal = held
+       ? 1
+       : introPlaying() && index === 0
+         ? Math.max(0, (arrive - 0.12) / 0.62)
+         : smooth(Math.max(0, (gather - 0.52) / 0.48));
+ 
+-    if (art.current && artTex && !useVolume) {
+-      const mat = art.current.material as MeshBasicMaterial;
+-      const plateOn = Boolean(artTex && (artReady(artTex) || ready));
+-      const bornIn = plateReveal;
+-      // Plate opacity via tested helper ΓÇö fully opaque during BirthChat, no plateMorphFade.
+-      const plateOp =
+-        computePlateOpacity({
+-          plateOn,
+-          held,
+-          focused,
+-          fade,
+-          bornIn,
+-          morphLevel: morphLevel.current,
+-        }) * (exploringHere ? galaxyTravel.plateFade : 1);
+-      art.current.visible = plateOp > 0.04;
+-      art.current.scale.set(wide, wide / aspect, 1);
+-      mat.opacity = plateOp;
+-      mat.map = artTex;
+-      mat.depthTest = false;
+-      mat.alphaTest = 0.04;
+-      if (plateOn && !shown.current) {
+-        artTex.needsUpdate = true;
+-        mat.needsUpdate = true;
+-        shown.current = true;
++    const landedHere =
++      exploringHere && insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
++
++    if (landedHere) {
++      mesh.visible = false;
++      if (art.current) {
++        art.current.visible = false;
++        (art.current.material as MeshBasicMaterial).opacity = 0;
+       }
+-    }
+-    if (shellWrap.current) {
+-      const shellOp = exploringHere ? galaxyTravel.plateFade : 1;
+-      shellWrap.current.visible = shellOp > 0.04;
+-      if (shellWrap.current.visible) {
+-        shellWrap.current.traverse((obj) => {
+-          const mat = (obj as Mesh).material as { opacity?: number; transparent?: boolean } | undefined;
+-          if (mat && typeof mat.opacity === "number") {
+-            mat.transparent = true;
+-            mat.opacity = 0.94 * shellOp;
+-          }
+-        });
++      if (shellWrap.current) shellWrap.current.visible = false;
++    } else {
++      if (art.current && artTex && !useVolume) {
++        const mat = art.current.material as MeshBasicMaterial;
++        const plateOn = Boolean(artTex && (artReady(artTex) || ready));
++        const bornIn = plateReveal;
++        // Plate opacity via tested helper ΓÇö fully opaque during BirthChat, no plateMorphFade.
++        const plateOp =
++          computePlateOpacity({
++            plateOn,
++            held,
++            focused,
++            fade,
++            bornIn,
++            morphLevel: morphLevel.current,
++          }) * (exploringHere ? galaxyTravel.plateFade : 1);
++        art.current.visible = plateOp > 0.04;
++        art.current.scale.set(wide, wide / aspect, 1);
++        mat.opacity = plateOp;
++        mat.map = artTex;
++        mat.depthTest = false;
++        mat.alphaTest = 0.04;
++        if (plateOn && !shown.current) {
++          artTex.needsUpdate = true;
++          mat.needsUpdate = true;
++          shown.current = true;
++        }
++      }
++      if (shellWrap.current) {
++        const shellOp = exploringHere ? galaxyTravel.plateFade : 1;
++        shellWrap.current.visible = shellOp > 0.04;
++        if (shellWrap.current.visible) {
++          shellWrap.current.traverse((obj) => {
++            const mat = (obj as Mesh).material as { opacity?: number; transparent?: boolean } | undefined;
++            if (mat && typeof mat.opacity === "number") {
++              mat.transparent = true;
++              mat.opacity = 0.94 * shellOp;
++            }
++          });
++        }
+       }
+-    }
+ 
+-    if (!focused && !incoming && !held && !exploringHere) {
+-      mesh.visible = false;
+-      return;
+-    }
+-    if (introPlaying() && index === 0 && introAries() < 0.1) {
+-      mesh.visible = false;
+-      return;
++      if (!focused && !incoming && !held && !exploringHere) {
++        mesh.visible = false;
++        return;
++      }
++      if (introPlaying() && index === 0 && introAries() < 0.1) {
++        mesh.visible = false;
++        return;
++      }
++      mesh.visible = true;
++      const morphTarget = picked ? 1 : 0;
++      // Faster in (star formation feels snappy), slower out (dissolve back gracefully)
++      const morphRate = prefersReducedMotion() ? 20 : picked ? 1.8 : 1.2;
++      morphLevel.current += (morphTarget - morphLevel.current) * Math.min(1, dt * morphRate);
++      const ml = morphLevel.current;
++      const u = coreMat.uniforms;
++      u.uTime.value = clock.elapsedTime;
++      u.uGather.value = gather;
++      u.uWide.value = wide;
++      u.uTall.value = wide / aspect;
++      u.uMorph.value = ml;
++      // Group slide handles X positioning; per-star bias causes double-shift
++      u.uGlyphBiasX.value = 0;
++      // Swirl dampens as morph settles; halo/spiral fade so glyph reads clean
++      u.uSwirl.value = prefersReducedMotion() ? 0 : 1 - ml * 0.9;
++      u.uFade.value = fade;
++      u.uHover.value = galaxyTravel.ptrOn && focused ? 1.12 : 1;
++      u.uPxScale.value = SMALL ? 0.9 : 1;
++      u.uBaseSize.value = SMALL ? 2.6 : 2.05;
++      // Boost opacity when forming glyph so stars are crisp and visible
++      const formBoost = exploringHere ? 0.35 + galaxyTravel.galaxyForm * 0.85 : 1;
++      u.uOpacity.value = (0.62 + fade * 0.32) * (1 + ml * 0.55) * formBoost;
++      // Dissolving plate: keep animal gather high; swirl eases as galaxy forms.
++      if (exploringHere) {
++        u.uGather.value = Math.max(gather, 0.72 + galaxyTravel.galaxyForm * 0.28);
++        u.uSwirl.value = prefersReducedMotion()
++          ? 0
++          : Math.max(0, (1 - ml * 0.9) * (1 - galaxyTravel.galaxyForm * 0.85));
++        u.uMorph.value = ml * (1 - galaxyTravel.galaxyForm);
++      }
++      (u.uTint.value as Color).copy(tint);
+     }
+-    mesh.visible = true;
+-    const morphTarget = picked ? 1 : 0;
+-    // Faster in (star formation feels snappy), slower out (dissolve back gracefully)
+-    const morphRate = prefersReducedMotion() ? 20 : picked ? 1.8 : 1.2;
+-    morphLevel.current += (morphTarget - morphLevel.current) * Math.min(1, dt * morphRate);
+-    const ml = morphLevel.current;
+-    const u = coreMat.uniforms;
+-    u.uTime.value = clock.elapsedTime;
+-    u.uGather.value = gather;
+-    u.uWide.value = wide;
+-    u.uTall.value = wide / aspect;
+-    u.uMorph.value = ml;
+-    // Group slide handles X positioning; per-star bias causes double-shift
+-    u.uGlyphBiasX.value = 0;
+-    // Swirl dampens as morph settles; halo/spiral fade so glyph reads clean
+-    u.uSwirl.value = prefersReducedMotion() ? 0 : 1 - ml * 0.9;
+-    u.uFade.value = fade;
+-    u.uHover.value = galaxyTravel.ptrOn && focused ? 1.12 : 1;
+-    u.uPxScale.value = SMALL ? 0.9 : 1;
+-    u.uBaseSize.value = SMALL ? 2.6 : 2.05;
+-    // Boost opacity when forming glyph so stars are crisp and visible
+-    const formBoost = exploringHere ? 0.35 + galaxyTravel.galaxyForm * 0.85 : 1;
+-    u.uOpacity.value = (0.62 + fade * 0.32) * (1 + ml * 0.55) * formBoost;
+-    // Dissolving plate: keep animal gather high; swirl eases as galaxy forms.
+-    if (exploringHere) {
+-      u.uGather.value = Math.max(gather, 0.72 + galaxyTravel.galaxyForm * 0.28);
+-      u.uSwirl.value = prefersReducedMotion()
+-        ? 0
+-        : Math.max(0, (1 - ml * 0.9) * (1 - galaxyTravel.galaxyForm * 0.85));
+-      u.uMorph.value = ml * (1 - galaxyTravel.galaxyForm);
++
++    if (landedHere) {
++      const u = coreMat.uniforms;
++      u.uOpacity.value = 0;
++      u.uFade.value = 0;
+     }
+-    (u.uTint.value as Color).copy(tint);
+   });
+ 
+   return (
+     <group ref={group} frustumCulled={false}>
+       <mesh
+         onClick={(e) => {
+           e.stopPropagation();
+           pick();
+diff --git a/src/lib/galaxy/signGalaxy.test.ts b/src/lib/galaxy/signGalaxy.test.ts
+index 273eabd..2696f48 100644
+--- a/src/lib/galaxy/signGalaxy.test.ts
++++ b/src/lib/galaxy/signGalaxy.test.ts
+@@ -6,16 +6,17 @@ import {
+   buildSignGalaxy,
+   clearSignGalaxyCache,
+   enterDive,
+   enterGalaxyForm,
+   enterHubSettle,
+   enterPlateFade,
+   enterWorldFade,
+   getSignGalaxy,
++  insideHardGateHidesLeftovers,
+   pickMajorStarIndices,
+ } from "./signGalaxy";
+ 
+ describe("signGalaxy", () => {
+   it("builds a galaxy for every sign from animal stars", () => {
+     clearSignGalaxyCache();
+     for (const c of CONSTELLATIONS) {
+       const g = buildSignGalaxy(c.id);
+@@ -68,8 +69,18 @@ describe("signGalaxy", () => {
+     assert.ok(enterHubSettle(0.35) > 0.1);
+     // Deep dive: plate nearly gone; form and dive complete.
+     assert.ok(enterPlateFade(0.78) < 0.05);
+     assert.ok(Math.abs(enterGalaxyForm(1) - 1) < 0.02);
+     assert.ok(enterDive(0.82) > 0.98);
+     assert.ok(Math.abs(enterHubSettle(1) - 1) < 0.02);
+   });
+ });
++
++describe("insideHardGateHidesLeftovers", () => {
++  it("hides leftovers only when inside", () => {
++    assert.equal(insideHardGateHidesLeftovers("idle"), false);
++    assert.equal(insideHardGateHidesLeftovers("fading"), false);
++    assert.equal(insideHardGateHidesLeftovers("diving"), false);
++    assert.equal(insideHardGateHidesLeftovers("inside"), true);
++    assert.equal(insideHardGateHidesLeftovers("exiting"), false);
++  });
++});
+diff --git a/src/lib/galaxy/signGalaxy.ts b/src/lib/galaxy/signGalaxy.ts
+index c78851f..69642f8 100644
+--- a/src/lib/galaxy/signGalaxy.ts
++++ b/src/lib/galaxy/signGalaxy.ts
+@@ -270,8 +270,13 @@ export function enterGalaxyForm(progress: number) {
+ export function enterDive(progress: number) {
+   return smooth01(Math.max(0, Math.min(1, (progress - 0.05) / (0.82 - 0.05))));
+ }
+ 
+ /** Look/approach bias toward the hub star ΓÇö starts early so the dive reads as "into that star". */
+ export function enterHubSettle(progress: number) {
+   return smooth01(Math.max(0, Math.min(1, (progress - 0.12) / (1 - 0.12))));
+ }
++
++/** Corridor leftovers (disk, corners, station cloud, plate) hard-off after land. */
++export function insideHardGateHidesLeftovers(phase: ExplorePhase): boolean {
++  return phase === "inside";
++}
+diff --git a/src/styles.css b/src/styles.css
+index c2b1836..0a3a1d4 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -266,16 +266,62 @@
+ .galaxy-chrome {
+   opacity: 0;
+ }
+ 
+ .galaxy-chrome[style*="opacity"] {
+   animation: none;
+ }
+ 
++/* Sign-galaxy explore copy ΓÇö lower stack, readable over dense starfield */
++.sign-galaxy-copy {
++  position: relative;
++  isolation: isolate;
++  padding: 0.85rem 1rem 1rem;
++}
++
++.sign-galaxy-copy::before {
++  content: "";
++  pointer-events: none;
++  position: absolute;
++  z-index: -1;
++  inset: -0.5rem -1.25rem -0.75rem;
++  border-radius: 1.25rem;
++  background: radial-gradient(
++    ellipse 78% 70% at 50% 55%,
++    rgba(8, 7, 6, 0.72) 0%,
++    rgba(8, 7, 6, 0.42) 48%,
++    rgba(8, 7, 6, 0) 78%
++  );
++}
++
++.sign-galaxy-copy-kicker {
++  color: color-mix(in oklab, var(--color-fg-muted) 88%, #efe8dc);
++  text-shadow:
++    0 0 10px rgba(8, 7, 6, 0.9),
++    0 1px 3px rgba(8, 7, 6, 0.85),
++    0 0 18px rgba(8, 7, 6, 0.55);
++}
++
++.sign-galaxy-copy-title {
++  color: #f5efe3;
++  text-shadow:
++    0 0 12px rgba(8, 7, 6, 0.92),
++    0 1px 5px rgba(8, 7, 6, 0.85),
++    0 0 22px rgba(8, 7, 6, 0.5);
++}
++
++.sign-galaxy-copy-body {
++  color: color-mix(in oklab, #efe8dc 86%, var(--color-fg-muted));
++  text-shadow:
++    0 0 10px rgba(8, 7, 6, 0.9),
++    0 1px 4px rgba(8, 7, 6, 0.82),
++    0 0 16px rgba(8, 7, 6, 0.48);
++}
++
+ .sign-claim {
+   position: relative;
+   isolation: isolate;
+   border-radius: 999px;
+   border: 1px solid color-mix(in oklab, var(--color-fg) 14%, transparent);
+   background: color-mix(in oklab, var(--color-bg) 62%, transparent);
+   box-shadow:
+     0 0 0 1px color-mix(in oklab, var(--color-accent) 8%, transparent),

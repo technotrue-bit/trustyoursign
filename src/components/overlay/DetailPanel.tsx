@@ -11,6 +11,7 @@ import { useSessionStore } from "@/lib/chart/session/store";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { getSkyPass, persistNatal, saveChartTone, sitWithTheSky } from "@/lib/chart/sky";
 import { Gloss, GlossRoot } from "./Gloss";
+import { streetForPlanet } from "@/lib/chart/digest";
 import { ChartSheet } from "./ChartSheet";
 import { cn } from "@/lib/utils";
 
@@ -184,6 +185,18 @@ function ShelfPanel() {
   );
 }
 
+function StreetBeat({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <p className="mt-3 text-sm leading-relaxed text-fg">
+      <span className="mb-1 block text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase">
+        In plain
+      </span>
+      <Gloss>{text}</Gloss>
+    </p>
+  );
+}
+
 function Kicker({ children }: { children: ReactNode }) {
   return (
     <p className="mb-2 font-sans text-xs tracking-[0.18em] text-fg-muted uppercase">{children}</p>
@@ -205,15 +218,19 @@ function PlanetBody({ id }: { id: PlanetId }) {
   if (!p) return null;
   const sign = signAtLon(p.lon);
   const wires = nat.aspects.filter((a) => a.a === id || a.b === id);
+  const street = streetForPlanet(p, nat.person);
   return (
     <>
       <Kicker>
         <Gloss>{p.note}</Gloss>
       </Kicker>
       <Title>{p.headline}</Title>
-      <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-        <Gloss>{p.why}</Gloss>
-      </p>
+      <StreetBeat text={street} />
+      {p.why && p.why !== street ? (
+        <p className="mt-3 text-sm leading-relaxed text-fg-muted">
+          <Gloss>{p.why}</Gloss>
+        </p>
+      ) : null}
       <div className="mt-4 space-y-3 text-sm leading-relaxed text-fg">
         {p.body.map((para) => (
           <p key={para.slice(0, 24)}>
@@ -315,6 +332,7 @@ function GateBody({ id }: { id: GateId }) {
         <Gloss>{g.kicker}</Gloss>
       </Kicker>
       <Title>{g.headline}</Title>
+      <StreetBeat text={g.street ?? ""} />
       <div className="mt-3 space-y-3 text-sm leading-relaxed text-fg">
         {g.body.map((p) => (
           <p key={p.slice(0, 24)}>
@@ -356,6 +374,7 @@ function ReadingBody({ id }: { id: ReadingId }) {
     <>
       <Kicker>{r.name}</Kicker>
       <Title>{r.headline}</Title>
+      <StreetBeat text={r.street ?? ""} />
       <div className="mt-3 space-y-3 text-sm leading-relaxed text-fg">
         {r.body.map((p) => (
           <p key={p.slice(0, 24)}>

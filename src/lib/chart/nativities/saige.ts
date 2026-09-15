@@ -50,5 +50,5 @@ export const SAIGE: Nativity = {
   extraBones: [],
   canonExtra: "",
   machineTitle: "How she decides.",
-  readingsTitle: "Love, work, wound, becoming.",
+  readingsTitle: "Love, work, body, clothes, wound, becoming.",
 };

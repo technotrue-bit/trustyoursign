@@ -1,7 +1,9 @@
 import { CONSTELLATIONS } from "./galaxy/constellations";
 import { ASK, introPlaying, skipIntro, templeIntro } from "./galaxy/intro";
 import { galaxyTravel, enterSignGalaxy, seekSign, skipEnterGalaxy } from "./galaxy/travel";
-import { getSignGalaxy } from "./galaxy/signGalaxy";
+import { clearSignGalaxyCache, getSignGalaxy } from "./galaxy/signGalaxy";
+import { clearBurstParamCache } from "./galaxy/signBurst";
+import { clearSignBurstCache, clearSignCoreCache } from "./galaxy/signCore";
 import { getSignVolume } from "./galaxy/signVolume";
 import { primeSignArt } from "./galaxy/signArt";
 import { galaxyFigureBox, getFigureMatch, paintedFigureBox } from "./galaxy/signAlign";
@@ -25,10 +27,17 @@ export type QaState = {
   tTarget: number;
   p: number;
   plateFade: number;
+  /** Opacity the entered sign's painted plate is drawn at (material opacity). */
+  plateOpacity: number;
   form: number;
   dive: number;
   rush: number;
   core: number;
+  /** Ignition hand-off channels — what the burst pass is doing right now. */
+  burst: number;
+  ignition: number;
+  dissolve: number;
+  impulse: number;
   probe: Record<string, unknown> | null;
 };
 
@@ -96,6 +105,18 @@ export function installQaHooks() {
       kick();
       return true;
     },
+    /**
+     * Cold every per-sign cache: galaxy builds, burst recipes, core sprites and
+     * burst sprites. Determinism runs use it to prove a reload paints the same
+     * sign from scratch rather than handing back a cached texture.
+     */
+    resetCaches() {
+      clearSignGalaxyCache();
+      clearBurstParamCache();
+      clearSignCoreCache();
+      clearSignBurstCache();
+      return true;
+    },
     state(): QaState {
       return {
         phase: galaxyTravel.explorePhase,
@@ -103,10 +124,15 @@ export function installQaHooks() {
         tTarget: galaxyTravel.tTarget,
         p: galaxyTravel.exploreProgress,
         plateFade: galaxyTravel.plateFade,
+        plateOpacity: galaxyTravel.plateOpacity,
         form: galaxyTravel.galaxyForm,
         dive: galaxyTravel.diveBlend,
         rush: galaxyTravel.enterRush,
         core: galaxyTravel.coreReveal,
+        burst: galaxyTravel.burst,
+        ignition: galaxyTravel.ignition,
+        dissolve: galaxyTravel.dissolve,
+        impulse: galaxyTravel.burstImpulse,
         probe: (window as unknown as { __tys?: Record<string, unknown> }).__tys ?? null,
       };
     },

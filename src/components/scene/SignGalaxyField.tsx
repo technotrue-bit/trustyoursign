@@ -19,12 +19,21 @@ import {
   coreOpacity,
   coreSpin,
   coreSwell,
+  getSignBurst,
+  getSignBurstFlash,
   getSignCore,
 } from "@/lib/galaxy/signCore";
+import {
+  burstFlashSize,
+  burstParams,
+  burstSpriteSize,
+  burstSpinAt,
+  flashPulse,
+} from "@/lib/galaxy/signBurst";
 import { fieldFrame, getFigureMatch, landingRoll, landingShift, rotatedPoint } from "@/lib/galaxy/signAlign";
 import { buildFlightDust, dustOpacity, makeDustMaterial } from "@/lib/galaxy/flightDust";
 import { starSpikeSprite, starSprite } from "@/lib/galaxy/starSprite";
-import { galaxyTravel, seekGalaxyPoint } from "@/lib/galaxy/travel";
+import { galaxyTravel, prefersReducedMotion, seekGalaxyPoint } from "@/lib/galaxy/travel";
 import { PLATE_WIDE, type TempleSign } from "@/lib/galaxy/temple";
 import { isSmallGpu } from "@/lib/gpu";
 
@@ -52,6 +61,10 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
   const dustGroup = useRef<Group>(null);
   const coreRef = useRef<Sprite>(null);
   const coreMat = useRef<SpriteMaterial>(null);
+  const burstRef = useRef<Sprite>(null);
+  const burstMat = useRef<SpriteMaterial>(null);
+  const flashRef = useRef<Sprite>(null);
+  const flashMat = useRef<SpriteMaterial>(null);
   const glowMat = useRef<LineBasicMaterial>(null);
   const lineMat = useRef<LineBasicMaterial>(null);
   const starMat = useRef<PointsMaterial>(null);
@@ -67,6 +80,11 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
     [sign.palette.chest],
   );
   const coreTex = useMemo(() => getSignCore(sign.id), [sign.id]);
+  // The ignition hand-off: one pulse, painted per sign from its palette + seed.
+  const burst = useMemo(() => burstParams(sign.id, sign.palette), [sign.id, sign.palette]);
+  const burstTex = useMemo(() => getSignBurst(sign.id, isSmallGpu()), [sign.id]);
+  // The full-frame flash is a small-GPU skip (same gate as everything else).
+  const flashTex = useMemo(() => (isSmallGpu() ? null : getSignBurstFlash(sign.id)), [sign.id]);
   const tint = useMemo(() => new Color(sign.palette.particle), [sign.palette.particle]);
   const accent = useMemo(() => new Color(sign.palette.accent), [sign.palette.accent]);
   const softStar = useMemo(() => starSprite(), []);
@@ -98,19 +116,28 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
       galaxyTravel.exploreSignIndex === index && galaxyTravel.explorePhase !== "idle";
     const inside = exploring && galaxyTravel.explorePhase === "inside";
     const form = exploring ? galaxyTravel.galaxyForm : 0;
+    // Ignition hand-off channels (all zero outside the enter).
+    const pulse = exploring ? galaxyTravel.burst : 0;
+    const ignition = exploring ? galaxyTravel.ignition : 0;
+    const impulse = exploring ? galaxyTravel.burstImpulse : 0;
 
     // Flight dust owns its own group: the corridor is never squashed by the
     // figure alignment.
     const dust = dustGroup.current;
     if (dust) {
-      const op = exploring ? dustOpacity(form, inside) : 0;
+      const op = exploring ? dustOpacity(form, inside) + impulse * 0.22 : 0;
       dust.visible = op > 0.005;
-      dustShader.uniforms.uOpacity!.value = op;
-      dustShader.uniforms.uTime!.value = state.clock.elapsedTime;
+      const du = dustShader.uniforms;
+      du.uOpacity!.value = Math.min(1, op);
+      du.uTime!.value = state.clock.elapsedTime;
+      // The blast throws the ring outward — debris the galaxy then forms from.
+      du.uImpulse!.value = impulse;
+      du.uImpulseAmp!.value = burst.debrisPush;
+      du.uImpulseSpan!.value = burst.debrisSpan;
     }
 
     // Keep the painted plate as the dive hero early; bloom the field as we settle into the hub.
-    g.visible = form > 0.12 || inside;
+    g.visible = form > 0.12 || inside || ignition > 0.02;
     if (!g.visible) return;
 
     const frame = fieldFrame(
@@ -129,18 +156,52 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
 
     const fieldReveal = Math.max(0, (form - 0.18) / 0.82);
     // Inside, the figure stays lit: it is the room, not scenery flown past.
-    const lit = inside ? 1 : fieldReveal;
-    if (lineMat.current) lineMat.current.opacity = Math.min(1, lit * (inside ? 0.72 : 0.85));
-    if (glowMat.current) glowMat.current.opacity = Math.min(1, lit * (inside ? 0.3 : 0.34));
+    // Before the blast, the ignition lights it early and hard — the figure must
+    // read as *lit before it is consumed*, not as the dark hole it used to be.
+    const lit = inside ? 1 : Math.max(fieldReveal, ignition);
+    if (lineMat.current) {
+      lineMat.current.opacity = Math.min(1, lit * (inside ? 0.72 : 0.85) + ignition * 0.15);
+    }
+    if (glowMat.current) {
+      glowMat.current.opacity = Math.min(1, lit * (inside ? 0.3 : 0.34) + ignition * 0.5);
+    }
     if (starMat.current) {
-      starMat.current.opacity = Math.min(1, lit * 0.95);
+      starMat.current.opacity = Math.min(1, lit * 0.95 + ignition * 0.05);
       starMat.current.color.copy(tint);
-      starMat.current.size = (inside ? 0.34 : 0.28) + form * 0.12;
+      starMat.current.size = (inside ? 0.34 : 0.28) + form * 0.12 + ignition * 0.2;
     }
     if (pointMat.current) {
       pointMat.current.opacity = Math.min(1, lit * 1.05);
       pointMat.current.color.copy(accent);
-      pointMat.current.size = (inside ? 0.46 : 0.38) + form * 0.12;
+      pointMat.current.size = (inside ? 0.46 : 0.38) + form * 0.12 + ignition * 0.18;
+    }
+
+    // The ignition itself: rays + shock front, centred on the hub star the camera
+    // is already aiming at, sized to the pulse so it swells and dies with it.
+    const burstSprite = burstRef.current;
+    if (burstSprite && burstMat.current) {
+      const show = exploring && pulse > 0.004;
+      burstSprite.visible = show;
+      if (show) {
+        burstSprite.scale.setScalar(burstSpriteSize(pulse, burst));
+        burstMat.current.opacity = Math.min(1, pulse * burst.gain);
+        // The spin lives in signBurst (burstSpinAt) so the ray rotation is one
+        // definition with the pulse that drives it, not an inline copy.
+        burstMat.current.rotation = burstSpinAt(galaxyTravel.exploreProgress, burst);
+      }
+    }
+
+    // The flash: a short additive pop at the hub. Small GPUs skip it entirely, and
+    // so does reduced motion — that path gets the slow brighten instead, never a flash.
+    const flashSprite = flashRef.current;
+    if (flashSprite && flashMat.current && flashTex) {
+      const fl =
+        exploring && !prefersReducedMotion() ? flashPulse(galaxyTravel.exploreProgress) : 0;
+      flashSprite.visible = fl > 0.01;
+      if (flashSprite.visible) {
+        flashSprite.scale.setScalar(burstFlashSize(fl, burst));
+        flashMat.current.opacity = Math.min(1, fl * burst.flashGain);
+      }
     }
 
     const core = coreRef.current;
@@ -240,6 +301,53 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
               depthWrite={false}
               depthTest={false}
               toneMapped={false}
+              blending={AdditiveBlending}
+            />
+          </sprite>
+        ) : null}
+        {/* Ignition: the seed inside the figure goes off. Drawn after the plate
+            (which is the only other blending pass here) so the blast is added
+            over the painting it is consuming. */}
+        {burstTex && hub ? (
+          <sprite
+            ref={burstRef}
+            renderOrder={20}
+            position={[hub.x, hub.y, hub.z]}
+            visible={false}
+            raycast={noopRaycast}
+          >
+            <spriteMaterial
+              ref={burstMat}
+              map={burstTex}
+              color="#ffffff"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              depthTest={false}
+              toneMapped={false}
+              fog={false}
+              blending={AdditiveBlending}
+            />
+          </sprite>
+        ) : null}
+        {flashTex && hub ? (
+          <sprite
+            ref={flashRef}
+            renderOrder={21}
+            position={[hub.x, hub.y, hub.z]}
+            visible={false}
+            raycast={noopRaycast}
+          >
+            <spriteMaterial
+              ref={flashMat}
+              map={flashTex}
+              color="#ffffff"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              depthTest={false}
+              toneMapped={false}
+              fog={false}
               blending={AdditiveBlending}
             />
           </sprite>
