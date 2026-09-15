@@ -133,3 +133,34 @@ the other 11 signs' palettes and plates · `scripts/qa/*` harnesses except addit
 
 Audio (the app has none today; a burst with sound is its own spec), the map/attract state,
 exit/reverse burst, and any change to the other 11 signs' art.
+
+## Round 2 result — PASS on M1–M11 + integration gate
+
+Measured by a second fresh critic (own captures in `screenshots/critic2`), then re-verified by the
+orchestrator against the served app (`screenshots/phase5`):
+
+| gate | required | critic | orchestrator |
+|---|---|---|---|
+| M1 centre-lit% at peak | >= 70 | 97.58 @1.6s | 98.17 @2.0s |
+| M2 centre-bright% | >= 15 | 34.98 | 35.46 |
+| M3 lit% | >= 20 | 58.75 | 59.09 |
+| M4 lit% @0.9s | >= 8 | 17.66 | — (75.08 centre-lit @1.2s) |
+| M5 centre-bright% at landing | <= 12 | 3.11 | 3.10 |
+| M6 hubNdcY @540, signs 0/1/6/7/8 | 0.281–0.299 | 0.296–0.299, x = 0.000 | 0.296–0.299, x = 0 |
+| M7 copy band | <= 14 | 12.6 (incumbent 15.3) | — |
+| M8 suite + types | unchanged or better | 194/193/1 + typecheck clean | same |
+| M9 console errors | 0 | 0 | 0 |
+| M10 determinism | both hold | 12/12 distinct, repeat identical | — |
+| M11 plate >= 0.85 until the burst peak, consumed by the dissolve | met | **1.0000 across p 0.18–0.51; burst peak p=0.274 with plate 1.0000; fade first moves p=0.607 while dissolve is already 1.0000** | same ladder confirmed |
+| build | completes | exit 0 | — |
+| guards | reduced motion + small GPU | burst 1.0 -> 0.352 @p=0.3, impulse x0.5, flash gated; rays 43 -> 21 | — |
+| additivity | landing pose untouched | diff touches only the 11 owned files | signAlign.ts not in diff |
+
+Cleanup verified independently by the critic, including re-deriving the shader's noise span from the
+GLSL string itself: max |difference| vs the unit-tested function = **0** over 25 samples, `uSeed`
+comes from the shared `dissolveSeedPhase()`, and no `977` literal remains. The test now vouches for
+the code the shader runs.
+
+Non-metric observation, recorded as a fact: at peak our burst is a compact starburst with thin rays
+while most of the frame stays dark; the reference's peak is a frame-filling blast at 75–90% lit. Not
+a gate (see the rejected-metric note in the plan — angular irregularity tracks saturation).
