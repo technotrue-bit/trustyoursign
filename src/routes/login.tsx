@@ -177,11 +177,11 @@ function Login() {
   };
 
   /**
-   * Apple users have no SSO button — the auth broker federates Google and X only
-   * — so their path is a code by email, with no password to invent. Tapping the
-   * Apple button puts the form into that mode for real: the address field takes
-   * focus, and if an address is already typed the code goes out immediately.
-   * (Scrolling to a form the visitor can already see is not an action.)
+   * The email-code path, for anyone the broker cannot federate (it serves
+   * Google and X only). Choosing it puts the form into that mode for real: the
+   * address field takes focus, and if an address is already typed the code goes
+   * out immediately. (Scrolling to a form the visitor can already see is not an
+   * action.)
    */
   const startCodeSignIn = (opts: { sendNow?: boolean } = {}) => {
     setError(null);
@@ -291,8 +291,8 @@ function Login() {
   const signInNote =
     socialProviders.length > 0
       ? otpAvailable
-        ? "Apple sign-in isn't offered here. Your iCloud or Apple address gets you a code by email — no password to invent."
-        : "Apple sign-in isn't offered here. Your iCloud or Apple address works the same way, with a password, below."
+        ? "Your email gets you a code — no password to invent."
+        : "Your email works the same way, with a password, below."
       : otpAvailable
         ? "Google and X sign-in aren't offered on this address. Your email gets you a code instead — no password to invent."
         : "Google and X sign-in aren't offered on this address. Use your email and a password below.";
@@ -337,10 +337,10 @@ function Login() {
                   Continue with {p.label}
                 </button>
               ))}
-            {/* No Apple SSO exists (the broker federates Google and X only), so
-                the Apple path is a code by email. This starts that flow for
-                real, and is only rendered when the host can send mail — never a
-                button that merely scrolls the page. */}
+            {/* This host has no SSO for every address (the broker federates
+                Google and X only), so the email-code path covers the rest. It
+                starts that flow for real, and is only rendered when the host can
+                send mail — never a button that merely scrolls the page. */}
             {otpAvailable ? (
               <button
                 type="button"
@@ -348,7 +348,7 @@ function Login() {
                 onClick={() => startCodeSignIn({ sendNow: true })}
                 className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
               >
-                Use Apple or iCloud email
+                Email me a code
               </button>
             ) : null}
             <p className="pt-1 text-xs leading-relaxed text-fg-subtle">{signInNote}</p>

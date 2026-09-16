@@ -130,6 +130,14 @@ export function SignGalaxyHud() {
                   {point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}
                 </Gloss>
               </p>
+              {point.isHub && lockReason === "auth" ? (
+                <ul className="mt-3 space-y-1 text-xs text-fg-subtle">
+                  <li>We don&apos;t sell your data.</li>
+                  <li>Your charts don&apos;t train public models.</li>
+                  <li>Birth dates stay on your account and can be deleted.</li>
+                  <li>An account exists to save your sky and continue on another device.</li>
+                </ul>
+              ) : null}
               {point.isHub && !unlocked ? (
                 <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
                   Drag to look around. Tap a star to move.
