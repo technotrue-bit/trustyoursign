@@ -83,6 +83,10 @@ const EXPLORE_LOOK_DRAG_X = 78;
 const EXPLORE_LOOK_DRAG_Y = 92;
 /** Look units per second while WASD / arrows are held. */
 const EXPLORE_LOOK_KEY_RATE = 3.2;
+/** Below this a wheel impulse is trackpad momentum dribble, not a new flick. */
+const WHEEL_ARM_IMPULSE = 0.004;
+/** How fast a wheel-driven glide fades once the fingers stop. */
+export const WHEEL_GLIDE_DECAY = 5;
 
 let reduceCache = false;
 let reduceAt = -1e9;
@@ -135,6 +139,8 @@ export const galaxyTravel = {
   dragging: false,
   /** performance.now() until a wheel flick still counts as hands-on. */
   wheelUntil: 0,
+  /** True while the wheel is what drives the flight, so its glide can fade. */
+  wheelDriven: false,
   /** Bumped on reset so the camera rig snaps instead of keeping stale t. */
   epoch: 0,
   /** 1 = rest hero. >1 pulls into the current sign. Pinch on mobile. */
@@ -264,6 +270,7 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.steer = 0;
   galaxyTravel.dragging = false;
   galaxyTravel.wheelUntil = 0;
+  galaxyTravel.wheelDriven = false;
   galaxyTravel.epoch += 1;
   galaxyTravel.zoom = 1;
   galaxyTravel.zoomTarget = 1;
@@ -727,11 +734,53 @@ function flyLocked() {
   return false;
 }
 
+const FLY_IGNORE =
+  "button, a, input, textarea, select, .sign-strip, .birth-chat, .gloss-card, [data-no-fly]";
+
+/** Duck-typed so the rule is testable outside a browser realm (and across iframes). */
+function closestElement(target: EventTarget | null): Element | null {
+  const el = target as Element | null;
+  return el && typeof el.closest === "function" ? el : null;
+}
+
 function flyIgnore(target: EventTarget | null) {
-  if (!(target instanceof Element)) return false;
-  return Boolean(
-    target.closest("button, a, input, textarea, select, .sign-strip, .birth-chat, .gloss-card, [data-no-fly]"),
-  );
+  const el = closestElement(target);
+  if (!el) return false;
+  return Boolean(el.closest(FLY_IGNORE));
+}
+
+/** A box that scrolls on its own keeps the wheel — panels, sheets, lists. */
+function scrollsItself(el: Element, hops = 8): boolean {
+  if (typeof getComputedStyle !== "function") return false;
+  let node: Element | null = el;
+  for (let i = 0; i < hops && node; i += 1) {
+    const style = getComputedStyle(node);
+    const scrolls = /(auto|scroll|overlay)/;
+    if (
+      (scrolls.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1) ||
+      (scrolls.test(style.overflowX) && node.scrollWidth > node.clientWidth + 1)
+    ) {
+      return true;
+    }
+    node = node.parentElement;
+  }
+  return false;
+}
+
+/**
+ * The sky takes the wheel; the interface keeps its own scrolling.
+ *
+ * Flying belongs to the sky surface — the canvas, or the backdrop behind the
+ * chrome — not to "everywhere the blacklist does not match". The old rule let a
+ * scroll over a panel fly the corridor while the panel itself stayed frozen,
+ * because the capture-phase preventDefault landed before the panel saw the event.
+ */
+export function wheelFlies(target: EventTarget | null): boolean {
+  const el = closestElement(target);
+  if (!el) return false;
+  if (el.closest("canvas, [data-fly-surface]")) return true;
+  if (flyIgnore(el)) return false;
+  return !scrollsItself(el);
 }
 
 function trackPtr(e: PointerEvent) {
@@ -786,6 +835,7 @@ export function applyFlyDelta(dy: number, dx = 0, touch = false) {
     if (introCanSkip()) skipIntro();
     return;
   }
+  galaxyTravel.wheelDriven = false;
   if (insideSignGalaxy()) {
     applyExploreLook(dy, dx, touch);
     return;
@@ -815,7 +865,10 @@ export function applyWheel(deltaY: number, deltaX = 0, deltaMode = 0) {
   }
   if (flyLocked()) return;
   const scale = deltaMode === 1 ? 16 : deltaMode === 2 ? 120 : 1;
-  const impulse = (deltaY * scale + deltaX * scale) / 900;
+  // Only the vertical axis flies. A trackpad's two-finger sideways scroll used to
+  // sum into this impulse, so a horizontal swipe flew the corridor, and a diagonal
+  // one could fly it backwards — `hold` follows the sign of the sum.
+  const impulse = (deltaY * scale) / 900;
   if (insideSignGalaxy()) {
     if (galaxyTravel.birth < 1) return;
     applyPinch(Math.exp(-impulse * 0.55));
@@ -827,8 +880,16 @@ export function applyWheel(deltaY: number, deltaX = 0, deltaMode = 0) {
   }
   galaxyTravel.steer += impulse;
   galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + impulse * 0.085);
-  if (Math.abs(impulse) > 0.002) galaxyTravel.hold = impulse > 0 ? 1 : -1;
-  galaxyTravel.wheelUntil = nowMs() + 220;
+  // A zero or sideways impulse is not a flight command: it must not latch a
+  // direction, arm the window, or claim the wheel.
+  if (Math.abs(impulse) > 0.002) {
+    galaxyTravel.hold = impulse > 0 ? 1 : -1;
+    galaxyTravel.wheelDriven = true;
+    // Trackpad momentum keeps firing events after the fingers lift. Re-arming the
+    // window on every dribble made the sky keep flying with nothing touching it, so
+    // only a real flick re-arms it.
+    if (Math.abs(impulse) >= WHEEL_ARM_IMPULSE) galaxyTravel.wheelUntil = nowMs() + 220;
+  }
   galaxyTravel.moved = true;
   galaxyTravel.awaken = 1;
   noteControl();
@@ -863,7 +924,18 @@ export function stepZoom(dt: number, stationChanged: boolean) {
 export function endFly() {
   galaxyTravel.dragging = false;
   galaxyTravel.hold = 0;
+  galaxyTravel.wheelDriven = false;
   galaxyTravel.handsOn = nowMs() < galaxyTravel.wheelUntil;
+}
+
+/**
+ * A wheel flick coasts and fades instead of running until its window expires.
+ * A held finger (drag) or a held key keeps its push, so only the wheel decays.
+ */
+export function decayWheelGlide(dt: number) {
+  if (!galaxyTravel.wheelDriven || galaxyTravel.dragging || galaxyTravel.hold === 0) return;
+  galaxyTravel.hold *= Math.exp(-dt * WHEEL_GLIDE_DECAY);
+  if (Math.abs(galaxyTravel.hold) < 0.02) galaxyTravel.hold = 0;
 }
 
 /** Slide the sky, pinch the sign, scroll the wheel. One winner per gesture. */
@@ -994,7 +1066,8 @@ export function ensureFlyInput() {
 
   const onWheel = (e: WheelEvent) => {
     if (flyLocked()) return;
-    if (flyIgnore(e.target)) return;
+    // Do not preventDefault unless the sky owns this gesture, or a panel cannot scroll.
+    if (!wheelFlies(e.target)) return;
     e.preventDefault();
     if (mode === "pinch" || leftoverLock) return;
     if (e.ctrlKey || e.metaKey) {
@@ -1244,6 +1317,7 @@ export function setPaused(paused: boolean) {
   galaxyTravel.steer = 0;
   galaxyTravel.dragging = false;
   galaxyTravel.wheelUntil = 0;
+  galaxyTravel.wheelDriven = false;
   if (paused) {
     stopAutoClock();
   } else {
