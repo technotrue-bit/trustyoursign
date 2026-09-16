@@ -58,10 +58,11 @@ export function GalaxyShell() {
         <>
           <p
             data-no-fly
-            className="pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] max-w-[3.25rem] text-[0.6rem] leading-tight tracking-[0.2em] text-fg-subtle uppercase md:max-w-none"
+            className="pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] max-w-[4.5rem] text-[0.6rem] leading-tight tracking-[0.18em] text-fg-subtle uppercase md:max-w-none"
             style={{ opacity: worldFade }}
+            aria-label="Closed beta version 0.1"
           >
-            Closed beta
+            Closed beta · V.01
           </p>
           <div
             data-no-fly
