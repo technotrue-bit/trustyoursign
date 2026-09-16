@@ -7,6 +7,7 @@ import {
   stepBirth,
   stepShaderTime,
 } from "./travel.ts";
+import { useGalaxy } from "./store.ts";
 
 /**
  * I5 — the vestibular pause. These pin the two halves that matter: the shared
@@ -36,6 +37,13 @@ describe("setPaused", () => {
     setPaused(false);
     setPaused(false);
     assert.equal(galaxyTravel.paused, false);
+  });
+
+  it("publishes to the store, so scene props (drei's ambient stars) can react", () => {
+    setPaused(true);
+    assert.equal(useGalaxy.getState().paused, true);
+    setPaused(false);
+    assert.equal(useGalaxy.getState().paused, false);
   });
 
   it("drops any held steering when it engages, so nobody resumes mid-thrust", () => {

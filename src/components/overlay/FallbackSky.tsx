@@ -535,7 +535,10 @@ export function FallbackSky({ note }: { note?: string }) {
       const arriving = introPlaying();
       const birthing = arriving;
       const exploring = exploringSign();
-      const flying = !entered && !chatting && !birthing && !exploring;
+      // I5: while paused the sky is not "flying" — velocity decays to rest and
+      // the star drift below is skipped entirely (the pause must stop the drift,
+      // not just the flight-path advance).
+      const flying = !entered && !chatting && !birthing && !exploring && !galaxyTravel.paused;
       const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
       galaxyTravel.handsOn = hands;
       galaxyTravel.busy = chatting || entered || birthing;

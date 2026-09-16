@@ -1195,6 +1195,9 @@ export function stepAutoSign(
 export function setPaused(paused: boolean) {
   if (galaxyTravel.paused === paused) return;
   galaxyTravel.paused = paused;
+  // Publish to the store: some scene pieces (drei's ambient <Stars>) animate on
+  // their own clock and can only be stilled through a prop.
+  useGalaxy.getState().setPausedFlag(paused);
   galaxyTravel.hold = 0;
   galaxyTravel.steer = 0;
   galaxyTravel.dragging = false;

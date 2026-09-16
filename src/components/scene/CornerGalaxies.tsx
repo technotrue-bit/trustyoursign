@@ -55,10 +55,10 @@ export function CornerGalaxies() {
       copyPal(mat.uniforms.uColorA.value, fromA);
       copyPal(mat.uniforms.uColorB.value, fromB);
       sign.current = i;
-      mixFrom.current = clock.elapsedTime;
+      mixFrom.current = galaxyTravel.shaderTime;
     }
     const pal = paletteForSign(sign.current);
-    const u = Math.min(1, Math.max(0, (clock.elapsedTime - mixFrom.current) / 0.4));
+    const u = Math.min(1, Math.max(0, (galaxyTravel.shaderTime - mixFrom.current) / 0.4));
     const e = u * u * u * (u * (u * 6 - 15) + 10);
     const aArr = mat.uniforms.uColorA.value as Color[];
     const bArr = mat.uniforms.uColorB.value as Color[];
@@ -67,7 +67,7 @@ export function CornerGalaxies() {
       bArr[k]!.copy(fromB[k]!).lerp(pal.b[k]!, e);
     }
     mat.uniforms.uMix.value = e;
-    mat.uniforms.uTime.value = clock.elapsedTime;
+    mat.uniforms.uTime.value = galaxyTravel.shaderTime;
     mat.uniforms.uPixelRatio.value = gl.getPixelRatio();
     const gateOff = insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
     const vis =

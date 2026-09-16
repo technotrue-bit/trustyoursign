@@ -6,6 +6,7 @@ import { lonToXZ } from "@/lib/chart/geometry";
 import { useNativity } from "@/lib/chart/nativity";
 import { useSessionHovered, useSessionSelection } from "@/lib/chart/session/hooks";
 import type { ChakraId, GateId } from "@/lib/chart/types";
+import { galaxyTravel } from "@/lib/galaxy/travel";
 import { Label } from "./Label";
 import { usePick } from "./pick";
 import { ThinLoop } from "./ThinLines";
@@ -58,7 +59,7 @@ function ChakraOrb({ id }: { id: ChakraId }) {
   useFrame((state, delta) => {
     if (!chakra) return;
     const d = Math.min(delta, 0.1);
-    const t = state.clock.elapsedTime;
+    const t = galaxyTravel.shaderTime;
     if (glow.current) {
       const pulse = 1 + Math.sin(t * 1.4 + chakra.y * 4) * 0.1;
       const target = (active ? 1.5 : 1) * pulse;
@@ -137,7 +138,7 @@ function GatePortal({ id, x }: { id: GateId; x: number }) {
 
   useFrame((state) => {
     if (!glow.current) return;
-    const t = state.clock.elapsedTime;
+    const t = galaxyTravel.shaderTime;
     const o = (active ? 0.28 : 0.1) + Math.sin(t * 1.2 + x) * 0.04;
     const mat = glow.current.material;
     if (!Array.isArray(mat) && "opacity" in mat) mat.opacity = o;

@@ -62,7 +62,8 @@ export function CelestialSky() {
       camera.far = 2500;
       camera.updateProjectionMatrix();
     }
-    const t = clock.elapsedTime;
+    // I5: the shared sky clock — a pause freezes the haze with everything else.
+    const t = galaxyTravel.shaderTime;
     for (const m of mats.current) m.uniforms.uTime.value = t;
     const world = exploringSign() ? galaxyTravel.worldFade : 1;
     const field = introField() * world;

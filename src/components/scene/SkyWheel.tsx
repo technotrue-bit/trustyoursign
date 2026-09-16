@@ -11,6 +11,7 @@ import {
 } from "three";
 import { ASPECT_COLOR } from "@/lib/chart/aspects";
 import { lonToXZ } from "@/lib/chart/geometry";
+import { galaxyTravel } from "@/lib/galaxy/travel";
 import { useNativity } from "@/lib/chart/nativity";
 import { useSessionHovered, useSessionSelection } from "@/lib/chart/session/hooks";
 import type { PlanetId } from "@/lib/chart/types";
@@ -215,7 +216,7 @@ function PlanetOrb({ id }: { id: PlanetId }) {
 
   useFrame((state, delta) => {
     const d = Math.min(delta, 0.1);
-    const t = state.clock.elapsedTime;
+    const t = galaxyTravel.shaderTime;
     if (group.current) {
       group.current.position.y = 0.12 + Math.sin(t * 0.65 + planet.lon * 0.04) * 0.05;
     }
