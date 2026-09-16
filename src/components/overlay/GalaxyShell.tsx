@@ -58,10 +58,11 @@ export function GalaxyShell() {
         <>
           <p
             data-no-fly
-            className="pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] max-w-[3.25rem] text-[0.6rem] leading-tight tracking-[0.2em] text-fg-subtle uppercase md:max-w-none"
+            className="pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] max-w-[4.5rem] text-[0.6rem] leading-tight tracking-[0.18em] text-fg-subtle uppercase md:max-w-none"
             style={{ opacity: worldFade }}
+            aria-label="Closed beta version 0.1"
           >
-            Closed beta
+            Closed beta · V.01
           </p>
           <div
             data-no-fly
@@ -115,7 +116,7 @@ export function GalaxyShell() {
               {/* Hero value proposition — fades in with the title, gone once the belt moves. */}
               {!moved && !asking && introTitle > 0.3 ? (
                 <p className="col-start-1 row-start-2 mx-auto mt-2 max-w-md px-1 text-sm leading-relaxed text-fg-muted md:mt-3 md:text-base">
-                  Pick a sign, fly its sky, then unlock a chart that actually belongs to a birth.
+                  Pick your sign &amp; Begin to explore
                 </p>
               ) : null}
               {moved && sign ? (
@@ -189,17 +190,15 @@ export function GalaxyShell() {
         >
           {moved ? "Enter this sign" : "Slide to choose a sign"}
         </button>
-        <button
-          type="button"
-          disabled={!moved}
-          onClick={() => sign && openClaim(sign.id)}
-          className={cn(
-            "pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] uppercase md:min-h-10 md:w-auto md:px-3 md:text-[0.65rem] md:tracking-[0.18em]",
-            moved ? "sign-claim text-fg hover:text-accent" : "cursor-not-allowed text-fg-muted",
-          )}
-        >
-          This is my sign
-        </button>
+        {moved ? (
+          <button
+            type="button"
+            onClick={() => sign && openClaim(sign.id)}
+            className="sign-claim pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent md:min-h-10 md:w-auto md:px-3 md:text-[0.65rem] md:tracking-[0.18em]"
+          >
+            This is my sign
+          </button>
+        ) : null}
       </div>
     </div>
   );
