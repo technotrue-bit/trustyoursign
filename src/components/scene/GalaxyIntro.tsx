@@ -38,6 +38,7 @@ import {
   aimedIndex,
   ensureAutoClock,
   stopAutoClock,
+  decayWheelGlide,
   ensureFlyInput,
   enterAnimating,
   enterSignGalaxy,
@@ -1248,6 +1249,7 @@ function TempleRig() {
         galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + 0.045);
         galaxyTravel.hold = 1;
         galaxyTravel.wheelUntil = performance.now() + 220;
+        galaxyTravel.wheelDriven = false;
         galaxyTravel.moved = true;
         galaxyTravel.handsOn = true;
         noteControl();
@@ -1255,6 +1257,7 @@ function TempleRig() {
         galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget - 0.045);
         galaxyTravel.hold = -1;
         galaxyTravel.wheelUntil = performance.now() + 220;
+        galaxyTravel.wheelDriven = false;
         galaxyTravel.moved = true;
         galaxyTravel.handsOn = true;
         noteControl();
@@ -1311,6 +1314,7 @@ function TempleRig() {
           galaxyTravel.tTarget + galaxyTravel.hold * HOLD_FLY * d * 0.22,
         );
       }
+      decayWheelGlide(d);
       galaxyTravel.steer = 0;
     }
     galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget);
