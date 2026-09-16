@@ -17,11 +17,13 @@ import {
   galaxyTravel,
   prefersReducedMotion,
   seekSign,
+  setPaused,
   skipBirth,
   stopAutoClock,
 } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
 import { readGuestDraft } from "@/lib/ui/guestDraft";
+import { readMotionPaused } from "@/lib/ui/motionPreference";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { GalaxyShell } from "./GalaxyShell";
@@ -173,6 +175,9 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
     galaxyTravel.birth = 1;
     ensureAutoClock();
     ensureFlyInput();
+    // I5: the stored motion preference applies to the sky itself, not just the
+    // button's label — a returning viewer lands still if that is how they left.
+    if (readMotionPaused()) setPaused(true);
     return () => stopAutoClock();
   }, []);
 

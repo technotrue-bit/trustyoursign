@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { SIGN_INSIGHTS, insightToneLabel } from "@/lib/galaxy/signInsights";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
-import { enterSignGalaxy, noteControl } from "@/lib/galaxy/travel";
+import { enterSignGalaxy, noteControl, setPaused } from "@/lib/galaxy/travel";
+import { readMotionPaused, writeMotionPaused } from "@/lib/ui/motionPreference";
 import { skipIntro } from "@/lib/galaxy/intro";
 import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/lib/chart/session";
@@ -26,6 +28,17 @@ export function GalaxyShell() {
   const asking = introVeil > 0.04;
   const titleAnimating = !introDone && introTitle > 0.08;
   const openClaim = useSessionStore((s) => s.openClaim);
+  // I5: motion preference is persisted, so the button opens in the state the
+  // viewer left it (VaultApp applies the stored value to the sky on mount).
+  const [paused, setPausedState] = useState(
+    () => typeof window !== "undefined" && readMotionPaused(),
+  );
+  const togglePaused = () => {
+    const next = !paused;
+    setPausedState(next);
+    writeMotionPaused(next);
+    setPaused(next);
+  };
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
   const exploring = explorePhase !== "idle";
   const worldFade = exploring ? exploreWorldFade : 1;
@@ -69,6 +82,15 @@ export function GalaxyShell() {
             className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-1"
             style={{ opacity: worldFade }}
           >
+            <button
+              type="button"
+              onClick={togglePaused}
+              aria-pressed={paused}
+              aria-label={paused ? "Resume the sky's motion" : "Pause the sky's motion"}
+              className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+            >
+              {paused ? "Resume" : "Pause"}
+            </button>
             {introSkip ? (
               <button
                 type="button"
