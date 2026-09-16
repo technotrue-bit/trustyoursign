@@ -1,6 +1,7 @@
 import { emailOTPClient, genericOAuthClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { runPreSignInSignOut, runSignOut } from "../../../scripts/sign-out-plan.mjs";
+import { signInAvailability } from "./email-otp";
 import { GROK_PROVIDERS } from "./providers";
 
 /**
@@ -39,6 +40,11 @@ export const authEnabled = import.meta.env.VITE_AUTH_ENABLED !== "false";
 
 /** The upstream providers to render sign-in buttons for. */
 export { GROK_PROVIDERS };
+
+/** A provider's human label, for messages about it. Falls back to its id. */
+function providerLabel(providerId: string): string {
+  return GROK_PROVIDERS.find((provider) => provider.providerId === providerId)?.label ?? providerId;
+}
 
 // ── Live-preview bearer token ────────────────────────────────────────────────
 // The embedded preview iframe has partitioned cookies, so we keep the session's
@@ -83,6 +89,24 @@ function inLivePreview(): boolean {
 type PopupMessage = { source: "grok-auth-popup"; token: string | null; error?: string };
 
 /**
+ * Provider ids the server has said it can start, or null when it could not be
+ * asked (probe failed / offline). One request per page: the answer is about the
+ * deployment's env, which cannot change under a loaded page.
+ *
+ * This is the SAME availability server function the sign-in page renders its
+ * buttons from, so what the page offers and what this will start cannot
+ * disagree.
+ */
+let servedProvidersPromise: Promise<readonly string[] | null> | null = null;
+
+function servedProviders(): Promise<readonly string[] | null> {
+  servedProvidersPromise ??= signInAvailability()
+    .then((availability) => availability.providers)
+    .catch(() => null);
+  return servedProvidersPromise;
+}
+
+/**
  * Start sign-in with one upstream provider (`providerId` from `GROK_PROVIDERS`),
  * federating through the Grok auth broker.
  *
@@ -94,7 +118,7 @@ type PopupMessage = { source: "grok-auth-popup"; token: string | null; error?: s
  * - **Deployed** (and local non-iframe): a normal full-page redirect into the broker.
  *
  * Either way it clears any existing local session FIRST so switching providers
- * actually switches identity.
+ * actually switches identity — but never for a provider the server cannot serve.
  */
 export async function signIn(
   providerId: string,
@@ -108,17 +132,35 @@ export async function signIn(
   // browsers when the opener is a cross-origin live-preview iframe.
   const popup = inLivePreview() ? openSignInPopup(providerId) : null;
 
+  // What the server can actually serve, asked before anything is touched. A
+  // provider that is not in this list has no `/sign-in/oauth2` route to reach,
+  // so the attempt below could only 404 while the pre-sign-in clear had already
+  // ended the visitor's session — which is exactly how production used to sign
+  // people out and leave them with nothing. Unknown (the probe failed) keeps the
+  // existing behaviour: the page renders no button without an answer.
+  const served = await servedProviders();
+  const servable = served === null || served.includes(providerId);
+
   // Clear any prior session so switching providers actually switches identity.
   // Bounded because the popup is already open — a request that never settles
   // would leave it hanging — but bounded PER ENVIRONMENT: only the server can
   // end a deployed session, so cutting it short at the preview's 1.5s would
-  // start OAuth with the old session still live.
+  // start OAuth with the old session still live. Skipped entirely for a provider
+  // that cannot be served (see `servable`): there is nothing to switch to.
   await runPreSignInSignOut({
     livePreview: inLivePreview(),
     hasBearer: Boolean(getBearerToken()),
+    servable,
     requestSignOut: () => authClient.signOut(),
     clearToken: () => setBearerToken(null),
   });
+
+  if (!servable) {
+    popup?.close();
+    throw new Error(
+      `${providerLabel(providerId)} sign-in is not available on this address — use the email code instead.`,
+    );
+  }
 
   if (inLivePreview()) {
     if (!popup) throw new Error("Pop-up blocked — allow pop-ups for sign-in");

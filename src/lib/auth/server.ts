@@ -29,6 +29,7 @@
  * components read the user via `@/lib/auth/use-current-user`; server functions get
  * a verified id via `@/lib/auth/middleware`.
  */
+import { APIError } from "better-auth/api";
 import { betterAuth } from "better-auth";
 import { bearer, genericOAuth, captcha, magicLink } from "better-auth/plugins";
 import { emailOTP } from "better-auth/plugins/email-otp";
@@ -368,7 +369,20 @@ export const auth = betterAuth({
               // A code sign-in claims this URL and mails it with the code; any
               // other caller gets the link on its own.
               if (signInLinks.offer(email, url)) return;
-              await sendSignInLinkEmail({ email, url });
+              try {
+                await sendSignInLinkEmail({ email, url });
+              } catch (err) {
+                // The message never left: the host cannot deliver to this address
+                // (a sandbox sender refuses every other recipient), or the provider
+                // could not be reached. Answer with what actually happened instead
+                // of letting the transport error escape as an opaque 5xx and an
+                // empty body — a visitor who asked for a link must be told it is
+                // not coming, and the code is still theirs to use.
+                console.error("[auth] could not email the sign-in link", err);
+                throw new APIError("BAD_REQUEST", {
+                  message: "Could not email that sign-in link — use the email code instead.",
+                });
+              }
             },
           }),
 
