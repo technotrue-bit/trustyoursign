@@ -4,10 +4,15 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listChartSummaries, type ChartSummary } from "@/lib/charts";
 import { useSessionStore } from "@/lib/chart/session";
 import { canExploreSignStars, exploreLockReason, sessionHasFullChart } from "@/lib/galaxy/exploreAccess";
+import type { ExploreLockReason } from "@/lib/galaxy/exploreAccess";
 import { setExploreStarsUnlocked } from "@/lib/galaxy/travel";
 
 /** Whether non-hub stars in this sign’s galaxy are unlocked for the viewer. */
-export function useSignExploreAccess(signId: SignId | null) {
+export function useSignExploreAccess(
+  signId: SignId | null,
+  /** Point context: lets guests open the hub and the first few stars only. */
+  point?: { pointIndex?: number | null; isHub?: boolean },
+) {
   const { user, isPending } = useCurrentUserState();
   const session = useSessionStore((s) => s.session);
   const [savedCharts, setSavedCharts] = useState<ChartSummary[] | null>(null);
@@ -106,9 +111,38 @@ export function useSignExploreAccess(signId: SignId | null) {
           signedIn,
         });
 
+  const pointIndex = point?.pointIndex ?? null;
+  const isHub = point?.isHub ?? false;
+  const hasPointContext = pointIndex != null || isHub;
+
+  // Per-star reason: guests see the hub and the first GUEST_PREVIEW_COUNT points,
+  // everything deeper keeps the auth gate.
+  const pointLockReason: ExploreLockReason =
+    isPending || signId == null
+      ? "auth"
+      : exploreLockReason({
+          signId,
+          session,
+          savedCharts,
+          signedIn,
+          pointIndex,
+          isHub,
+        });
+
+  const pointUnlocked = hasPointContext && !isPending && signId != null && pointLockReason == null;
+
   useEffect(() => {
     setExploreStarsUnlocked(unlocked);
   }, [unlocked]);
 
-  return { unlocked, lockReason, signedIn, isPending, savedCharts, session };
+  return {
+    unlocked,
+    lockReason,
+    pointUnlocked,
+    pointLockReason,
+    signedIn,
+    isPending,
+    savedCharts,
+    session,
+  };
 }

@@ -3,6 +3,7 @@ import type { Nativity } from "@/lib/chart/schema";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { AppMode, ResearchChartId, Selection, SignId } from "@/lib/chart/types";
 import { followingBeat, markBeatSeen, markTourDone, nextJoeyBeat } from "@/lib/chart/tour";
+import { clearGuestDraft, saveGuestDraft } from "@/lib/ui/guestDraft";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { OPEN_T, exitSignGalaxy, exploringSign, resetTravel, seekSign } from "@/lib/galaxy/travel";
@@ -90,9 +91,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       origin: "galaxy",
     });
     set((current) => openSessionState(current, session));
+    clearGuestDraft();
   },
 
-  openSession: (session) => set((current) => openSessionState(current, session)),
+  openSession: (session) => {
+    set((current) => openSessionState(current, session));
+    clearGuestDraft();
+  },
 
   openResearch: (id, nativity) => {
     const beat = id === "joey" ? nextJoeyBeat() : null;
@@ -105,12 +110,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       selection: beat?.selection ?? null,
     });
     set((state) => openSessionState(state, session));
+    clearGuestDraft();
   },
 
   openShelf: (input) => {
     seekSignFor(input.signId);
     const session = fromShelf(input);
     set((state) => openSessionState(state, session));
+    clearGuestDraft();
   },
 
   openLibrary: () => set((state) => setSurfaceState(state, "library")),
@@ -128,16 +135,30 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   openClaim: (signId) => {
     seekSignFor(signId);
-    set((state) => openClaimState(state, signId));
+    // Reopening the same sign keeps the birth already typed — "This is my
+    // sign" twice must not discard a half-finished birth chat.
+    const birth = get().claim?.signId === signId ? get().claim?.birth ?? null : null;
+    set((state) => {
+      const next = openClaimState(state, signId);
+      return birth ? setClaimBirthState(next, birth) : next;
+    });
+    saveGuestDraft(signId, birth);
   },
 
-  closeClaim: () => set((state) => clearClaimState(state)),
+  closeClaim: () => {
+    set((state) => clearClaimState(state));
+    // Deliberate exit ("Keep flying") ends the in-progress flow; a reload
+    // should not resurrect it. Redirects that skip closeClaim keep the draft.
+    clearGuestDraft();
+  },
 
   setClaimBirth: (birth) =>
     set((state) => {
       // Accept any valid date — cusp dates may fall in a neighbouring sign.
       // The sun sign is resolved from the actual birth date, not the claim's signId.
-      return setClaimBirthState(state, birth);
+      const next = setClaimBirthState(state, birth);
+      if (next.claim) saveGuestDraft(next.claim.signId, birth);
+      return next;
     }),
 
   setShelfNatal: (natal) =>

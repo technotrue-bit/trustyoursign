@@ -10,6 +10,7 @@ import {
   DoubleSide,
   FogExp2,
   Group,
+  LineSegments,
   LinearFilter,
   Mesh,
   MeshBasicMaterial,
@@ -52,6 +53,7 @@ import {
   stepExplore,
   stepSelectionHold,
   stepSeek,
+  stepShaderTime,
   stepZoom,
 } from "@/lib/galaxy/travel";
 import {
@@ -66,6 +68,8 @@ import {
   introField,
   introPlaying,
   introAries,
+  ariesConstellationReveal,
+  ariesConstellationLineCount,
   skipIntro,
   stepIntro,
   uAssemble,
@@ -112,6 +116,7 @@ import {
 } from "@/lib/galaxy/signVolume";
 import { buildBirthNebula, makeNebulaMaterial } from "@/lib/galaxy/nebula";
 import { makeStarSprite } from "@/lib/galaxy/celestial";
+import { starRenderProfile } from "@/lib/galaxy/starAppearance";
 import {
   NAVE,
   PLATE_WIDE,
@@ -136,8 +141,9 @@ import { SignGalaxyField, pointLocalOffset } from "./SignGalaxyField";
 import { getFigureMatch, landingBiasNdc } from "@/lib/galaxy/signAlign";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
-const DUST_N = SMALL ? 180 : 320;
-const CLOUD_N = SMALL ? 2600 : 4400;
+const STAR_PROFILE = starRenderProfile(SMALL);
+const DUST_N = STAR_PROFILE.dustCount;
+const CLOUD_N = STAR_PROFILE.stationCount;
 
 const _cam = new Vector3();
 const _look = new Vector3();
@@ -392,7 +398,7 @@ function SignDisk() {
       galaxyTravel.ptrOn && !galaxyTravel.dragging,
       reduced,
     );
-    sim.mat.uniforms.uTime.value = clock.elapsedTime;
+    sim.mat.uniforms.uTime.value = galaxyTravel.shaderTime;
     sim.mat.uniforms.uFade.value =
       fieldFade(gather) *
       Math.min(1, (intro - 0.38) / 0.4) *
@@ -495,7 +501,7 @@ function BirthNebula() {
     mesh.visible = fade > 0.02;
     if (!mesh.visible) return;
     mesh.position.copy(TEMPLE_STATIONS[0]!);
-    mat.uniforms.uTime.value = clock.elapsedTime;
+    mat.uniforms.uTime.value = galaxyTravel.shaderTime;
     mat.uniforms.uBirth.value = uBirth();
     mat.uniforms.uAssemble.value = assemble;
     mat.uniforms.uOpacity.value = fade;
@@ -801,6 +807,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         const mat = art.current.material as MeshBasicMaterial;
         const plateOn = Boolean(artTex && (artReady(artTex) || ready));
         const bornIn = plateReveal;
+        const ariesBreath =
+          index === 0 && !prefersReducedMotion()
+            ? 1 + Math.sin(galaxyTravel.shaderTime * 0.72) * 0.012
+            : 1;
         // Plate opacity via tested helper — fully opaque during BirthChat, no plateMorphFade.
         const plateOp =
           computePlateOpacity({
@@ -812,8 +822,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             morphLevel: morphLevel.current,
           }) * (exploringHere ? galaxyTravel.plateFade : 1);
         art.current.visible = plateOp > 0.04;
-        art.current.scale.set(wide, wide / aspect, 1);
-        mat.opacity = plateOp;
+        art.current.scale.set(wide * ariesBreath, (wide / aspect) * ariesBreath, 1);
+        mat.opacity =
+          plateOp *
+          (index === 0 && !prefersReducedMotion()
+            ? 0.985 + Math.sin(galaxyTravel.shaderTime * 0.9 + 0.6) * 0.015
+            : 1);
         // Measured evidence for M11: what the entered sign's plate is actually
         // drawn at. Only the entered station publishes, so a neighbour's frame
         // can't clobber the value the QA probe reads.
@@ -854,10 +868,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       const ml = morphLevel.current;
       const u = coreMat.uniforms;
       const landGain =
-        index === aimedIndex() && !exploringHere
-          ? cloudBurstGain(signArrive.burst)
-          : CLOUD_GAIN_IDLE;
-      u.uTime.value = clock.elapsedTime;
+        index === aimedIndex() && !exploringHere ? cloudBurstGain(signArrive.burst) : CLOUD_GAIN_IDLE;
+      u.uTime.value = galaxyTravel.shaderTime;
       u.uGather.value = gather;
       u.uWide.value = wide;
       u.uTall.value = wide / aspect;
@@ -868,8 +880,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       u.uSwirl.value = (prefersReducedMotion() ? 0 : 1 - ml * 0.9) * landGain.swirl;
       u.uFade.value = fade;
       u.uHover.value = (galaxyTravel.ptrOn && focused ? 1.12 : 1) * landGain.hover;
-      u.uPxScale.value = SMALL ? 0.9 : 1;
-      u.uBaseSize.value = SMALL ? 2.6 : 2.05;
+      u.uPxScale.value = STAR_PROFILE.stationPixelScale;
+      u.uBaseSize.value = STAR_PROFILE.stationBaseSize;
       // Boost opacity when forming glyph so stars are crisp and visible
       const formBoost = exploringHere ? 0.35 + galaxyTravel.galaxyForm * 0.85 : 1;
       u.uOpacity.value = (0.62 + fade * 0.32) * (1 + ml * 0.55) * formBoost * landGain.opacity;
@@ -950,7 +962,149 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         raycast={noopRaycast}
       />
       <SignGalaxyField sign={sign} index={index} />
+      {index === 0 ? <AriesConstellationReveal /> : null}
+      {index === 0 ? <AriesAtmosphere /> : null}
       <BigThreeLights signId={sign.id} />
+    </group>
+  );
+}
+
+function AriesConstellationReveal() {
+  const line = useRef<LineSegments>(null);
+  const figure = CONSTELLATIONS[0]?.animal;
+  const geometry = useMemo(() => {
+    const g = new BufferGeometry();
+    if (!figure) return g;
+    const pos = new Float32Array(figure.lines.length * 6);
+    let w = 0;
+    for (const [a, b] of figure.lines) {
+      const sa = figure.stars[a];
+      const sb = figure.stars[b];
+      if (!sa || !sb) continue;
+      pos[w++] = sa.x;
+      pos[w++] = sa.y;
+      pos[w++] = 0.02;
+      pos[w++] = sb.x;
+      pos[w++] = sb.y;
+      pos[w++] = 0.02;
+    }
+    g.setAttribute("position", new BufferAttribute(pos.subarray(0, w), 3));
+    g.setDrawRange(0, 0);
+    return g;
+  }, [figure]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  useFrame(({ clock }) => {
+    const mesh = line.current;
+    if (!mesh) return;
+    const reduced = prefersReducedMotion();
+    const reveal = ariesConstellationReveal(introAries(), reduced);
+    const count = geometry.getAttribute("position")?.count ?? 0;
+    const segmentCount = Math.floor(count / 2);
+    const lineCount = ariesConstellationLineCount(introAries(), segmentCount, reduced);
+    geometry.setDrawRange(0, lineCount * 2);
+    mesh.visible = lineCount > 0;
+    const material = mesh.material as MeshBasicMaterial;
+    const shimmer = reduced ? 0 : (Math.sin(galaxyTravel.shaderTime * 1.1) + 1) * 0.025;
+    material.opacity = (reduced ? 0.2 : 0.13 + shimmer) * (0.35 + reveal * 0.65);
+  });
+
+  return (
+    <lineSegments
+      ref={line}
+      geometry={geometry}
+      position={[0, 0.05, 0.08]}
+      scale={[PLATE_WIDE, PLATE_WIDE / (16 / 9), 1]}
+      renderOrder={19}
+      frustumCulled={false}
+      raycast={noopRaycast}
+    >
+      <lineBasicMaterial
+        color="#f0d4a1"
+        transparent
+        opacity={0}
+        depthWrite={false}
+        depthTest={false}
+        toneMapped={false}
+        blending={AdditiveBlending}
+      />
+    </lineSegments>
+  );
+}
+
+function AriesAtmosphere() {
+  const halo = useRef<Mesh>(null);
+  const orbit = useRef<Mesh>(null);
+  const core = useRef<Mesh>(null);
+
+  useFrame(() => {
+    const t = galaxyTravel.shaderTime;
+    const breathe = 1 + Math.sin(t * 0.72) * 0.025;
+    const hover = galaxyTravel.ptrOn ? 1 : 0;
+    const shimmer = 0.5 + 0.5 * Math.sin(t * 1.15 + 0.8) + hover * 0.18;
+
+    if (halo.current) {
+      halo.current.scale.set(
+        (1.02 + hover * 0.018) * breathe,
+        (0.58 + hover * 0.012) * breathe,
+        1,
+      );
+      halo.current.rotation.z = t * 0.035;
+      const material = halo.current.material as MeshBasicMaterial;
+      material.opacity = 0.035 + shimmer * 0.018;
+    }
+    if (orbit.current) {
+      orbit.current.scale.set(
+        (1.02 + hover * 0.025) * breathe,
+        (0.58 + hover * 0.018) * breathe,
+        1,
+      );
+      orbit.current.rotation.z = -t * 0.055;
+      const material = orbit.current.material as MeshBasicMaterial;
+      material.opacity = 0.14 + shimmer * 0.06;
+    }
+    if (core.current) {
+      const material = core.current.material as MeshBasicMaterial;
+      material.opacity = 0.025 + shimmer * 0.018;
+    }
+  });
+
+  return (
+    <group position={[0, 0.05, -0.12]} renderOrder={14} raycast={noopRaycast}>
+      <mesh ref={core} renderOrder={13}>
+        <circleGeometry args={[5.1, 96]} />
+        <meshBasicMaterial
+          color="#c9a15b"
+          transparent
+          opacity={0.03}
+          depthWrite={false}
+          toneMapped={false}
+          blending={AdditiveBlending}
+        />
+      </mesh>
+      <mesh ref={halo} renderOrder={14}>
+        <ringGeometry args={[5.08, 5.13, 128]} />
+        <meshBasicMaterial
+          color="#c9a15b"
+          transparent
+          opacity={0.04}
+          depthWrite={false}
+          toneMapped={false}
+          blending={AdditiveBlending}
+        />
+      </mesh>
+      <mesh ref={orbit} renderOrder={15} rotation={[0, 0, Math.PI / 2]}>
+        <ringGeometry args={[5.34, 5.365, 128]} />
+        <meshBasicMaterial
+          color="#f0d4a1"
+          transparent
+          opacity={0.16}
+          depthWrite={false}
+          toneMapped={false}
+          blending={AdditiveBlending}
+        />
+      </mesh>
     </group>
   );
 }
@@ -1123,6 +1277,8 @@ function TempleRig() {
       galaxyTravel.tTarget = galaxyTravel.t;
       booted.current = false;
     }
+    // I5: one shared sky clock — a pause freezes every shader below together.
+    stepShaderTime(d);
     if (stepBirth(d)) {
       useGalaxy.getState().markBorn();
       galaxyTravel.awaken = 1;

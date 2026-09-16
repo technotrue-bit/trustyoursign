@@ -19,6 +19,8 @@ type ExploreUi = {
 type GalaxyState = {
   t: number;
   moved: boolean;
+  /** I5: React-visible mirror of `galaxyTravel.paused`, for scene props. */
+  paused: boolean;
   signIndex: number;
   born: boolean;
   chakraNote: string | null;
@@ -33,6 +35,7 @@ type GalaxyState = {
   markBorn: () => void;
   setChakraNote: (id: string | null) => void;
   setExplore: (explore: ExploreUi) => void;
+  setPausedFlag: (paused: boolean) => void;
 };
 
 const IDLE_EXPLORE: ExploreUi = {
@@ -50,6 +53,7 @@ const IDLE_EXPLORE: ExploreUi = {
 export const useGalaxy = create<GalaxyState>((set, get) => ({
   t: 0,
   moved: false,
+  paused: false,
   signIndex: 0,
   born: false,
   chakraNote: null,
@@ -80,6 +84,10 @@ export const useGalaxy = create<GalaxyState>((set, get) => ({
     set({ born: true });
   },
   setChakraNote: (id) => set({ chakraNote: id }),
+  setPausedFlag: (paused) => {
+    if (get().paused === paused) return;
+    set({ paused });
+  },
   setExplore: (explore) => {
     const prev = get().explore;
     if (

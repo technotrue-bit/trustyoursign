@@ -1,14 +1,24 @@
+import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { insightToneLabel } from "@/lib/galaxy/signInsights";
 import { getSignGalaxy } from "@/lib/galaxy/signGalaxy";
+import type { PointPurposeKind } from "@/lib/galaxy/signGalaxy";
+import { guestPreviewUnlocked } from "@/lib/galaxy/exploreAccess";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { exitSignGalaxy, seekGalaxyPoint, skipEnterGalaxy } from "@/lib/galaxy/travel";
 import { useSessionStore } from "@/lib/chart/session";
+import { MIN_AGE } from "@/lib/legal";
+import { genreSealedByTone, useViewerTone } from "@/lib/ui/viewerTone";
 import { useSignExploreAccess } from "@/hooks/useSignExploreAccess";
 import { Gloss } from "./Gloss";
 import { AuthSlot } from "./AuthSlot";
 import { cn } from "@/lib/utils";
 import type { CSSProperties } from "react";
+
+/** Genre label that tolerates the hub kind (TS cannot prove non-hub points never carry it). */
+function kindLabel(kind: PointPurposeKind): string {
+  return kind === "hub" ? "Star" : insightToneLabel(kind);
+}
 
 /** HUD while diving into / exploring a selected sign’s animal-star galaxy. */
 export function SignGalaxyHud() {
@@ -16,31 +26,35 @@ export function SignGalaxyHud() {
   const openClaim = useSessionStore((s) => s.openClaim);
 
   const sign = explore.signIndex != null ? (CONSTELLATIONS[explore.signIndex] ?? null) : null;
-  const { unlocked, lockReason } = useSignExploreAccess(sign?.id ?? null);
+  const galaxy = sign ? getSignGalaxy(sign.id) : null;
+  const point = galaxy ? (galaxy.points[explore.pointIndex] ?? galaxy.points[0] ?? null) : null;
+  const { unlocked, lockReason, pointUnlocked, pointLockReason, signedIn } = useSignExploreAccess(
+    sign?.id ?? null,
+    { pointIndex: explore.pointIndex, isHub: point?.isHub ?? false },
+  );
+  const viewerTone = useViewerTone((s) => s.tone);
+  const setViewerTone = useViewerTone((s) => s.setTone);
 
-  if (explore.phase === "idle" || explore.signIndex == null || !sign) return null;
+  if (explore.phase === "idle" || explore.signIndex == null || !sign || !galaxy) return null;
 
-  const galaxy = getSignGalaxy(sign.id);
-  const point = galaxy.points[explore.pointIndex] ?? galaxy.points[0];
   const inside = explore.phase === "inside";
   const phaseEntering = explore.phase === "fading" || explore.phase === "diving";
   const entering = phaseEntering || explore.skipPhase !== "idle";
-  const lockedPoint = Boolean(point && !point.isHub && !unlocked);
+  /** Guest inside the open preview — real copy, with a sign-in nudge. */
+  const previewPoint = Boolean(point && !point.isHub && !unlocked && pointLockReason == null);
+  /** Non-hub star still behind the gate (auth or chart). */
+  const lockedPoint = Boolean(point && !point.isHub && !unlocked && pointLockReason != null);
+  /** Star held shut only by the Warm tone setting (horror register). */
+  const toneSealed = Boolean(
+    point && !point.isHub && !lockedPoint && genreSealedByTone(viewerTone, point.purpose.kind),
+  );
   const sealedCopy =
-    lockReason === "auth"
+    pointLockReason === "auth"
       ? `Sign in or create an account, then keep a full ${sign.name} birth chart to open this star.`
       : `This star stays sealed until your ${sign.name} birth chart and profile are complete.`;
-  const hubTone = unlocked ? "Home star" : lockReason === "auth" ? "Account" : "First star";
-  const hubTitle = unlocked
-    ? point?.purpose.title
-    : lockReason === "auth"
-      ? "Sign in to open your galaxy"
-      : point?.purpose.title;
-  const hubBody = unlocked
-    ? point?.purpose.body
-    : lockReason === "auth"
-      ? `Create an account or sign in, finish a timed ${sign.name} birth chart, and keep your profile — then every star unlocks with insight, spice, horror, and warning.`
-      : point?.purpose.body;
+  const hubTone = pointUnlocked ? "Home star" : "First star";
+  const hubTitle = point?.purpose.title ?? "";
+  const hubBody = point?.purpose.body ?? "";
 
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
@@ -118,19 +132,27 @@ export function SignGalaxyHud() {
                   ? hubTone
                   : lockedPoint
                     ? "Sealed"
-                    : point.purpose.kind === "hub"
-                      ? "Star"
-                      : insightToneLabel(point.purpose.kind)}
+                    : toneSealed
+                      ? `${kindLabel(point.purpose.kind)} · held`
+                      : point.purpose.kind === "hub"
+                        ? "Star"
+                        : insightToneLabel(point.purpose.kind)}
               </p>
               <h3 className="sign-galaxy-copy-title font-display mt-1 text-xl leading-snug font-medium tracking-tight italic md:text-2xl">
                 {point.isHub ? hubTitle : lockedPoint ? "Still sealed" : point.purpose.title}
               </h3>
               <p className="sign-galaxy-copy-body mt-2 text-sm leading-relaxed md:text-base">
                 <Gloss card={false}>
-                  {point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}
+                  {point.isHub
+                    ? hubBody
+                    : lockedPoint
+                      ? sealedCopy
+                      : toneSealed
+                        ? "This star speaks in a horror register. It stays shut while your tone is Warm — switch to Full when you want the dark version."
+                        : point.purpose.body}
                 </Gloss>
               </p>
-              {point.isHub && lockReason === "auth" ? (
+              {point.isHub && !signedIn ? (
                 <ul className="mt-3 space-y-1 text-xs text-fg-subtle">
                   <li>We don&apos;t sell your data.</li>
                   <li>Your charts don&apos;t train public models.</li>
@@ -143,6 +165,25 @@ export function SignGalaxyHud() {
                   Drag to look around. Tap a star to move.
                 </p>
               ) : null}
+              {previewPoint ? (
+                <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
+                  Free preview star — sign in to open every star.
+                </p>
+              ) : null}
+              {toneSealed ? (
+                <button
+                  type="button"
+                  onClick={() => setViewerTone("vault")}
+                  className="pointer-events-auto mt-3 min-h-11 rounded-md border border-border px-4 text-xs tracking-[0.18em] text-fg-muted uppercase hover:text-fg"
+                >
+                  Open dark stars — Full tone
+                </button>
+              ) : null}
+              {!lockedPoint && !toneSealed && !point.isHub ? (
+                <p className="mt-3 text-[0.6rem] leading-snug text-fg-subtle">
+                  Readings are cultural entertainment, not medical, legal, or psychological advice. <Link to="/terms" className="underline hover:text-fg">Terms</Link>. {MIN_AGE}+.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -150,7 +191,9 @@ export function SignGalaxyHud() {
             {inside ? (
               <div className="sign-galaxy-dots pointer-events-auto" role="group" aria-label="Star points">
                 {galaxy.points.map((p, i) => {
-                  const sealed = !p.isHub && !unlocked;
+                  const sealed = !p.isHub && !unlocked && !guestPreviewUnlocked(i, p.isHub);
+                  const dark = !p.isHub && !sealed && genreSealedByTone(viewerTone, p.purpose.kind);
+                  const shut = sealed || dark;
                   const active = i === explore.pointIndex;
                   return (
                     <button
@@ -161,20 +204,65 @@ export function SignGalaxyHud() {
                       className={cn(
                         "sign-galaxy-dot",
                         p.isHub && "sign-galaxy-dot--hub",
-                        sealed && "sign-galaxy-dot--sealed",
-                        !p.isHub && !sealed && "sign-galaxy-dot--open",
+                        shut && "sign-galaxy-dot--sealed",
+                        !p.isHub && !shut && "sign-galaxy-dot--open",
                         active && "sign-galaxy-dot--active",
                       )}
                       aria-current={active ? "true" : undefined}
-                      aria-label={sealed ? `${p.purpose.title} (sealed)` : p.purpose.title}
+                      aria-label={`${p.purpose.title} · ${p.isHub ? "Home star" : kindLabel(p.purpose.kind)}${sealed ? " · sealed" : ""}${dark ? " · dark, tone is Warm" : ""}`}
                     >
-                      <span aria-hidden>{p.isHub ? "●" : sealed ? "◌" : "○"}</span>
+                      <span aria-hidden>{p.isHub ? "●" : shut ? "◌" : "○"}</span>
                     </button>
                   );
                 })}
               </div>
             ) : null}
+            {inside && point ? (
+              <p className="text-[0.6rem] tracking-[0.18em] text-fg-subtle uppercase">
+                Star {Math.min(explore.pointIndex + 1, galaxy.points.length)} of {galaxy.points.length}
+              </p>
+            ) : null}
+            {inside ? (
+              <div className="pointer-events-auto flex items-center gap-3 text-[0.6rem] tracking-[0.18em] uppercase">
+                <span className="text-fg-subtle">Tone</span>
+                <button
+                  type="button"
+                  aria-pressed={viewerTone === "warm"}
+                  onClick={() => setViewerTone("warm")}
+                  className={cn(
+                    "min-h-9 px-2",
+                    viewerTone === "warm" ? "text-fg" : "text-fg-subtle hover:text-fg",
+                  )}
+                >
+                  Warm
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={viewerTone === "vault"}
+                  onClick={() => setViewerTone("vault")}
+                  className={cn(
+                    "min-h-9 px-2",
+                    viewerTone === "vault" ? "text-fg" : "text-fg-subtle hover:text-fg",
+                  )}
+                >
+                  Full
+                </button>
+              </div>
+            ) : null}
+            {inside && point ? (
+              <p className="sr-only" aria-live="polite">
+                {`At ${point.purpose.title}. ${point.isHub ? "Home star" : lockedPoint ? "Sealed until your chart is kept" : kindLabel(point.purpose.kind)}. Star ${explore.pointIndex + 1} of ${galaxy.points.length}.`}
+              </p>
+            ) : null}
             {inside && point?.isHub && lockReason === "auth" ? (
+              <a
+                href="/login"
+                className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
+              >
+                Sign in / Sign up
+              </a>
+            ) : null}
+            {inside && previewPoint ? (
               <a
                 href="/login"
                 className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
@@ -194,6 +282,7 @@ export function SignGalaxyHud() {
             {inside && unlocked ? (
               <p className="sign-galaxy-copy-body max-w-sm px-2 text-center text-[0.7rem] tracking-wide">
                 Your galaxy is open. Each star holds insight, spice, horror, and warning.
+                {viewerTone === "warm" ? " Dark stars stay shut until you switch tone to Full." : ""}
               </p>
             ) : null}
           </div>

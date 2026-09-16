@@ -95,6 +95,10 @@ export const galaxyTravel = {
   /** Damped camera follows this. Scroll and seek write here. Clamped 0–1. */
   tTarget: OPEN_T,
   moved: false,
+  /** I5: vestibular pause — flight, drift, and sky clocks all hold while true. */
+  paused: false,
+  /** Shared sky clock: cameras and shaders read this so a pause freezes them together. */
+  shaderTime: 0,
   /** ms left on the post-select hold; null when no countdown is armed. */
   selectionHoldLeft: null as number | null,
   /** performance.now() when selectionHoldLeft was last sampled. */
@@ -219,6 +223,8 @@ function restIdle() {
 /** Advance the opening birth one display frame. Capped so a hitch never jumps the boom. */
 export function stepBirth(dt?: number) {
   if (galaxyTravel.birth >= 1) return false;
+  // A pause holds the birth exactly where it is — resuming continues it.
+  if (galaxyTravel.paused) return false;
   if (prefersReducedMotion()) {
     galaxyTravel.birth = 1;
     return true;
@@ -290,6 +296,12 @@ export function clearSignSelection() {
  */
 export function stepSelectionHold() {
   if (galaxyTravel.selectionHoldLeft == null) return;
+  if (galaxyTravel.paused) {
+    // Freeze the countdown: keep the sample time fresh so resuming does not
+    // burn the remaining hold in one frame.
+    galaxyTravel.selectionHoldAt = nowMs();
+    return;
+  }
   if (!galaxyTravel.moved) {
     galaxyTravel.selectionHoldLeft = null;
     return;
@@ -573,6 +585,7 @@ function stepEnterSkip(dt: number) {
 }
 
 export function stepExplore(dt: number) {
+  if (galaxyTravel.paused) return;
   if (galaxyTravel.enterSkip !== "idle") {
     stepEnterSkip(dt);
     return;
@@ -841,6 +854,7 @@ export function applyPinch(ratio: number) {
 }
 
 export function stepZoom(dt: number, stationChanged: boolean) {
+  if (galaxyTravel.paused) return;
   if (stationChanged) galaxyTravel.zoomTarget = 1;
   const k = 1 - Math.exp(-dt * 10);
   galaxyTravel.zoom += (galaxyTravel.zoomTarget - galaxyTravel.zoom) * k;
@@ -1139,6 +1153,7 @@ function finishSeek(dest: number) {
 
 /** Cruise toward a strip jump. Fly through the sky — never teleport into a blank. */
 export function stepSeek(t: number, dt: number) {
+  if (galaxyTravel.paused) return { t, active: false };
   const dest = galaxyTravel.seek;
   if (dest == null) return { t, active: false };
   if (galaxyTravel.seekDirect) {
@@ -1190,6 +1205,10 @@ export function stepAutoSign(
   _dt: number,
   opts: { canAdvance: boolean; traveling?: boolean; handsOn?: boolean },
 ) {
+  if (galaxyTravel.paused) {
+    restIdle();
+    return false;
+  }
   if (!opts.canAdvance || opts.traveling || opts.handsOn) {
     restIdle();
     return false;
@@ -1208,6 +1227,43 @@ export function stepAutoSign(
   if (i >= 11) return false;
   seekSign(i + 1, { auto: true });
   return true;
+}
+
+/**
+ * I5: one switch for the whole sky — camera flight, drift, twinkle, and the
+ * 7s auto-walk. Pausing stops the shared clocks rather than any single scene,
+ * so the 2D sky and the 3D scene freeze together.
+ */
+export function setPaused(paused: boolean) {
+  if (galaxyTravel.paused === paused) return;
+  galaxyTravel.paused = paused;
+  // Publish to the store: some scene pieces (drei's ambient <Stars>) animate on
+  // their own clock and can only be stilled through a prop.
+  useGalaxy.getState().setPausedFlag(paused);
+  galaxyTravel.hold = 0;
+  galaxyTravel.steer = 0;
+  galaxyTravel.dragging = false;
+  galaxyTravel.wheelUntil = 0;
+  if (paused) {
+    stopAutoClock();
+  } else {
+    autoLast = nowMs();
+    ensureAutoClock();
+  }
+  restIdle();
+}
+
+/**
+ * Advance the shared sky clock unless paused, and return the value the
+ * renderers should feed their shaders. Using one clock (not each scene's own
+ * elapsed time) is what makes the freeze total.
+ */
+export function stepShaderTime(dt: number): number {
+  if (galaxyTravel.paused) return galaxyTravel.shaderTime;
+  const raw =
+    typeof dt === "number" && Number.isFinite(dt) && dt > 0 ? Math.min(dt, BIRTH_DT_CAP) : 0;
+  galaxyTravel.shaderTime += raw;
+  return galaxyTravel.shaderTime;
 }
 
 /** Own rAF so the 7s walk keeps time even while the canvas is booting. */

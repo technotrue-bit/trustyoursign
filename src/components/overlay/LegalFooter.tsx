@@ -16,6 +16,18 @@ export function LegalFooter() {
   if (!show) {
     return (
       <p className="pointer-events-auto px-2 text-center text-[0.58rem] leading-snug tracking-wide text-fg-subtle md:px-3 md:text-[0.6rem] md:leading-relaxed">
+        <Link to="/about" className="text-fg/90 hover:text-fg">
+          About
+        </Link>
+        {" · "}
+        <Link to="/how-this-works" className="text-fg/90 hover:text-fg">
+          How
+        </Link>
+        {" · "}
+        <Link to="/contact" className="text-fg/90 hover:text-fg">
+          Contact
+        </Link>
+        {" · "}
         <Link to="/privacy" className="text-fg/90 hover:text-fg">
           Privacy
         </Link>

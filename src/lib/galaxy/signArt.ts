@@ -162,8 +162,10 @@ export function releaseSignArt(tex: CanvasTexture | null | undefined) {
   }
   const canvas = tex.image as HTMLCanvasElement | undefined;
   if (canvas && typeof canvas.width === "number") {
-    canvas.width = 0;
-    canvas.height = 0;
+    // Keep a valid source while React/Three finishes its unmount frame. A
+    // zero-sized canvas can trigger texSubImage2D INVALID_VALUE warnings.
+    canvas.width = 1;
+    canvas.height = 1;
   }
   tex.dispose();
 }

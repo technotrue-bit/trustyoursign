@@ -4,7 +4,7 @@ import { lonToXZ } from "@/lib/chart/geometry";
 import { CONSTELLATIONS, constellationDust, nearestSign, pairFigures } from "@/lib/galaxy/constellations";
 import { preloadSignArt, signArtImage } from "@/lib/galaxy/signArt";
 import { getSignVolume } from "@/lib/galaxy/signVolume";
-import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, ensureAutoClock, ensureFlyInput, exploringSign, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
+import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, ensureAutoClock, ensureFlyInput, exploringSign, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepShaderTime, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
 import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
@@ -91,7 +91,7 @@ function finishBirth() {
 }
 
 /** 2D sky so a WebGL failure never blanks the page. */
-export function FallbackSky() {
+export function FallbackSky({ note }: { note?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -523,6 +523,8 @@ export function FallbackSky() {
     const tickSky = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
+      // Shared sky clock: pausing holds the twinkle and drift as well as the flight.
+      const skyTime = stepShaderTime(dt);
       const state = useSessionStore.getState();
       const entered = state.session !== null;
       const chatting = state.claim !== null && !entered;
@@ -533,7 +535,10 @@ export function FallbackSky() {
       const arriving = introPlaying();
       const birthing = arriving;
       const exploring = exploringSign();
-      const flying = !entered && !chatting && !birthing && !exploring;
+      // I5: while paused the sky is not "flying" — velocity decays to rest and
+      // the star drift below is skipped entirely (the pause must stop the drift,
+      // not just the flight-path advance).
+      const flying = !entered && !chatting && !birthing && !exploring && !galaxyTravel.paused;
       const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
       galaxyTravel.handsOn = hands;
       galaxyTravel.busy = chatting || entered || birthing;
@@ -574,7 +579,7 @@ export function FallbackSky() {
           vel = Math.min(MAX_FLY, Math.max(0, vel));
         }
         galaxyTravel.speed = vel * 38;
-        if (!sought.active) {
+        if (!sought.active && !galaxyTravel.paused) {
           galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + vel * dt * 0.045);
           galaxyTravel.t += (galaxyTravel.tTarget - galaxyTravel.t) * (1 - Math.exp(-dt * 3.4));
           galaxyTravel.t = clamp01(galaxyTravel.t);
@@ -654,7 +659,6 @@ export function FallbackSky() {
         const t = galaxyTravel.t;
         const awaken = galaxyTravel.awaken;
         const picked = state.claim?.signId ?? state.session?.signId ?? null;
-        const skyTime = now / 1000;
         if (chatting && picked) {
           const holdIdx = CONSTELLATIONS.findIndex((c) => c.id === picked);
           const hold = holdIdx >= 0 ? CONSTELLATIONS[holdIdx] : undefined;
@@ -730,6 +734,14 @@ export function FallbackSky() {
   return (
     <div className="canvas-root" style={{ background: "#0c0b0a" }}>
       <canvas ref={canvasRef} className="h-full w-full touch-none" aria-hidden />
+      {note ? (
+        <p
+          role="status"
+          className="pointer-events-none absolute inset-x-0 bottom-[calc(var(--chrome-bottom)+11rem)] z-[1] px-4 text-center text-[0.6rem] leading-snug tracking-[0.18em] text-fg-subtle uppercase"
+        >
+          {note}
+        </p>
+      ) : null}
     </div>
   );
 }

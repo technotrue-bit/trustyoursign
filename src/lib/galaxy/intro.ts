@@ -1,4 +1,5 @@
 import { useGalaxy } from "./store";
+import { prefersReducedMotion } from "./travel";
 
 export const INTRO_KEY = "templeIntroSeen";
 export const INTRO_FULL = 6.8;
@@ -33,6 +34,47 @@ function easeOutCubic(x: number) {
 function smoother(x: number) {
   const t = clamp01(x);
   return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+/** Progressively draws the Aries constellation after its silhouette gathers. */
+export function ariesConstellationReveal(progress: number, reduced = false) {
+  if (reduced) return 1;
+  return smoother((clamp01(progress) - 0.16) / 0.72);
+}
+
+/**
+ * Stages the animal's compiled stroke order: horns first, then face/chest,
+ * with the legs and tail arriving last. The Aries animal data is authored in
+ * that order, so the line renderer can stay a cheap contiguous draw range.
+ */
+export function ariesConstellationLineReveal(
+  progress: number,
+  lineIndex: number,
+  lineCount: number,
+  reduced = false,
+) {
+  if (reduced) return 1;
+  if (lineCount <= 0 || lineIndex < 0 || lineIndex >= lineCount) return 0;
+  const overall = ariesConstellationReveal(progress);
+  const position = lineIndex / Math.max(1, lineCount - 1);
+  const start = 0.04 + position * 0.68;
+  return smoother((overall - start) / 0.22);
+}
+
+export function ariesConstellationLineCount(
+  progress: number,
+  lineCount: number,
+  reduced = false,
+) {
+  if (reduced) return Math.max(0, lineCount);
+  let visible = 0;
+  while (
+    visible < lineCount &&
+    ariesConstellationLineReveal(progress, visible, lineCount) >= 0.5
+  ) {
+    visible += 1;
+  }
+  return visible;
 }
 
 function windowOut(t: number, a: number, b: number) {
@@ -221,11 +263,17 @@ export function bootIntro() {
   } catch {
     seen = false;
   }
-  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  // Reduced motion: no splash at all — land straight on the landing overlay.
+  // `seen` + `done` are both set so every intro accessor returns its settled
+  // value (1 / 0) even if `done` is ever cleared.
+  if (prefersReducedMotion()) {
+    templeIntro.seen = true;
     templeIntro.asking = false;
     templeIntro.askT = ASK;
-    templeIntro.t = 1;
+    templeIntro.t = templeIntro.duration;
+    // Sets done = true, marks seen/born, and pushes the settled intro state.
     skipIntro();
+    publish();
     return;
   }
   templeIntro.seen = seen;

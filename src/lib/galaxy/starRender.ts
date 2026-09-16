@@ -1,6 +1,7 @@
 import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, ShaderMaterial, Vector3 } from "three";
 import type { MorphPair } from "./constellations";
 import type { VolumeStar } from "./signVolume";
+import { STAR_APPEARANCE } from "./starAppearance";
 
 /**
  * Station stars — GPU gather, swirl, twinkle.
@@ -60,7 +61,8 @@ void main() {
   float flash = pow(0.5 + 0.5 * sin(uTime * (1.7 + mod(aPhase, 7.0) * 0.21) + aPhase * 1.3), 18.0);
   float spark = breathe + flash * (kind > 0.5 && kind < 1.5 ? 0.35 : 0.2);
   float mag = aMag;
-  float b = min(1.35, spark * (0.5 + mag * 0.55) * (0.55 + uFade * 0.5));
+  float visibility = clamp(uFade, 0.0, 1.0);
+  float b = min(1.35, spark * (0.5 + mag * 0.55) * (0.78 + visibility * 0.22));
   vec3 gold = vec3(1.0, 0.9, 0.72);
   vec3 violet = vec3(0.62, 0.55, 0.82);
   if (kind > 0.5 && kind < 1.5) vColor = mix(gold, uTint, 0.28) * b * 1.15;
@@ -69,7 +71,7 @@ void main() {
   // Fade spiral (kind 1) and halo (kind 2) out while glyph is forming
   // so only the clean body-star symbol is visible at full morph.
   float ambientFade = kind < 0.5 ? 1.0 : max(0.0, 1.0 - uMorph * 1.4);
-  vAlpha = uOpacity * (kind > 1.5 ? 0.55 : 1.0) * ambientFade;
+  vAlpha = uOpacity * visibility * (kind > 1.5 ? 0.55 : 1.0) * ambientFade * (1.0 + max(0.0, uHover - 1.0) * 0.35);
   vSpike = mag > 0.7 ? (mag - 0.7) * 2.2 : 0.0;
 
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
@@ -77,7 +79,7 @@ void main() {
   float base = uBaseSize + mag * mag * 7.4;
   if (kind > 0.5 && kind < 1.5) base *= 1.25;
   if (kind > 1.5) base *= 1.8;
-  gl_PointSize = max(1.2, base * uPxScale * uHover * (0.55 + gath * 0.5));
+  gl_PointSize = max(1.2, base * uPxScale * mix(1.0, uHover, ${STAR_APPEARANCE.hoverSizeMix}) * (0.55 + gath * 0.5));
 }
 `;
 
@@ -89,6 +91,7 @@ void main() {
   vec2 d = gl_PointCoord - vec2(0.5);
   float r2 = dot(d, d);
   if (r2 > 0.25) discard;
+  float edge = 1.0 - smoothstep(${STAR_APPEARANCE.spriteEdgeInner}, ${STAR_APPEARANCE.spriteEdgeOuter}, r2);
   float core = exp(-r2 * 92.0);
   float glow = exp(-r2 * 12.0) * 0.18;
   float ax = abs(d.x);
@@ -96,8 +99,8 @@ void main() {
   float spikeH = exp(-ay * 28.0) * exp(-ax * 2.8);
   float spikeV = exp(-ax * 28.0) * exp(-ay * 2.8);
   float spike = max(spikeH, spikeV) * vSpike * 0.52;
-  float s = (core + glow + spike) * vAlpha;
-  if (s < 0.016) discard;
+  float s = (core + glow + spike) * vAlpha * edge;
+  if (s < ${STAR_APPEARANCE.alphaCutoff}) discard;
   gl_FragColor = vec4(vColor * s, s);
 }
 `;
@@ -172,7 +175,8 @@ export function fillStationCloud(
     scat[i * 3] = sc.x;
     scat[i * 3 + 1] = sc.y;
     scat[i * 3 + 2] = sc.z;
-    phase[i] = i * 0.17;
+    // Stable but decorrelated phases avoid visible rows of synchronized twinkles.
+    phase[i] = hash(i, 50) * 6.2831853;
     mag[i] = 0;
     kind[i] = 0;
   }

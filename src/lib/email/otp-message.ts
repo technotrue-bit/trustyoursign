@@ -11,10 +11,10 @@ import { SIGN_IN_LINK_EXPIRES_SECONDS } from "../auth/sign-in-link";
 export type OtpPurpose = "sign-in" | "email-verification" | "forget-password" | "change-email";
 
 export const OTP_SUBJECTS: Record<OtpPurpose, string> = {
-  "sign-in": "Your Vault sign-in code",
-  "email-verification": "Confirm your Vault email",
-  "forget-password": "Your Vault reset code",
-  "change-email": "Confirm your new Vault email",
+  "sign-in": "Your Trust Your Sign sign-in code",
+  "email-verification": "Confirm your email for Trust Your Sign",
+  "forget-password": "Your Trust Your Sign reset code",
+  "change-email": "Confirm your new email for Trust Your Sign",
 };
 
 export function otpSubject(purpose: OtpPurpose): string {
@@ -44,7 +44,7 @@ export function otpText({ otp, purpose, expiresInSeconds, signInUrl }: OtpEmailI
         ? "Your password-reset code is"
         : "Your confirmation code is";
   return [
-    "The Vault",
+    "Trust Your Sign",
     "",
     `${lead} ${otp}.`,
     "",
@@ -59,7 +59,7 @@ export function otpText({ otp, purpose, expiresInSeconds, signInUrl }: OtpEmailI
     `It expires in ${expiryWording(expiresInSeconds)} and works once.`,
     "If you didn't ask for this, ignore this message — nobody can get in without the code.",
     "",
-    "The Vault · kept by Devin Norris",
+    "Trust Your Sign · kept by Devin Norris",
   ].join("\n");
 }
 
@@ -76,8 +76,8 @@ function messageShell(body: string): string {
   return `<!doctype html>
 <html><body style="margin:0;background:#0c0b0a;color:#efe8dc;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
   <div style="max-width:480px;margin:0 auto;padding:32px 24px">
-    <p style="margin:0 0 24px;font-size:12px;letter-spacing:0.22em;text-transform:uppercase;color:#a8a097">The Vault</p>
-${body}    <p style="margin:28px 0 0;font-size:12px;color:#a8a097">The Vault · kept by Devin Norris</p>
+    <p style="margin:0 0 24px;font-size:12px;letter-spacing:0.22em;text-transform:uppercase;color:#a8a097">Trust Your Sign</p>
+${body}    <p style="margin:28px 0 0;font-size:12px;color:#a8a097">Trust Your Sign · kept by Devin Norris</p>
   </div>
 </body></html>`;
 }
@@ -89,7 +89,7 @@ ${body}    <p style="margin:28px 0 0;font-size:12px;color:#a8a097">The Vault · 
 function signInLinkBlock(url: string, expiresInSeconds: number): string {
   const href = escapeHtml(url);
   return `    <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#c9c1b6">Rather not type it? Tap this and you are in — once, and only for the next ${expiryWording(expiresInSeconds)}:</p>
-    <p style="margin:0 0 12px"><a href="${href}" style="display:inline-block;padding:14px 22px;border-radius:6px;background:#efe8dc;color:#0c0b0a;font-size:15px;font-weight:600;text-decoration:none">Sign in to The Vault</a></p>
+    <p style="margin:0 0 12px"><a href="${href}" style="display:inline-block;padding:14px 22px;border-radius:6px;background:#efe8dc;color:#0c0b0a;font-size:15px;font-weight:600;text-decoration:none">Sign in to Trust Your Sign</a></p>
     <p style="margin:0 0 24px;font-size:12px;line-height:1.6;color:#a8a097">Button not working? Paste this into your browser:<br><span style="color:#c9c1b6;word-break:break-all">${href}</span></p>
 `;
 }
@@ -119,9 +119,8 @@ export function otpHtml(input: OtpEmailInput): string {
 
 /** Subject for a link sent on its own. */
 export function signInLinkSubject(): string {
-  return "Your Vault sign-in link";
+  return "Your Trust Your Sign sign-in link";
 }
-
 export type SignInLinkEmailInput = {
   url: string;
   expiresInSeconds: number;
@@ -130,7 +129,7 @@ export type SignInLinkEmailInput = {
 /** Plain-text body for a link sent on its own. */
 export function signInLinkText({ url, expiresInSeconds }: SignInLinkEmailInput): string {
   return [
-    "The Vault",
+    "Trust Your Sign",
     "",
     "Open this link and you are signed in:",
     url,
@@ -138,7 +137,7 @@ export function signInLinkText({ url, expiresInSeconds }: SignInLinkEmailInput):
     `It works once and expires in ${expiryWording(expiresInSeconds)}.`,
     "If you didn't ask for this, ignore this message — nobody can get in without the link.",
     "",
-    "The Vault · kept by Devin Norris",
+    "Trust Your Sign · kept by Devin Norris",
   ].join("\n");
 }
 
@@ -148,5 +147,40 @@ export function signInLinkHtml({ url, expiresInSeconds }: SignInLinkEmailInput):
     signInLinkBlock(url, expiresInSeconds) +
       `    <p style="margin:0;font-size:14px;line-height:1.6;color:#c9c1b6">If you didn't ask for this, ignore this message — nobody can get in without the link.</p>
 `,
+  );
+}
+
+export type ResetPasswordEmailInput = {
+  url: string;
+};
+
+/** Subject for a password-reset link (Better Auth sendResetPassword). */
+export function resetPasswordSubject(): string {
+  return "Choose a new Trust Your Sign password";
+}
+
+/** Plain-text body for a password-reset link. */
+export function resetPasswordText({ url }: ResetPasswordEmailInput): string {
+  return [
+    "Trust Your Sign",
+    "",
+    "Someone asked to choose a new password for this account. If that was you, open:",
+    url,
+    "",
+    "The link works once and expires in about an hour.",
+    "If you didn't ask for this, ignore this message — your current password keeps working.",
+    "",
+    "Trust Your Sign · kept by Devin Norris",
+  ].join("\n");
+}
+
+/** HTML body for a password-reset link. */
+export function resetPasswordHtml({ url }: ResetPasswordEmailInput): string {
+  const href = escapeHtml(url);
+  return messageShell(
+    `    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#efe8dc">Someone asked to choose a new password for this account. If that was you:</p>` +
+    `    <p style="margin:0 0 12px"><a href="${href}" style="display:inline-block;padding:14px 22px;border-radius:6px;background:#efe8dc;color:#0c0b0a;font-size:15px;font-weight:600;text-decoration:none">Choose a new password</a></p>` +
+    `    <p style="margin:0 0 24px;font-size:12px;line-height:1.6;color:#a8a097">Button not working? Paste this into your browser:<br><span style="color:#c9c1b6;word-break:break-all">${href}</span></p>` +
+    `    <p style="margin:0;font-size:14px;line-height:1.6;color:#c9c1b6">The link works once and expires in about an hour. If you didn&rsquo;t ask for this, ignore this message — your current password keeps working.</p>`,
   );
 }
