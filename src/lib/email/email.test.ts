@@ -5,6 +5,9 @@ import {
   otpHtml,
   otpSubject,
   otpText,
+  resetPasswordHtml,
+  resetPasswordSubject,
+  resetPasswordText,
   signInLinkHtml,
   signInLinkSubject,
   signInLinkText,
@@ -196,6 +199,28 @@ describe("the sign-in link the code email can carry", () => {
     assert.match(signInLinkSubject(), /link/);
     assert.match(signInLinkText({ url: link, expiresInSeconds: 900 }), /expires in 15 minutes/);
     assert.match(signInLinkHtml({ url: link, expiresInSeconds: 900 }), /Sign in to Trust Your Sign/);
+  });
+});
+
+describe("the password-reset email", () => {
+  const url = "https://trustyoursign.vercel.app/reset-password?token=abc";
+
+  it("is a reset link, not a sign-in code", () => {
+    assert.match(resetPasswordSubject(), /new Trust Your Sign password/);
+    const text = resetPasswordText({ url });
+    assert.match(text, /choose a new password/);
+    assert.equal(text.includes(url), true);
+    assert.equal(text.includes("sign-in code"), false);
+    const html = resetPasswordHtml({ url });
+    assert.match(html, /Choose a new password/);
+    assert.match(html, /href="https:\/\/trustyoursign\.vercel\.app\/reset-password\?token=abc"/);
+    assert.equal(html.includes("Sign in to Trust Your Sign"), false);
+  });
+
+  it("escapes a hostile URL in the button and the paste-this line alike", () => {
+    const html = resetPasswordHtml({ url: 'https://x.test/"><script>alert(1)</script>' });
+    assert.equal(html.includes("<script>"), false);
+    assert.match(html, /&quot;&gt;&lt;script&gt;/);
   });
 });
 

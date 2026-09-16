@@ -121,7 +121,6 @@ export function otpHtml(input: OtpEmailInput): string {
 export function signInLinkSubject(): string {
   return "Your Trust Your Sign sign-in link";
 }
-
 export type SignInLinkEmailInput = {
   url: string;
   expiresInSeconds: number;
@@ -148,5 +147,40 @@ export function signInLinkHtml({ url, expiresInSeconds }: SignInLinkEmailInput):
     signInLinkBlock(url, expiresInSeconds) +
       `    <p style="margin:0;font-size:14px;line-height:1.6;color:#c9c1b6">If you didn't ask for this, ignore this message — nobody can get in without the link.</p>
 `,
+  );
+}
+
+export type ResetPasswordEmailInput = {
+  url: string;
+};
+
+/** Subject for a password-reset link (Better Auth sendResetPassword). */
+export function resetPasswordSubject(): string {
+  return "Choose a new Trust Your Sign password";
+}
+
+/** Plain-text body for a password-reset link. */
+export function resetPasswordText({ url }: ResetPasswordEmailInput): string {
+  return [
+    "Trust Your Sign",
+    "",
+    "Someone asked to choose a new password for this account. If that was you, open:",
+    url,
+    "",
+    "The link works once and expires in about an hour.",
+    "If you didn't ask for this, ignore this message — your current password keeps working.",
+    "",
+    "Trust Your Sign · kept by Devin Norris",
+  ].join("\n");
+}
+
+/** HTML body for a password-reset link. */
+export function resetPasswordHtml({ url }: ResetPasswordEmailInput): string {
+  const href = escapeHtml(url);
+  return messageShell(
+    `    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#efe8dc">Someone asked to choose a new password for this account. If that was you:</p>` +
+    `    <p style="margin:0 0 12px"><a href="${href}" style="display:inline-block;padding:14px 22px;border-radius:6px;background:#efe8dc;color:#0c0b0a;font-size:15px;font-weight:600;text-decoration:none">Choose a new password</a></p>` +
+    `    <p style="margin:0 0 24px;font-size:12px;line-height:1.6;color:#a8a097">Button not working? Paste this into your browser:<br><span style="color:#c9c1b6;word-break:break-all">${href}</span></p>` +
+    `    <p style="margin:0;font-size:14px;line-height:1.6;color:#c9c1b6">The link works once and expires in about an hour. If you didn&rsquo;t ask for this, ignore this message — your current password keeps working.</p>`,
   );
 }

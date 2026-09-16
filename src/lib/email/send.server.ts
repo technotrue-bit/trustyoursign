@@ -2,6 +2,9 @@ import {
   otpHtml,
   otpSubject,
   otpText,
+  resetPasswordHtml,
+  resetPasswordSubject,
+  resetPasswordText,
   signInLinkHtml,
   signInLinkSubject,
   signInLinkText,
@@ -178,6 +181,16 @@ export async function sendOtpEmail(opts: {
     subject: otpSubject(input.purpose),
     text: otpText(input),
     html: otpHtml(input),
+  });
+}
+
+/** Build and send the password-reset link email (Better Auth sendResetPassword). */
+export async function sendResetPasswordEmail(opts: { email: string; url: string }): Promise<void> {
+  await sendEmail({
+    to: opts.email,
+    subject: resetPasswordSubject(),
+    text: resetPasswordText({ url: opts.url }),
+    html: resetPasswordHtml({ url: opts.url }),
   });
 }
 

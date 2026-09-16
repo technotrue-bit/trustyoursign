@@ -37,7 +37,12 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie, getRequest } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { ensureDbReady, getNeonPool, getPglite } from "../db.server";
-import { emailDeliveryConfigured, sendOtpEmail, sendSignInLinkEmail } from "../email/send.server";
+import {
+  emailDeliveryConfigured,
+  sendOtpEmail,
+  sendResetPasswordEmail,
+  sendSignInLinkEmail,
+} from "../email/send.server";
 import {
   createSignInLinkRelay,
   SIGN_IN_LINK_CALLBACK_PATH,
@@ -299,7 +304,20 @@ export const auth = betterAuth({
   session: { cookieCache: { enabled: true, maxAge: 300 } },
 
   // Local email/password — toggled only via `./email-password` (not a plugin).
-  ...(emailAndPasswordEnabled ? { emailAndPassword: { enabled: true } } : {}),
+  // sendResetPassword is the callback that makes "Forgot password?" real:
+  // Better Auth mints the token and builds the URL, this delivers it. Without
+  // the callback the endpoint answers RESET_PASSWORD_DISABLED instead of
+  // silently dropping the mail.
+  ...(emailAndPasswordEnabled
+    ? {
+        emailAndPassword: {
+          enabled: true,
+          async sendResetPassword({ user, url }: { user: { email: string }; url: string }) {
+            await sendResetPasswordEmail({ email: user.email, url });
+          },
+        },
+      }
+    : {}),
 
   // `__Host-` prefixed cookies: the browser REFUSES any same-named cookie that
   // carries a `Domain` attribute, so a sibling `*.grok.me` app cannot "toss" a
