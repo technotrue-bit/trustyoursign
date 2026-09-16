@@ -1,6 +1,7 @@
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { insightToneLabel } from "@/lib/galaxy/signInsights";
 import { getSignGalaxy } from "@/lib/galaxy/signGalaxy";
+import { guestPreviewUnlocked } from "@/lib/galaxy/exploreAccess";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { exitSignGalaxy, seekGalaxyPoint, skipEnterGalaxy } from "@/lib/galaxy/travel";
 import { useSessionStore } from "@/lib/chart/session";
@@ -16,31 +17,29 @@ export function SignGalaxyHud() {
   const openClaim = useSessionStore((s) => s.openClaim);
 
   const sign = explore.signIndex != null ? (CONSTELLATIONS[explore.signIndex] ?? null) : null;
-  const { unlocked, lockReason } = useSignExploreAccess(sign?.id ?? null);
+  const galaxy = sign ? getSignGalaxy(sign.id) : null;
+  const point = galaxy ? (galaxy.points[explore.pointIndex] ?? galaxy.points[0] ?? null) : null;
+  const { unlocked, lockReason, pointUnlocked, pointLockReason, signedIn } = useSignExploreAccess(
+    sign?.id ?? null,
+    { pointIndex: explore.pointIndex, isHub: point?.isHub ?? false },
+  );
 
-  if (explore.phase === "idle" || explore.signIndex == null || !sign) return null;
+  if (explore.phase === "idle" || explore.signIndex == null || !sign || !galaxy) return null;
 
-  const galaxy = getSignGalaxy(sign.id);
-  const point = galaxy.points[explore.pointIndex] ?? galaxy.points[0];
   const inside = explore.phase === "inside";
   const phaseEntering = explore.phase === "fading" || explore.phase === "diving";
   const entering = phaseEntering || explore.skipPhase !== "idle";
-  const lockedPoint = Boolean(point && !point.isHub && !unlocked);
+  /** Guest inside the open preview — real copy, with a sign-in nudge. */
+  const previewPoint = Boolean(point && !point.isHub && !unlocked && pointLockReason == null);
+  /** Non-hub star still behind the gate (auth or chart). */
+  const lockedPoint = Boolean(point && !point.isHub && !unlocked && pointLockReason != null);
   const sealedCopy =
-    lockReason === "auth"
+    pointLockReason === "auth"
       ? `Sign in or create an account, then keep a full ${sign.name} birth chart to open this star.`
       : `This star stays sealed until your ${sign.name} birth chart and profile are complete.`;
-  const hubTone = unlocked ? "Home star" : lockReason === "auth" ? "Account" : "First star";
-  const hubTitle = unlocked
-    ? point?.purpose.title
-    : lockReason === "auth"
-      ? "Sign in to open your galaxy"
-      : point?.purpose.title;
-  const hubBody = unlocked
-    ? point?.purpose.body
-    : lockReason === "auth"
-      ? `Create an account or sign in, finish a timed ${sign.name} birth chart, and keep your profile — then every star unlocks with insight, spice, horror, and warning.`
-      : point?.purpose.body;
+  const hubTone = pointUnlocked ? "Home star" : "First star";
+  const hubTitle = point?.purpose.title ?? "";
+  const hubBody = point?.purpose.body ?? "";
 
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
@@ -130,7 +129,7 @@ export function SignGalaxyHud() {
                   {point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}
                 </Gloss>
               </p>
-              {point.isHub && lockReason === "auth" ? (
+              {point.isHub && !signedIn ? (
                 <ul className="mt-3 space-y-1 text-xs text-fg-subtle">
                   <li>We don&apos;t sell your data.</li>
                   <li>Your charts don&apos;t train public models.</li>
@@ -143,6 +142,11 @@ export function SignGalaxyHud() {
                   Drag to look around. Tap a star to move.
                 </p>
               ) : null}
+              {previewPoint ? (
+                <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
+                  Free preview star — sign in to open every star.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -150,7 +154,7 @@ export function SignGalaxyHud() {
             {inside ? (
               <div className="sign-galaxy-dots pointer-events-auto" role="group" aria-label="Star points">
                 {galaxy.points.map((p, i) => {
-                  const sealed = !p.isHub && !unlocked;
+                  const sealed = !p.isHub && !unlocked && !guestPreviewUnlocked(i, p.isHub);
                   const active = i === explore.pointIndex;
                   return (
                     <button
@@ -175,6 +179,14 @@ export function SignGalaxyHud() {
               </div>
             ) : null}
             {inside && point?.isHub && lockReason === "auth" ? (
+              <a
+                href="/login"
+                className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
+              >
+                Sign in / Sign up
+              </a>
+            ) : null}
+            {inside && previewPoint ? (
               <a
                 href="/login"
                 className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
