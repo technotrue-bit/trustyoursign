@@ -735,7 +735,7 @@ function flyLocked() {
 }
 
 const FLY_IGNORE =
-  "button, a, input, textarea, select, .sign-strip, .birth-chat, .gloss-card, [data-no-fly]";
+  "button, a, input, textarea, select, details, summary, .sign-strip, .birth-chat, .gloss-card, .chart-talks, [data-no-fly]";
 
 /** Duck-typed so the rule is testable outside a browser realm (and across iframes). */
 function closestElement(target: EventTarget | null): Element | null {
