@@ -30,7 +30,7 @@ function chartRole(id: ChartId | null, date?: string) {
   if (id === "saige") return date ? `Premium house · ${date}` : "Premium house";
   if (id === "joey") return date ? `Walkthrough · ${date}` : "Walkthrough";
   if (id === "visitor") return date ? `Your natal · ${date}` : "Your natal";
-  return date ?? "The Vault";
+  return date ?? "Trust Your Sign";
 }
 
 const MODES: { id: AppMode; label: string; icon: typeof Compass }[] = [
@@ -59,7 +59,7 @@ function Chrome() {
   const nat = useNativity();
   const roomDefs = sessionKind ? roomsFor(sessionKind) : [];
   const rooms = roomDefs.map((room) => MODES.find((mode) => mode.id === room.id)!);
-  const title = shelf ? shelf.label : (nat?.meta.name ?? "The Vault");
+  const title = shelf ? shelf.label : (nat?.meta.name ?? "Trust Your Sign");
   const who = shelf
     ? `${shelf.signId} · ${shelf.birth.month}/${shelf.birth.day}/${shelf.birth.year}`
     : chartRole(chartKey, nat?.meta.date);

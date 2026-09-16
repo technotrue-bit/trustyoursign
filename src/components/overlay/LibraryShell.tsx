@@ -40,7 +40,7 @@ function Intro() {
       <div className="absolute inset-0 bg-gradient-to-r from-bg from-25% via-bg/80 to-transparent" />
       <div className="stagger-in relative max-w-xl px-6 pt-16 pb-[max(2rem,env(safe-area-inset-bottom))] md:px-12">
         <h1 className="font-display text-5xl leading-[1.05] font-medium tracking-tight text-fg italic md:text-6xl">
-          The Vault
+          Trust Your Sign
         </h1>
         <p className="mt-2 text-[0.7rem] tracking-[0.22em] text-fg-subtle uppercase">
           Kept by {SITE_OWNER.name} · {SITE_OWNER.handle}

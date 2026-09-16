@@ -43,7 +43,7 @@ function Admin() {
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">Closed</p>
           <h1 className="mt-2 font-display text-4xl italic">This desk is taken.</h1>
           <p className="mt-4 text-sm leading-relaxed text-fg-muted">
-            {SITE_OWNER.name} keeps The Vault. Sign in with the Google or X account that carries
+            {SITE_OWNER.name} keeps Trust Your Sign. Sign in with the Google or X account that carries
             that name, or the handle {SITE_OWNER.handle}.
           </p>
           <Link to="/" className="mt-6 inline-flex min-h-11 text-xs tracking-[0.18em] uppercase">
@@ -74,7 +74,7 @@ function Admin() {
         <dl className="mt-8 space-y-3 text-sm">
           <div className="flex justify-between gap-4 border-b border-border py-2">
             <dt className="text-fg-subtle">Site</dt>
-            <dd>The Vault</dd>
+            <dd>Trust Your Sign</dd>
           </div>
           <div className="flex justify-between gap-4 border-b border-border py-2">
             <dt className="text-fg-subtle">Owner</dt>
