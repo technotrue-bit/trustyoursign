@@ -1,4 +1,5 @@
 import { useGalaxy } from "./store";
+import { prefersReducedMotion } from "./travel";
 
 export const INTRO_KEY = "templeIntroSeen";
 export const INTRO_FULL = 6.8;
@@ -221,11 +222,17 @@ export function bootIntro() {
   } catch {
     seen = false;
   }
-  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  // Reduced motion: no splash at all — land straight on the landing overlay.
+  // `seen` + `done` are both set so every intro accessor returns its settled
+  // value (1 / 0) even if `done` is ever cleared.
+  if (prefersReducedMotion()) {
+    templeIntro.seen = true;
     templeIntro.asking = false;
     templeIntro.askT = ASK;
-    templeIntro.t = 1;
+    templeIntro.t = templeIntro.duration;
+    // Sets done = true, marks seen/born, and pushes the settled intro state.
     skipIntro();
+    publish();
     return;
   }
   templeIntro.seen = seen;

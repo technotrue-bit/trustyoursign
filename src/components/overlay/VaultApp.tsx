@@ -15,6 +15,7 @@ import {
   ensureAutoClock,
   ensureFlyInput,
   galaxyTravel,
+  prefersReducedMotion,
   skipBirth,
   stopAutoClock,
 } from "@/lib/galaxy/travel";
@@ -55,7 +56,9 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
     (entered && !shelf) || claiming || (sessionOrigin ?? surface) === "library";
 
   useEffect(() => {
-    if (!shouldUse3D()) {
+    // Reduced motion: never import or mount the WebGL scene - the 2D
+    // FallbackSky is the whole canvas for these users.
+    if (prefersReducedMotion() || !shouldUse3D()) {
       setSceneFailed(true);
       return;
     }
