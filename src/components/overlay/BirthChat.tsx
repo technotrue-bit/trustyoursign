@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
-import { daysForSign, formatBirth, formatClock, isDateInSign, monthsForSign, sunSignOn } from "@/lib/chart/sun";
+import { formatBirth, formatClock, sunSignOn } from "@/lib/chart/sun";
 import { fromVisitor, useClaim, useSessionStore } from "@/lib/chart/session";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
@@ -70,28 +70,44 @@ export function BirthChat() {
 
   const monthN = Number(month);
   const yearN = Number(year);
-  const signMonths = monthsForSign(sign.id);
-  const signDays = daysForSign(sign.id, monthN, yearN || undefined);
   const dayN = Number(day);
-  const ready = isDateInSign(sign.id, monthN, dayN) && signDays.includes(dayN) && yearN >= 1926;
+  const thisYear = new Date().getFullYear();
+  const monthIsValid = monthN >= 1 && monthN <= 12;
+  // Calendar length of the picked month, so Feb 30 never becomes an option.
+  const monthLen = monthIsValid ? new Date(yearN || thisYear, monthN, 0).getDate() : 31;
+  const monthDays = useMemo(() => Array.from({ length: monthLen }, (_, i) => i + 1), [monthLen]);
+  const ready = monthN >= 1 && monthN <= 12 && dayN >= 1 && dayN <= 31 && yearN >= 1926;
+
+  // Any real date is accepted; the sun it actually falls under is the authority.
+  const enteredSun = ready ? sunSignOn(monthN, dayN) : null;
+  const enteredSunName = enteredSun ? (CONSTELLATIONS.find((c) => c.id === enteredSun)?.name ?? null) : null;
+  const offSign = Boolean(enteredSun && enteredSunName && enteredSun !== sign.id);
 
   const sun = birth ? sunSignOn(birth.month, birth.day) : null;
   const sunName = sun ? CONSTELLATIONS.find((c) => c.id === sun)?.name : null;
 
   const pickMonth = (value: string) => {
     setMonth(value);
-    const nextDays = daysForSign(sign.id, Number(value), yearN || undefined);
-    if (day && !nextDays.includes(Number(day))) setDay("");
+    const m = Number(value);
+    if (m < 1 || m > 12) {
+      setDay("");
+      return;
+    }
+    const nextDays = new Date(yearN || thisYear, m, 0).getDate();
+    if (day && Number(day) > nextDays) setDay("");
   };
 
   const pickYear = (value: string) => {
     setYear(value);
-    const nextDays = daysForSign(sign.id, monthN, Number(value) || undefined);
-    if (day && !nextDays.includes(Number(day))) setDay("");
+    if (!monthIsValid) return;
+    const nextDays = new Date(Number(value) || thisYear, monthN, 0).getDate();
+    if (day && Number(day) > nextDays) setDay("");
   };
 
   const submit = () => {
     if (!ready) return;
+    // Record the date as entered. Which sun it fell under is resolved from the
+    // date itself, not from the sign this form was opened for.
     setClaimBirth({ month: monthN, day: dayN, year: yearN, hour: null, minute: null, place: null });
     setStep("offer");
   };
@@ -194,9 +210,7 @@ export function BirthChat() {
             }}
           >
             <p className="font-display text-xl tracking-tight text-fg italic">When did you arrive?</p>
-            <p className="text-sm leading-relaxed text-fg-subtle">
-              Only the days the sun sat in {sign.name}.
-            </p>
+            <p className="text-sm leading-relaxed text-fg-subtle">The day you arrived.</p>
             <div className="grid grid-cols-3 gap-2">
               <label className="col-span-1 block">
                 <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">Month</span>
@@ -207,9 +221,9 @@ export function BirthChat() {
                   required
                 >
                   <option value="">—</option>
-                  {signMonths.map((m) => (
-                    <option key={m} value={m}>
-                      {MONTHS[m - 1]}
+                  {MONTHS.map((name, i) => (
+                    <option key={name} value={i + 1}>
+                      {name}
                     </option>
                   ))}
                 </select>
@@ -224,7 +238,7 @@ export function BirthChat() {
                   disabled={!monthN}
                 >
                   <option value="">—</option>
-                  {signDays.map((d) => (
+                  {monthDays.map((d) => (
                     <option key={d} value={d}>
                       {d}
                     </option>
@@ -248,6 +262,11 @@ export function BirthChat() {
                 </select>
               </label>
             </div>
+            {offSign ? (
+              <p className="text-sm text-fg-muted mt-3">
+                Born on a cusp? Your sun is in {enteredSunName}. We&apos;ll use that.
+              </p>
+            ) : null}
             <button
               type="submit"
               disabled={!ready}

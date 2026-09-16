@@ -2,7 +2,6 @@ import { create } from "zustand";
 import type { Nativity } from "@/lib/chart/schema";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { AppMode, ResearchChartId, Selection, SignId } from "@/lib/chart/types";
-import { isDateInSign } from "@/lib/chart/sun";
 import { followingBeat, markBeatSeen, markTourDone, nextJoeyBeat } from "@/lib/chart/tour";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy } from "@/lib/galaxy/store";
@@ -136,9 +135,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   setClaimBirth: (birth) =>
     set((state) => {
-      if (state.claim && !isDateInSign(state.claim.signId, birth.month, birth.day)) {
-        return state;
-      }
+      // Accept any valid date — cusp dates may fall in a neighbouring sign.
+      // The sun sign is resolved from the actual birth date, not the claim's signId.
       return setClaimBirthState(state, birth);
     }),
 

@@ -57,7 +57,15 @@ describe("session store", () => {
       minute: null,
       place: null,
     });
-    assert.equal(useSessionStore.getState().claim?.birth, null);
+    // Cusp dates are now accepted — the sun sign is resolved from the date, not the claim.
+    assert.deepEqual(useSessionStore.getState().claim?.birth, {
+      year: 2004,
+      month: 9,
+      day: 1,
+      hour: null,
+      minute: null,
+      place: null,
+    });
 
     state.setClaimBirth({
       year: 2004,
