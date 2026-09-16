@@ -10,6 +10,7 @@ import {
 } from "three";
 import { TEMPLE_CURVE } from "./temple";
 import { isSmallGpu } from "@/lib/gpu";
+import { STAR_APPEARANCE } from "./starAppearance";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const ARM_N = SMALL ? 4200 : 8000;
@@ -99,7 +100,7 @@ export function makeHazeSprite() {
   return tex;
 }
 
-const VERT = /* glsl */ `
+export const GALAXY_VERT = /* glsl */ `
 uniform float uTime;
 uniform float uOpacity;
 attribute vec3 aColor;
@@ -120,14 +121,15 @@ void main() {
 }
 `;
 
-const FRAG = /* glsl */ `
+export const GALAXY_FRAG = /* glsl */ `
 uniform sampler2D uMap;
 varying vec3 vColor;
 varying float vAlpha;
 void main() {
   vec4 s = texture2D(uMap, gl_PointCoord);
-  float a = s.a * vAlpha;
-  if (a < 0.016) discard;
+  float edge = 1.0 - smoothstep(${STAR_APPEARANCE.spriteEdgeInner}, ${STAR_APPEARANCE.spriteEdgeOuter}, dot(gl_PointCoord - vec2(0.5), gl_PointCoord - vec2(0.5)));
+  float a = s.a * vAlpha * edge;
+  if (a < ${STAR_APPEARANCE.alphaCutoff}) discard;
   gl_FragColor = vec4(vColor * s.rgb * a, a);
 }
 `;
@@ -139,8 +141,8 @@ export function makeGalaxyMaterial(map: CanvasTexture, opacity: number) {
       uOpacity: { value: opacity },
       uMap: { value: map },
     },
-    vertexShader: VERT,
-    fragmentShader: FRAG,
+    vertexShader: GALAXY_VERT,
+    fragmentShader: GALAXY_FRAG,
     transparent: true,
     depthWrite: false,
     depthTest: true,

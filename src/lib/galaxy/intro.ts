@@ -36,6 +36,12 @@ function smoother(x: number) {
   return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
+/** Progressively draws the Aries constellation after its silhouette gathers. */
+export function ariesConstellationReveal(progress: number, reduced = false) {
+  if (reduced) return 1;
+  return smoother((clamp01(progress) - 0.16) / 0.72);
+}
+
 function windowOut(t: number, a: number, b: number) {
   return easeOutCubic((t - a) / Math.max(0.001, b - a));
 }

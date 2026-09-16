@@ -168,7 +168,7 @@ export function GalaxyShell() {
         <SignStrip />
         <p className="px-2 text-center text-[0.65rem] tracking-wide text-fg-subtle md:px-4 md:text-xs">
           <span className="md:hidden">
-            Slide to fly. Tap the sign to enter. Swipe names to jump.
+            Slide to fly. Tap a sign to choose it, then enter above. Swipe names to jump.
           </span>
           <span className="hidden md:inline">
             Slide to fly. Click the selected sign to enter its galaxy.
@@ -182,13 +182,20 @@ export function GalaxyShell() {
             enterSignGalaxy(signIndex);
           }}
           className={cn(
-            "pointer-events-auto hidden min-h-11 w-auto px-4 text-xs tracking-[0.22em] uppercase md:inline-flex md:items-center",
+            "pointer-events-auto inline-flex min-h-11 w-auto items-center px-4 text-xs tracking-[0.22em] uppercase",
             moved
               ? "sign-claim text-fg hover:text-accent active:text-accent"
               : "cursor-not-allowed border border-border/80 bg-bg-subtle/40 text-fg-muted",
           )}
         >
-          {moved ? "Enter this sign" : "Slide to choose a sign"}
+          {moved ? (
+            <>
+              <span className="md:hidden">Enter selected sign</span>
+              <span className="hidden md:inline">Enter this sign</span>
+            </>
+          ) : (
+            "Slide to choose a sign"
+          )}
         </button>
         <button
           type="button"

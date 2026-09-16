@@ -11,6 +11,7 @@ import {
 import { getSignGalaxy, GALAXY_SPAN, type SignGalaxy } from "@/lib/galaxy/signGalaxy";
 import { galaxyTravel, seekGalaxyPoint } from "@/lib/galaxy/travel";
 import { PLATE_WIDE, type TempleSign } from "@/lib/galaxy/temple";
+import { STAR_APPEARANCE } from "@/lib/galaxy/starAppearance";
 
 function noopRaycast() {
   /* ambient field never steals picks */
@@ -63,18 +64,22 @@ export function SignGalaxyField({
       ?.material;
     const fieldReveal = Math.max(0, (form - 0.18) / 0.82);
     if (lineMat) {
-      lineMat.opacity = Math.min(1, fieldReveal * 0.85);
+      lineMat.opacity = Math.min(1, fieldReveal * STAR_APPEARANCE.fieldLineOpacity);
       if (lineMat.color) lineMat.color.copy(accent);
     }
     if (starMat) {
-      starMat.opacity = Math.min(1, fieldReveal * 0.95);
+      starMat.opacity = Math.min(1, fieldReveal * STAR_APPEARANCE.fieldStarOpacity);
       if (starMat.color) starMat.color.copy(tint);
-      if (typeof starMat.size === "number") starMat.size = 0.28 + form * 0.12;
+      if (typeof starMat.size === "number") {
+        starMat.size = STAR_APPEARANCE.fieldStarSize + form * STAR_APPEARANCE.fieldStarSizeGrowth;
+      }
     }
     if (pointMat) {
-      pointMat.opacity = Math.min(1, fieldReveal * 1.05);
+      pointMat.opacity = Math.min(1, fieldReveal * STAR_APPEARANCE.fieldPointOpacity);
       if (pointMat.color) pointMat.color.copy(accent);
-      if (typeof pointMat.size === "number") pointMat.size = 0.38 + form * 0.12;
+      if (typeof pointMat.size === "number") {
+        pointMat.size = STAR_APPEARANCE.fieldPointSize + form * STAR_APPEARANCE.fieldPointSizeGrowth;
+      }
     }
   });
 
