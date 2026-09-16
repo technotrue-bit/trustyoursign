@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { insightToneLabel } from "@/lib/galaxy/signInsights";
 import { getSignGalaxy } from "@/lib/galaxy/signGalaxy";
@@ -5,6 +6,7 @@ import { guestPreviewUnlocked } from "@/lib/galaxy/exploreAccess";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { exitSignGalaxy, seekGalaxyPoint, skipEnterGalaxy } from "@/lib/galaxy/travel";
 import { useSessionStore } from "@/lib/chart/session";
+import { MIN_AGE } from "@/lib/legal";
 import { useSignExploreAccess } from "@/hooks/useSignExploreAccess";
 import { Gloss } from "./Gloss";
 import { AuthSlot } from "./AuthSlot";
@@ -145,6 +147,11 @@ export function SignGalaxyHud() {
               {previewPoint ? (
                 <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
                   Free preview star — sign in to open every star.
+                </p>
+              ) : null}
+              {!lockedPoint && !point.isHub ? (
+                <p className="mt-3 text-[0.6rem] leading-snug text-fg-subtle">
+                  Readings are cultural entertainment, not medical, legal, or psychological advice. <Link to="/terms" className="underline hover:text-fg">Terms</Link>. {MIN_AGE}+.
                 </p>
               ) : null}
             </div>
