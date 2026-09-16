@@ -2,9 +2,15 @@
 import { CONSTELLATIONS, nearestSign, signStation, signedDelta, wrap12 } from "./constellations";
 import { primeSignArt } from "./signArt";
 import {
+  enterBurst,
+  enterBurstDissolve,
+  enterBurstIgnition,
+  enterBurstImpulse,
+  enterCoreReveal,
   enterDive,
   enterGalaxyForm,
   enterPlateFade,
+  enterRush,
   enterWorldFade,
   getSignGalaxy,
   type ExplorePhase,
@@ -144,8 +150,27 @@ export const galaxyTravel = {
   skipVeil: 0,
   worldFade: 1,
   plateFade: 1,
+  /**
+   * Opacity the painted plate is actually drawn at this frame (material opacity,
+   * before the erode mask per-pixel). Written by the entered station only, so the
+   * QA probe reads the plate of the sign being entered rather than a neighbour's.
+   * M11 in docs/superpowers/specs/2026-09-15-aries-ignition-handoff-design.md.
+   */
+  plateOpacity: 1,
   galaxyForm: 0,
   diveBlend: 0,
+  /** Extra travel in the back half of the enter — the surge into the galaxy. */
+  enterRush: 0,
+  /** 0 → 1 as the galaxy core swells into the hero of the shot. */
+  coreReveal: 0,
+  /** Ignition hand-off: the burst pulse on the same enter clock (0 → peak → 0). */
+  burst: 0,
+  /** Figure brighten that runs ahead of the blast, so the figure lights first. */
+  ignition: 0,
+  /** 0 → 1 as the painted plate is eaten away outward from the hub. */
+  dissolve: 0,
+  /** Shock-front impulse handed to the flight dust. */
+  burstImpulse: 0,
   pointIndex: 0,
   pointSeek: null as number | null,
   pointT: 0,
@@ -296,12 +321,22 @@ function publishExplore() {
   });
 }
 
-function applyEnterCurves(p: number) {
-  galaxyTravel.exploreProgress = clamp01(p);
-  galaxyTravel.worldFade = enterWorldFade(p);
-  galaxyTravel.plateFade = enterPlateFade(p);
-  galaxyTravel.galaxyForm = enterGalaxyForm(p);
-  galaxyTravel.diveBlend = enterDive(p);
+function applyEnterCurves(p: number, reduced = prefersReducedMotion(), withBurst = true) {
+  const q = clamp01(p);
+  galaxyTravel.exploreProgress = q;
+  galaxyTravel.worldFade = enterWorldFade(q);
+  galaxyTravel.plateFade = enterPlateFade(q);
+  galaxyTravel.galaxyForm = enterGalaxyForm(q);
+  galaxyTravel.diveBlend = enterDive(q);
+  galaxyTravel.enterRush = enterRush(q);
+  galaxyTravel.coreReveal = enterCoreReveal(q);
+  // The ignition hand-off rides the same clock. `withBurst` is false on the way
+  // out: the exit replays the enter curves backwards and must not fire the blast
+  // (a reverse burst is its own spec, not this one).
+  galaxyTravel.burst = withBurst ? enterBurst(q, reduced) : 0;
+  galaxyTravel.ignition = withBurst ? enterBurstIgnition(q, reduced) : 0;
+  galaxyTravel.dissolve = withBurst ? enterBurstDissolve(q) : 0;
+  galaxyTravel.burstImpulse = withBurst ? enterBurstImpulse(q, reduced) : 0;
 }
 
 function skipDurations() {
@@ -324,8 +359,15 @@ export function resetExplore(publish = true) {
   clearEnterSkip();
   galaxyTravel.worldFade = 1;
   galaxyTravel.plateFade = 1;
+  galaxyTravel.plateOpacity = 1;
   galaxyTravel.galaxyForm = 0;
   galaxyTravel.diveBlend = 0;
+  galaxyTravel.enterRush = 0;
+  galaxyTravel.coreReveal = 0;
+  galaxyTravel.burst = 0;
+  galaxyTravel.ignition = 0;
+  galaxyTravel.dissolve = 0;
+  galaxyTravel.burstImpulse = 0;
   galaxyTravel.pointIndex = 0;
   galaxyTravel.pointSeek = null;
   galaxyTravel.pointT = 0;
@@ -544,7 +586,7 @@ export function stepExplore(dt: number) {
       resetExplore(true);
       return;
     }
-    applyEnterCurves(p);
+    applyEnterCurves(p, undefined, false);
     publishExplore();
     return;
   }

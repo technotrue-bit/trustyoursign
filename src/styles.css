@@ -142,6 +142,34 @@
   color: #efe8dc;
 }
 
+.back-to-sky {
+  text-decoration: none;
+  transition:
+    color 0.22s ease-out,
+    text-shadow 0.22s ease-out,
+    transform 0.22s ease-out;
+}
+
+.back-to-sky:hover,
+.back-to-sky:focus-visible {
+  color: #f5efe3;
+  text-shadow:
+    0 0 12px color-mix(in oklab, #f5efe3 55%, transparent),
+    0 0 28px color-mix(in oklab, #c9a15b 38%, transparent),
+    0 0 48px color-mix(in oklab, #c9a15b 22%, transparent);
+}
+
+.back-to-sky:focus-visible {
+  outline: 1px solid color-mix(in oklab, var(--color-fg) 35%, transparent);
+  outline-offset: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back-to-sky {
+    transition: color 0.01ms linear;
+  }
+}
+
 @media (max-width: 767px) {
   :root {
     --overlay-hit: 2.75rem;

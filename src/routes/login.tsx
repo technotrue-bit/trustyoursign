@@ -299,7 +299,7 @@ function Login() {
 
   return (
     <main id="main-content" className="vault-page bg-bg px-5 text-fg">
-      <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[max(2.5rem,var(--chrome-bottom))]">
+      <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[max(6.5rem,calc(var(--chrome-bottom)+4.25rem))]">
         <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">
           Trust Your Sign · {SITE_OWNER.name}
         </p>
@@ -617,12 +617,15 @@ function Login() {
           <Link to="/terms" className="text-fg underline">
             Terms
           </Link>
-          {" · "}
-          <Link to="/" className="text-fg underline">
-            Back to the sky
-          </Link>
         </p>
       </div>
+
+      <Link
+        to="/"
+        className="back-to-sky absolute bottom-[max(1.25rem,var(--chrome-bottom))] left-1/2 z-10 -translate-x-1/2 px-5 py-3 font-display text-xl tracking-tight text-fg italic md:text-2xl"
+      >
+        Back to the sky
+      </Link>
     </main>
   );
 }

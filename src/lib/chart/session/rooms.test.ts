@@ -14,7 +14,7 @@ describe("rooms matrix", () => {
     assert.deepEqual(roomsFor("research").map((r) => r.id), ROOM_CATALOG.map((r) => r.id));
     assert.deepEqual(
       roomsFor("visitor").map((r) => r.id),
-      ["sky", "body", "bones", "ask"],
+      ["sky", "body", "gates", "machine", "readings", "bones", "ask"],
     );
     assert.deepEqual(
       roomsFor("shelf").map((r) => r.id),
@@ -24,7 +24,8 @@ describe("rooms matrix", () => {
 
   it("canEnter is true only for allowlisted modes", () => {
     assert.equal(canEnter("visitor", "sky"), true);
-    assert.equal(canEnter("visitor", "gates"), false);
+    assert.equal(canEnter("visitor", "gates"), true);
+    assert.equal(canEnter("visitor", "readings"), true);
     assert.equal(canEnter("shelf", "ask"), true);
     assert.equal(canEnter("shelf", "body"), false);
     assert.equal(canEnter("research", "machine"), true);

@@ -17,10 +17,19 @@ import {
   PerspectiveCamera,
   Points,
   SRGBColorSpace,
+  Vector2,
   Vector3,
 } from "three";
 import { isSmallGpu } from "@/lib/gpu";
 import { CONSTELLATIONS, ELEMENT_TINT, pairFigures } from "@/lib/galaxy/constellations";
+import {
+  PLATE_DISSOLVE_GLSL,
+  burstParams,
+  plateDissolveUniforms,
+  plateHubUv,
+  type PlateDissolveUniforms,
+} from "@/lib/galaxy/signBurst";
+import type { SignId } from "@/lib/chart/types";
 import {
   EXPLORE_ZOOM_MAX,
   EXPLORE_ZOOM_MIN,
@@ -45,7 +54,11 @@ import {
   stepSeek,
   stepZoom,
 } from "@/lib/galaxy/travel";
-import { enterHubSettle, getSignGalaxy, insideHardGateHidesLeftovers } from "@/lib/galaxy/signGalaxy";
+import {
+  enterHubSettle,
+  getSignGalaxy,
+  insideHardGateHidesLeftovers,
+} from "@/lib/galaxy/signGalaxy";
 import {
   bootIntro,
   introCam,
@@ -95,6 +108,7 @@ import {
   interiorCloud,
   primeSignVolumes,
   volumeChest,
+  type SignVolume,
 } from "@/lib/galaxy/signVolume";
 import { buildBirthNebula, makeNebulaMaterial } from "@/lib/galaxy/nebula";
 import { makeStarSprite } from "@/lib/galaxy/celestial";
@@ -119,6 +133,7 @@ import { CelestialSky } from "./CelestialSky";
 import { CornerGalaxies } from "./CornerGalaxies";
 import { SignShell } from "./SignShell";
 import { SignGalaxyField, pointLocalOffset } from "./SignGalaxyField";
+import { getFigureMatch, landingBiasNdc } from "@/lib/galaxy/signAlign";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const DUST_N = SMALL ? 180 : 320;
@@ -134,10 +149,21 @@ const _up = new Vector3(0, 1, 0);
 const _sitCam = new Vector3();
 const _camRight = new Vector3();
 const _camUp = new Vector3();
+const _hub = new Vector3();
+const _hubNdc = new Vector3();
+
+/** Enter flythrough: where the camera comes to rest relative to the hub star. */
+export const HUB_STANDOFF = 2.6;
 
 function cssViewWidth() {
   if (typeof window === "undefined") return 1280;
   return window.visualViewport?.width ?? window.innerWidth;
+}
+
+/** CSS viewport height — short frames need the core framed higher (see landingBiasNdc). */
+function cssViewHeight() {
+  if (typeof window === "undefined") return 900;
+  return window.visualViewport?.height ?? window.innerHeight;
 }
 
 function noopRaycast() {
@@ -182,6 +208,26 @@ function makeCircleTexture() {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
   return finishTexture(new CanvasTexture(canvas));
+}
+
+type PlatePlan = { u: number; v: number; aspect: number };
+
+/**
+ * Where the painting ignites, in plate UV.
+ *
+ * The hub star is the seed inside the figure's body, and `figureMatch` is the
+ * transform signAlign measures at runtime to lay the live figure exactly over the
+ * painted one — so this is measured, never guessed, and it works for any sign.
+ * Called at most once per enter (the caller caches it).
+ */
+function measurePlatePlan(signId: SignId, vol: SignVolume | null): PlatePlan | null {
+  if (!vol) return null;
+  const galaxy = getSignGalaxy(signId);
+  const match = getFigureMatch(signId, galaxy);
+  const hub = galaxy.points[0];
+  if (!match || !hub) return null;
+  const uv = plateHubUv(match, hub, PLATE_WIDE, vol.aspect);
+  return { u: uv.u, v: uv.v, aspect: vol.aspect };
 }
 
 export function GalaxyIntro() {
@@ -477,6 +523,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const group = useRef<Group>(null);
   const cores = useRef<Points>(null);
   const art = useRef<Mesh>(null);
+  const plateMat = useRef<MeshBasicMaterial>(null);
+  const platePlan = useRef<PlatePlan | null>(null);
+  const plateBurst = useRef<
+    | (PlateDissolveUniforms & {
+        uDissolve: { value: number };
+        uHubUv: { value: Vector2 };
+        uAspect: { value: number };
+      })
+    | null
+  >(null);
   const shellWrap = useRef<Group>(null);
   const shown = useRef(false);
   const hydrated = useRef(false);
@@ -549,6 +605,56 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     shellMats.current = mats;
   });
 
+  /**
+   * The painted plate is consumed outward from its hub during the enter. The mask
+   * is a shader pass on the existing plate material — the plate's own opacity path
+   * is untouched, this only multiplies the sampled alpha by the erode mask, so the
+   * verified plate fade still owns when the painting dies.
+   */
+  useEffect(() => {
+    const mat = plateMat.current;
+    if (!mat || plateBurst.current) return;
+    const params = burstParams(sign.id, sign.palette);
+    const uniforms = {
+      uDissolve: { value: 0 },
+      uHubUv: { value: new Vector2(0.5, 0.5) },
+      uAspect: { value: 16 / 9 },
+      // Mask numbers (and the seed derivation) come from signBurst — the same
+      // ones dissolveMaskDistance is tested with. Never hand-build these.
+      ...plateDissolveUniforms(params),
+    };
+    plateBurst.current = uniforms;
+    mat.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", "#include <common>\nvarying vec2 vTysPlateUv;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvTysPlateUv = uv;");
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          [
+            "#include <common>",
+            "varying vec2 vTysPlateUv;",
+            "uniform float uDissolve;",
+            "uniform vec2 uHubUv;",
+            "uniform float uSoft;",
+            "uniform float uNoise;",
+            "uniform float uSeed;",
+            "uniform float uRagged;",
+            "uniform float uRadius;",
+            "uniform float uAspect;",
+          ].join("\n"),
+        )
+        .replace(
+          "#include <map_fragment>",
+          ["#include <map_fragment>", "{", PLATE_DISSOLVE_GLSL, "}"].join("\n"),
+        );
+    };
+    // Only this material carries the dissolve; keep the program cache honest.
+    mat.customProgramCacheKey = () => "tys-plate-dissolve";
+    mat.needsUpdate = true;
+  }, [sign.id, sign.palette]);
+
   useFrame(({ clock, camera }, dt) => {
     const g = group.current;
     const mesh = cores.current;
@@ -589,13 +695,17 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       g.visible = false;
       return;
     }
-    const fade = held || exploringHere
-      ? 1
-      : direct && index === aimedIndex()
-        ? Math.max(0.35, smooth(fieldGather(dist, 0.22)))
-        : fieldFade(fieldGather(dist)) * worldFade;
+    const fade =
+      held || exploringHere
+        ? 1
+        : direct && index === aimedIndex()
+          ? Math.max(0.35, smooth(fieldGather(dist, 0.22)))
+          : fieldFade(fieldGather(dist)) * worldFade;
     const show =
-      held || exploringHere || fieldVisible(fieldGather(dist)) || (direct && index === aimedIndex());
+      held ||
+      exploringHere ||
+      fieldVisible(fieldGather(dist)) ||
+      (direct && index === aimedIndex());
     g.visible = show;
     if (!show) {
       mesh.visible = false;
@@ -659,15 +769,32 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         ? Math.max(0, (arrive - 0.12) / 0.62)
         : smooth(Math.max(0, (gather - 0.52) / 0.48));
 
-    const landedHere =
-      exploringHere && insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
+    const landedHere = exploringHere && insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
+
+    // Ignition dissolve: the painting is eaten outward from its hub. Data-driven —
+    // the hub lands in plate UV via the same measured alignment the field uses.
+    const pb = plateBurst.current;
+    if (pb) {
+      const live = exploringHere && galaxyTravel.dissolve > 0.001 ? galaxyTravel.dissolve : 0;
+      if (live > 0 && !platePlan.current) platePlan.current = measurePlatePlan(sign.id, volEarly);
+      const plan = platePlan.current;
+      if (plan) {
+        (pb.uHubUv.value as Vector2).set(plan.u, plan.v);
+        pb.uAspect.value = plan.aspect;
+      }
+      pb.uDissolve.value = live;
+    }
 
     if (landedHere) {
-      mesh.visible = false;
+      // Inside: the star volume is the room — keep it lit. The painted plate and
+      // the 3D shell are the approach shells and go away (the camera is past them).
+      mesh.visible = true;
+      setCloudDrawRange(starGeo, true);
       if (art.current) {
         art.current.visible = false;
         (art.current.material as MeshBasicMaterial).opacity = 0;
       }
+      if (exploringHere) galaxyTravel.plateOpacity = 0;
       if (shellWrap.current) shellWrap.current.visible = false;
     } else {
       if (art.current && artTex && !useVolume) {
@@ -687,6 +814,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         art.current.visible = plateOp > 0.04;
         art.current.scale.set(wide, wide / aspect, 1);
         mat.opacity = plateOp;
+        // Measured evidence for M11: what the entered sign's plate is actually
+        // drawn at. Only the entered station publishes, so a neighbour's frame
+        // can't clobber the value the QA probe reads.
+        if (exploringHere) galaxyTravel.plateOpacity = plateOp;
         mat.map = artTex;
         mat.depthTest = false;
         mat.alphaTest = 0.04;
@@ -723,7 +854,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       const ml = morphLevel.current;
       const u = coreMat.uniforms;
       const landGain =
-        index === aimedIndex() && !exploringHere ? cloudBurstGain(signArrive.burst) : CLOUD_GAIN_IDLE;
+        index === aimedIndex() && !exploringHere
+          ? cloudBurstGain(signArrive.burst)
+          : CLOUD_GAIN_IDLE;
       u.uTime.value = clock.elapsedTime;
       u.uGather.value = gather;
       u.uWide.value = wide;
@@ -752,9 +885,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     }
 
     if (landedHere) {
+      // Settled interior light: you are inside the galaxy, surrounded by its
+      // stars — not looking at a switched-off set. Gentle drift, no swirl.
       const u = coreMat.uniforms;
-      u.uOpacity.value = 0;
-      u.uFade.value = 0;
+      u.uOpacity.value = 0.66;
+      u.uFade.value = 1;
+      u.uGather.value = 1;
+      u.uSwirl.value = prefersReducedMotion() ? 0 : 0.16;
+      u.uMorph.value = 0;
+      u.uTime.value = clock.elapsedTime;
+      u.uHover.value = 1;
     }
   });
 
@@ -781,6 +921,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       >
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
+          ref={plateMat}
           map={artTex ?? undefined}
           color="#ffffff"
           transparent
@@ -918,10 +1059,7 @@ function TempleRig() {
       if (state.session) return;
       if (introPlaying()) {
         // Tab must move focus — only Escape / Enter / Space skip the intro.
-        if (
-          introCanSkip() &&
-          (e.key === "Escape" || e.key === "Enter" || e.key === " ")
-        ) {
+        if (introCanSkip() && (e.key === "Escape" || e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
           skipIntro();
           galaxyTravel.birth = 1;
@@ -938,7 +1076,10 @@ function TempleRig() {
       }
       // Keys typed into a form field belong to that field, not to the sky.
       const t = e.target;
-      if (t instanceof HTMLElement && t.closest("input, textarea, select, [contenteditable=true]")) {
+      if (
+        t instanceof HTMLElement &&
+        t.closest("input, textarea, select, [contenteditable=true]")
+      ) {
         return;
       }
       // While exploring one sign's galaxy, Escape is the way out.
@@ -1054,11 +1195,23 @@ function TempleRig() {
     // Local dive: BirthChat volume hold, or selected-sign galaxy enter.
     const heldSignId = chatting ? state.claim?.signId : shelfOn ? state.session?.signId : undefined;
     const volumeDive = heldSignId && hasVolumeSign(heldSignId) ? 0.35 * PLATE_WIDE : 0;
-    const exploreDive =
-      exploring && galaxyTravel.exploreSignIndex != null
-        ? // Stay in front of the plate while approaching the hub star — don't punch through into empty sky.
-          galaxyTravel.diveBlend * (0.65 + galaxyTravel.galaxyForm * 2.1)
-        : 0;
+    let exploreDive = 0;
+    if (exploring && galaxyTravel.exploreSignIndex != null) {
+      // Close the measured gap to the hub star instead of a fixed distance: the
+      // landing then frames the core the same way on any aspect, and the hub can
+      // never end up behind the lens (which is what left the room dark).
+      const hubGalaxy = getSignGalaxy(TEMPLE_SIGNS[galaxyTravel.exploreSignIndex]!.id);
+      const hubLocal = pointLocalOffset(hubGalaxy, 0, galaxyTravel.galaxyForm);
+      _hub.copy(TEMPLE_STATIONS[galaxyTravel.exploreSignIndex]!);
+      _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+      _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+      _hub.addScaledVector(_camRight, hubLocal.x);
+      _hub.addScaledVector(_camUp, hubLocal.y);
+      _hub.z += hubLocal.z + 0.35;
+      const gap = Math.max(1.2, _cam.distanceTo(_hub) - HUB_STANDOFF);
+      // Hold first (the figure is the subject), then the rush does the flying.
+      exploreDive = gap * (0.55 * galaxyTravel.diveBlend + 0.45 * galaxyTravel.enterRush);
+    }
     const diveTarget = Math.max(volumeDive, exploreDive);
     const snapSkipPose = galaxyTravel.enterSkip === "hold" || galaxyTravel.skipVeil > 0.5;
     // During sign-enter (not BirthChat volume-only), track the curve tightly.
@@ -1104,17 +1257,26 @@ function TempleRig() {
         galaxyTravel.explorePhase === "inside"
           ? 1
           : Math.max(enterHubSettle(galaxyTravel.exploreProgress), dive);
-      if (settle > 0.001) {
-        // Ease toward the travel node; inside uses a softer pull so multiple nodes stay framed.
-        const pull =
-          galaxyTravel.explorePhase === "inside"
-            ? 0.016 + settle * 0.055
-            : 0.025 + settle * 0.1;
+      if (galaxyTravel.explorePhase !== "inside" && settle > 0.001) {
+        // Ease toward the hub star on the figure while the plate is still filling the frame.
+        const pull = 0.025 + settle * 0.1;
         _cam.x += (_look.x - _cam.x) * pull;
         _cam.y += (_look.y - _cam.y) * (pull * 0.85);
-        if (galaxyTravel.explorePhase === "inside") {
-          // Bias look toward the chest so the silhouette (not one junction) fills the frame.
-          _look.lerp(_chest, 0.5);
+      }
+      if (galaxyTravel.explorePhase === "inside") {
+        // Park explicitly at the hub star: fixed standoff, framed a touch above
+        // centre. Convergence alone left a per-sign residual — the hero-frame lift
+        // fights the pull — which is why the landing drifted sign to sign. Setting
+        // the pose directly makes every sign and viewport land the same way.
+        const fovNow = camera instanceof PerspectiveCamera ? camera.fov : 50;
+        // Drop the *aim* below the hub: aiming at the hub centres it exactly, which
+        // is why a camera-height bias alone did nothing measurable (hubNdcY stayed
+        // 0.000 at every viewport). Aiming low frames the core above centre, and the
+        // amount is a pure function of viewport height, so nothing can drift per sign.
+        const lift = landingBiasNdc(cssViewHeight()) * HUB_STANDOFF * Math.tan((fovNow * Math.PI) / 360);
+        _look.set(_hub.x, _hub.y - lift, _hub.z);
+        _cam.set(_hub.x, _hub.y, _hub.z + HUB_STANDOFF);
+        {
           const lx = galaxyTravel.exploreLookX;
           const ly = galaxyTravel.exploreLookY;
           if (lx !== 0 || ly !== 0) {
@@ -1146,6 +1308,25 @@ function TempleRig() {
       const ease = exploring ? 1 - Math.exp(-d * 1.6) : k;
       camera.position.lerp(_cam, ease);
       camera.lookAt(_look);
+    }
+    // The seam-clearance roll lives on the *figure* (SignGalaxyField), not here:
+    // the station is billboarded to the camera, so rolling the camera would carry
+    // the billboard with it and change nothing on screen.
+    if (import.meta.env.DEV && exploring && galaxyTravel.exploreSignIndex != null) {
+      // Dev-only QA probe — lets scripts/qa/enter-capture.mjs measure the dive
+      // (camera → hub distance, framing) instead of eyeballing it.
+      _hubNdc.copy(_hub).project(camera);
+      (window as unknown as { __tys?: unknown }).__tys = {
+        p: +galaxyTravel.exploreProgress.toFixed(4),
+        phase: galaxyTravel.explorePhase,
+        camZ: +camera.position.z.toFixed(3),
+        hubZ: +_hub.z.toFixed(3),
+        camToHub: +camera.position.distanceTo(_hub).toFixed(3),
+        hubNdcX: +_hubNdc.x.toFixed(3),
+        hubNdcY: +_hubNdc.y.toFixed(3),
+        dive: +diveAmount.current.toFixed(3),
+        fov: camera instanceof PerspectiveCamera ? +camera.fov.toFixed(2) : null,
+      };
     }
     if (camera instanceof PerspectiveCamera) {
       camera.far = 2500;

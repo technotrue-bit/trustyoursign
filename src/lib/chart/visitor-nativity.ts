@@ -9,6 +9,13 @@ import { SIGNS, type SignDef } from "./signs";
 import type { NatalCast, CastPoint, SkyNatal } from "./ephemeris";
 import { formatLon, signFromLon, wrap360 } from "./ephemeris";
 import type { AspectType, Dignity, Element, Modality, PlanetId, SignId } from "./types";
+import {
+  applyDigestToPlanet,
+  digestGates,
+  digestReadings,
+  digestSteps,
+  SIGN_CLIMATE,
+} from "./digest";
 
 const DOMICILE: Partial<Record<PlanetId, SignId[]>> = {
   sun: ["leo"],
@@ -117,7 +124,7 @@ function seedBody(p: CastPoint): string[] {
 
 function toPlanetDef(p: CastPoint): PlanetDef {
   const look = PLANET_LOOK[p.id] ?? { color: "#d8cfc0", glow: "#9a9186", size: 0.16, radius: 5.4 };
-  return {
+  const raw: PlanetDef = {
     id: p.id,
     name: p.name,
     glyph: p.name.slice(0, 4),
@@ -135,6 +142,7 @@ function toPlanetDef(p: CastPoint): PlanetDef {
     body: seedBody(p),
     note: p.note,
   };
+  return applyDigestToPlanet(raw, "you");
 }
 
 function wholeSignCusps(ascLon: number): HouseCusp[] {
@@ -225,7 +233,7 @@ function visitorSigns(planets: PlanetDef[], ascLon: number): SignDef[] {
       modality: s.modality,
       intercepted: false,
       headline: rising ? `${s.name} rises.` : held.length ? `${s.name} holds chart points.` : `${s.name}.`,
-      body: `${s.element} · ${s.modality}. Geometry only — not a research essay.`,
+      body: `${SIGN_CLIMATE[s.id].street}. ${s.element} · ${s.modality}.`,
       inChart,
     };
   });
@@ -283,6 +291,9 @@ export function buildVisitorNativity(cast: NatalCast, opts: VisitorNatalOpts): N
   const houses = wholeSignCusps(cast.angles.asc);
   const chakras = visitorChakras(planets);
   const cut = oneCutFrom(planets);
+  const gates = digestGates(planets, "you");
+  const machine = digestSteps(planets, "you");
+  const readings = digestReadings(planets, "you");
 
   return {
     id: "visitor",
@@ -301,7 +312,7 @@ export function buildVisitorNativity(cast: NatalCast, opts: VisitorNatalOpts): N
       engine: "astronomy-engine",
       sunAltitude: "—",
       oneCut: cut,
-      thesis: `${cut} Degrees and houses are calculated. Essays are not invented past the table.`,
+      thesis: `${cut} In plain first. Then the life. Then the sky. Degrees before meaning.`,
     },
     angles: cast.angles,
     planets,
@@ -313,12 +324,12 @@ export function buildVisitorNativity(cast: NatalCast, opts: VisitorNatalOpts): N
     aspects,
     chakras,
     chakraById: Object.fromEntries(chakras.map((c) => [c.id, c])) as Nativity["chakraById"],
-    gates: [],
-    gateById: {} as Nativity["gateById"],
-    steps: [],
-    decisionClose: "The machine rooms stay on research books. Your sky is the table.",
-    readings: [],
-    readingById: {},
+    gates,
+    gateById: Object.fromEntries(gates.map((g) => [g.id, g])) as Nativity["gateById"],
+    steps: machine.steps,
+    decisionClose: machine.close,
+    readings,
+    readingById: Object.fromEntries(readings.map((r) => [r.id, r])),
     suggested: [
       "What is my sun holding?",
       "What is my moon holding?",
@@ -327,9 +338,9 @@ export function buildVisitorNativity(cast: NatalCast, opts: VisitorNatalOpts): N
     ],
     alwaysLabel: ["sun", "moon", "asc", "mercury", "venus", "mars"],
     extraBones: [],
-    canonExtra: "Visitor natal. Quote positions exactly. Do not invent research-book prose.",
-    machineTitle: "The machine",
-    readingsTitle: "Readings",
+    canonExtra: "Visitor natal. Positions from astronomy-engine. Prose from the digest engine (street, lived, canon). Quote degrees exactly. Do not invent past the table.",
+    machineTitle: "How you decide.",
+    readingsTitle: "Love, work, body, clothes, becoming.",
   };
 }
 

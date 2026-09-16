@@ -12,6 +12,7 @@ import {
   visitorBirth,
   visitorSign,
 } from "./factories.ts";
+import type { AppMode } from "@/lib/chart/types";
 import { canEnter } from "./rooms.ts";
 
 const birth = {
@@ -110,7 +111,7 @@ describe("session factories", () => {
     assert.equal(s.signId, "virgo");
   });
 
-  it("fromVisitor coerces illegal mode to sky", () => {
+  it("fromVisitor preserves legal gates mode", () => {
     const s = fromVisitor({
       nativity: nat,
       skyNatal: sky,
@@ -118,6 +119,19 @@ describe("session factories", () => {
       signId: "leo",
       origin: "galaxy",
       mode: "gates",
+    });
+    assert.equal(s.mode, "gates");
+    assert.equal(canEnter(s.kind, s.mode), true);
+  });
+
+  it("fromVisitor coerces illegal mode to sky", () => {
+    const s = fromVisitor({
+      nativity: nat,
+      skyNatal: sky,
+      birth,
+      signId: "leo",
+      origin: "galaxy",
+      mode: "nope" as AppMode,
     });
     assert.equal(s.mode, "sky");
     assert.equal(canEnter(s.kind, s.mode), true);

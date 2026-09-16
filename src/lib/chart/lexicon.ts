@@ -289,6 +289,14 @@ export const LEXICON: LexEntry[] = [
     meaning: "Not “sad childhood” as a slogan. A specific place the life cannot fake being already solid.",
     truth: "Chiron is the medicine that starts as a limp.",
   },
+  {
+    id: "sect",
+    word: "Sect",
+    aliases: ["day chart", "night chart", "sect"],
+    info: "Whether the Sun was above the horizon (day) or below (night) at the minute of birth.",
+    meaning: "Day charts: the Sun leads. Night charts: the Moon leads. A planet of the other team works overtime — it still works.",
+    truth: "Sect is which team the sky put you on.",
+  },
 ];
 
 const BY_ID: Record<string, LexEntry> = Object.fromEntries(LEXICON.map((e) => [e.id, e]));

@@ -58,7 +58,7 @@ export type ChakraId =
 
 export type GateId = "rising" | "sun" | "moon";
 
-export type ReadingId = "love" | "work" | "wound" | "becoming" | "wire" | "return";
+export type ReadingId = "love" | "work" | "wound" | "becoming" | "wire" | "return" | "body" | "clothes";
 
 export type AspectType =
   | "conjunction"
