@@ -229,6 +229,64 @@ test("pre-sign-in: the preview skips the request when there is no bearer", async
   assert.equal(h.cleared, 1);
 });
 
+test("pre-sign-in: a provider the server cannot serve touches nothing", async () => {
+  // The production failure this guards: the button cleared the session and the
+  // attempt then 404'd (no `/sign-in/oauth2` without the broker plugin), leaving
+  // the visitor signed out with nothing on screen. An unservable provider is not
+  // a sign-in at all, so neither the server session nor the local token is cleared.
+  let requests = 0;
+  let cleared = 0;
+  await runPreSignInSignOut({
+    livePreview: false,
+    hasBearer: true,
+    servable: false,
+    requestSignOut: () => {
+      requests += 1;
+      return Promise.resolve();
+    },
+    clearToken: () => (cleared += 1),
+  });
+  assert.equal(requests, 0, "no sign-out request for a provider that cannot be served");
+  assert.equal(cleared, 0, "the visitor is still signed in afterwards");
+});
+
+test("pre-sign-in: a servable provider still clears the prior session", async () => {
+  // The sign-out is deliberate when the provider IS served — switching providers
+  // must switch identity — so the guard must never become a blanket no-op.
+  let requests = 0;
+  let cleared = 0;
+  await runPreSignInSignOut({
+    livePreview: false,
+    hasBearer: true,
+    servable: true,
+    requestSignOut: () => {
+      requests += 1;
+      return Promise.resolve();
+    },
+    clearToken: () => (cleared += 1),
+  });
+  assert.equal(requests, 1);
+  assert.equal(cleared, 1);
+});
+
+test("pre-sign-in: unknown servability keeps the existing clear", async () => {
+  // `servable` omitted = the caller could not ask. Every pre-existing caller
+  // relies on this default, so the clearing behaviour must not move under them.
+  let requests = 0;
+  let cleared = 0;
+  await runPreSignInSignOut({
+    livePreview: false,
+    hasBearer: true,
+    requestSignOut: () => {
+      requests += 1;
+      return Promise.resolve();
+    },
+    clearToken: () => (cleared += 1),
+  });
+  assert.equal(requests, 1);
+  assert.equal(cleared, 1);
+});
+
 test("every sign-out bound comes from one rule", () => {
   assert.equal(signOutTimeoutMs(true), PREVIEW_SIGN_OUT_TIMEOUT_MS);
   assert.equal(signOutTimeoutMs(false), DEPLOYED_SIGN_OUT_TIMEOUT_MS);

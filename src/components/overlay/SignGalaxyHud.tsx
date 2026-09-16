@@ -8,6 +8,7 @@ import { useSignExploreAccess } from "@/hooks/useSignExploreAccess";
 import { Gloss } from "./Gloss";
 import { AuthSlot } from "./AuthSlot";
 import { cn } from "@/lib/utils";
+import type { CSSProperties } from "react";
 
 /** HUD while diving into / exploring a selected sign’s animal-star galaxy. */
 export function SignGalaxyHud() {
@@ -15,7 +16,7 @@ export function SignGalaxyHud() {
   const openClaim = useSessionStore((s) => s.openClaim);
 
   const sign = explore.signIndex != null ? (CONSTELLATIONS[explore.signIndex] ?? null) : null;
-  const { unlocked, lockReason, signedIn } = useSignExploreAccess(sign?.id ?? null);
+  const { unlocked, lockReason } = useSignExploreAccess(sign?.id ?? null);
 
   if (explore.phase === "idle" || explore.signIndex == null || !sign) return null;
 
@@ -81,25 +82,25 @@ export function SignGalaxyHud() {
           inside ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       >
-        <div className="relative flex shrink-0 items-start justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => exitSignGalaxy()}
-            className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
-          >
-            Back
-          </button>
-          <div className="text-right">
+        <div className="grid shrink-0 grid-cols-[minmax(4.75rem,auto)_minmax(0,1fr)_minmax(4.75rem,auto)] items-start gap-x-3 gap-y-1">
+          <div className="justify-self-start">
+            <button
+              type="button"
+              onClick={() => exitSignGalaxy()}
+              className="chrome-glow back-to-sky pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] uppercase"
+            >
+              Back
+            </button>
+          </div>
+          <div className="min-w-0 px-1 text-center">
             <p className="text-[0.65rem] tracking-[0.28em] text-fg-muted uppercase">{sign.month}</p>
             <h2 className="font-display text-2xl leading-tight font-medium tracking-tight text-fg italic md:text-3xl">
               {sign.name}
             </h2>
           </div>
-          {!signedIn ? (
-            <div className="pointer-events-auto absolute top-0 right-0 -translate-y-1">
-              <AuthSlot />
-            </div>
-          ) : null}
+          <div className="pointer-events-auto flex min-h-11 min-w-[4.75rem] justify-end justify-self-end">
+            <AuthSlot />
+          </div>
         </div>
 
         <div className="min-h-0 flex-1" aria-hidden />
@@ -129,6 +130,14 @@ export function SignGalaxyHud() {
                   {point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}
                 </Gloss>
               </p>
+              {point.isHub && lockReason === "auth" ? (
+                <ul className="mt-3 space-y-1 text-xs text-fg-subtle">
+                  <li>We don&apos;t sell your data.</li>
+                  <li>Your charts don&apos;t train public models.</li>
+                  <li>Birth dates stay on your account and can be deleted.</li>
+                  <li>An account exists to save your sky and continue on another device.</li>
+                </ul>
+              ) : null}
               {point.isHub && !unlocked ? (
                 <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
                   Drag to look around. Tap a star to move.
@@ -139,25 +148,27 @@ export function SignGalaxyHud() {
 
           <div className="flex flex-col items-center gap-3">
             {inside ? (
-              <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-2">
+              <div className="sign-galaxy-dots pointer-events-auto" role="group" aria-label="Star points">
                 {galaxy.points.map((p, i) => {
                   const sealed = !p.isHub && !unlocked;
+                  const active = i === explore.pointIndex;
                   return (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => seekGalaxyPoint(i)}
+                      style={{ "--i": i } as CSSProperties}
                       className={cn(
-                        "min-h-10 min-w-10 rounded-sm px-2 text-[0.65rem] tracking-[0.14em] uppercase",
-                        i === explore.pointIndex
-                          ? "bg-fg/10 text-fg"
-                          : sealed
-                            ? "text-fg-subtle/55 hover:text-fg-muted"
-                            : "text-fg-subtle hover:text-fg",
+                        "sign-galaxy-dot",
+                        p.isHub && "sign-galaxy-dot--hub",
+                        sealed && "sign-galaxy-dot--sealed",
+                        !p.isHub && !sealed && "sign-galaxy-dot--open",
+                        active && "sign-galaxy-dot--active",
                       )}
+                      aria-current={active ? "true" : undefined}
                       aria-label={sealed ? `${p.purpose.title} (sealed)` : p.purpose.title}
                     >
-                      {p.isHub ? "●" : sealed ? "◌" : "○"}
+                      <span aria-hidden>{p.isHub ? "●" : sealed ? "◌" : "○"}</span>
                     </button>
                   );
                 })}

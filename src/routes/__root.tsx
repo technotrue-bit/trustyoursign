@@ -5,7 +5,7 @@ import { StageLock } from "@/components/StageLock";
 import { OwnerBind } from "@/components/OwnerBind";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "The Vault";
+const APP_NAME = "Trust Your Sign";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -15,7 +15,7 @@ export const Route = createRootRoute({
       { title: APP_NAME },
       {
         name: "description",
-        content: "The Vault · kept by Devin Norris. A natal fly-through. Sign in to save a chart.",
+        content: "Trust Your Sign · a natal fly-through. Pick a sign, fly its sky, unlock a chart.",
       },
       { name: "theme-color", content: "#0c0b0a" },
       { name: "color-scheme", content: "dark" },

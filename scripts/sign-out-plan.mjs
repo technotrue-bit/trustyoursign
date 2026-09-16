@@ -128,6 +128,9 @@ export async function runSignOut({
  * @property {boolean} hasBearer Whether a preview bearer token is stored.
  * @property {() => unknown} requestSignOut Ask the server to end any prior session.
  * @property {() => void} clearToken Drop the stored bearer token.
+ * @property {boolean} [servable] Whether the server can start the provider being
+ *   signed in to. `false` means the attempt can only fail (no route to reach), so
+ *   nothing is touched — see below.
  * @property {number} [timeoutMs]
  */
 
@@ -142,6 +145,13 @@ export async function runSignOut({
  * way. Only the wait is bounded, and by the same per-environment rule as
  * `runSignOut`: a deployed session dies server-side, so it gets the full
  * window rather than the preview's aggressive one.
+ *
+ * A provider the server CANNOT serve (`servable: false`) is not a sign-in at
+ * all: the call would 404, so clearing the session first would leave the visitor
+ * signed out for nothing — the production failure this guards against. Nothing
+ * is touched in that case, not even the local token. Unknown (`servable`
+ * omitted) keeps the clearing behaviour, which is what a servable provider
+ * wants: switching identity needs the old session gone.
  * @param {PreSignInSteps} steps
  * @returns {Promise<void>}
  */
@@ -150,8 +160,11 @@ export async function runPreSignInSignOut({
   hasBearer,
   requestSignOut,
   clearToken,
+  servable = true,
   timeoutMs,
 }) {
+  if (!servable) return;
+
   // In the preview a missing bearer means there is nothing to clear.
   if (hasBearer || !livePreview) {
     await settleWithin(requestSignOut, timeoutMs ?? signOutTimeoutMs(livePreview));

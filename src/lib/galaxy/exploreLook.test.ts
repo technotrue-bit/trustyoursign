@@ -5,9 +5,12 @@ import { getSignGalaxy } from "./signGalaxy.ts";
 import { skipIntro, templeIntro } from "./intro.ts";
 import {
   EXPLORE_LOOK_MAX_X,
+  EXPLORE_ZOOM_MAX,
+  EXPLORE_ZOOM_MIN,
   applyExploreLook,
   applyExploreLookOffset,
   applyFlyDelta,
+  applyWheel,
   enterSignGalaxy,
   galaxyTravel,
   resetExplore,
@@ -109,5 +112,68 @@ describe("explore look inside a locked galaxy", () => {
   it("look clamps to the galaxy frame", () => {
     applyExploreLookOffset(-100, 0);
     assert.equal(galaxyTravel.exploreLookX, -EXPLORE_LOOK_MAX_X);
+  });
+
+  it("seek from a look-offset frames the travel point", () => {
+    applyExploreLook(20, 140, true);
+    assert.ok(Math.abs(galaxyTravel.exploreLookX) > 0.4, "precondition: look offset");
+    assert.ok(Math.abs(galaxyTravel.exploreLookY) > 0.05, "precondition: look Y");
+    galaxyTravel.zoomTarget = 0.9;
+    const zoomBefore = galaxyTravel.zoomTarget;
+
+    assert.equal(seekGalaxyPoint(1), true);
+    assert.equal(galaxyTravel.pointIndex, 1);
+    assert.equal(galaxyTravel.exploreLookX, 0, "seek resets look X so the star is framed");
+    assert.equal(galaxyTravel.exploreLookY, 0, "seek resets look Y so the star is framed");
+    assert.ok(
+      galaxyTravel.zoomTarget > zoomBefore,
+      `seek should nudge zoom toward framing (~1.12), got ${galaxyTravel.zoomTarget} from ${zoomBefore}`,
+    );
+    assert.ok(
+      galaxyTravel.zoomTarget >= EXPLORE_ZOOM_MIN && galaxyTravel.zoomTarget <= EXPLORE_ZOOM_MAX,
+      `framed zoom stays in inside clamp, got ${galaxyTravel.zoomTarget}`,
+    );
+    // 0.9 + (1.12 - 0.9) * 0.45 ≈ 0.999 — soft ease toward SEEK_FRAME_ZOOM
+    assert.ok(
+      Math.abs(galaxyTravel.zoomTarget - (0.9 + (1.12 - 0.9) * 0.45)) < 1e-9,
+      `expected soft frame blend, got ${galaxyTravel.zoomTarget}`,
+    );
+  });
+
+  it("wheel inside changes zoomTarget and can pull back below 1", () => {
+    assert.ok(EXPLORE_ZOOM_MIN < 1, "inside min must allow pull-back below 1");
+    galaxyTravel.zoomTarget = 1;
+    const atOne = galaxyTravel.zoomTarget;
+
+    applyWheel(-400);
+    assert.ok(
+      galaxyTravel.zoomTarget > atOne,
+      `scroll up should zoom in, got ${galaxyTravel.zoomTarget}`,
+    );
+    assert.ok(galaxyTravel.zoomTarget <= EXPLORE_ZOOM_MAX);
+
+    galaxyTravel.zoomTarget = 1;
+    applyWheel(500);
+    assert.ok(
+      galaxyTravel.zoomTarget < 1,
+      `scroll down should pull back below 1, got ${galaxyTravel.zoomTarget}`,
+    );
+    assert.ok(galaxyTravel.zoomTarget >= EXPLORE_ZOOM_MIN);
+
+    galaxyTravel.zoomTarget = EXPLORE_ZOOM_MIN;
+    applyWheel(800);
+    assert.equal(
+      galaxyTravel.zoomTarget,
+      EXPLORE_ZOOM_MIN,
+      "pull-back clamps at EXPLORE_ZOOM_MIN",
+    );
+
+    galaxyTravel.zoomTarget = EXPLORE_ZOOM_MAX;
+    applyWheel(-800);
+    assert.equal(
+      galaxyTravel.zoomTarget,
+      EXPLORE_ZOOM_MAX,
+      "push-in clamps at EXPLORE_ZOOM_MAX",
+    );
   });
 });

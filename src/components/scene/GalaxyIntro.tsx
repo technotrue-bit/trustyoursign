@@ -31,6 +31,8 @@ import {
 } from "@/lib/galaxy/signBurst";
 import type { SignId } from "@/lib/chart/types";
 import {
+  EXPLORE_ZOOM_MAX,
+  EXPLORE_ZOOM_MIN,
   HOLD_FLY,
   aimedIndex,
   ensureAutoClock,
@@ -1171,7 +1173,12 @@ function TempleRig() {
     const shelfOn = state.session?.kind === "shelf";
     const well = chatting || shelfOn ? { top: 0.12, bottom: 0.48 } : { top: 0.15, bottom: 0.24 };
     const frame = heroFrame(aspect, arriving ? introCam() : 1, plateA, PLATE_WIDE, well);
-    const zoom = arriving ? 1 : Math.max(1, galaxyTravel.zoom);
+    // Inside: allow pull-back below 1 so the silhouette stays readable; corridor floors at 1.
+    const zoom = arriving
+      ? 1
+      : exploring
+        ? Math.min(EXPLORE_ZOOM_MAX, Math.max(EXPLORE_ZOOM_MIN, galaxyTravel.zoom))
+        : Math.max(1, galaxyTravel.zoom);
     const pull = 1 - introCam();
     _cam.copy(_chest);
     _cam.z += frame.z / zoom;
@@ -1245,7 +1252,7 @@ function TempleRig() {
       _look.copy(sit);
       _look.addScaledVector(_camRight, local.x);
       _look.addScaledVector(_camUp, local.y);
-      _look.z += local.z * 0.15;
+      _look.z += local.z * 0.12;
       const settle =
         galaxyTravel.explorePhase === "inside"
           ? 1

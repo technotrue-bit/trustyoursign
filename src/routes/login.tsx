@@ -15,7 +15,7 @@ import {
   cooldownSecondsLeft,
   isCompleteOtp,
   normalizeOtpInput,
-  emailOtpStatus,
+  signInAvailability,
 } from "@/lib/auth/email-otp";
 import { MIN_AGE } from "@/lib/legal";
 import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
@@ -61,11 +61,15 @@ function Login() {
   const [error, setError] = useState<string | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
 
-  // ── One-time-code sign-in ──────────────────────────────────────────────────
-  // Offered only when the host can actually deliver mail, so the button never
-  // appears as a path that cannot finish.
+  // ── What this host can actually serve ──────────────────────────────────────
+  // One answer from the server drives every option on the page: the code path
+  // (needs mail delivery) and the Google/X buttons (need the broker's OAuth
+  // plugin, which is what serves `/sign-in/oauth2`). Nothing is rendered that
+  // the server cannot finish — no button that merely scrolls, no button that
+  // 404s after signing the visitor out.
   const [otpAvailable, setOtpAvailable] = useState(false);
   const [otpSandbox, setOtpSandbox] = useState(false);
+  const [servedProviders, setServedProviders] = useState<readonly string[]>([]);
   const [otpStage, setOtpStage] = useState<"idle" | "code" | "sent">("idle");
   const [otp, setOtp] = useState("");
   const [codeSentTo, setCodeSentTo] = useState("");
@@ -74,14 +78,15 @@ function Login() {
 
   useEffect(() => {
     let cancelled = false;
-    emailOtpStatus()
+    signInAvailability()
       .then((status) => {
         if (cancelled) return;
-        setOtpAvailable(status.available);
-        setOtpSandbox(status.sandbox);
+        setOtpAvailable(status.codeAvailable);
+        setOtpSandbox(status.codeSandbox);
+        setServedProviders(status.providers);
       })
       .catch(() => {
-        /* leave it hidden rather than offer a path that may not work */
+        /* leave everything hidden rather than offer a path that may not work */
       });
     return () => {
       cancelled = true;
@@ -172,11 +177,11 @@ function Login() {
   };
 
   /**
-   * Apple users have no SSO button — the auth broker federates Google and X only
-   * — so their path is a code by email, with no password to invent. Tapping the
-   * Apple button puts the form into that mode for real: the address field takes
-   * focus, and if an address is already typed the code goes out immediately.
-   * (Scrolling to a form the visitor can already see is not an action.)
+   * The email-code path, for anyone the broker cannot federate (it serves
+   * Google and X only). Choosing it puts the form into that mode for real: the
+   * address field takes focus, and if an address is already typed the code goes
+   * out immediately. (Scrolling to a form the visitor can already see is not an
+   * action.)
    */
   const startCodeSignIn = (opts: { sendNow?: boolean } = {}) => {
     setError(null);
@@ -275,10 +280,29 @@ function Login() {
     );
   }
 
+  // Only providers the server said it can start. `GROK_PROVIDERS` supplies the
+  // labels and the order; the served ids decide whether a button exists at all.
+  const socialProviders = GROK_PROVIDERS.filter((provider) =>
+    servedProviders.includes(provider.providerId),
+  );
+
+  // The note under the buttons. It must not imply Google/X exist when the
+  // broker cannot be served — that is the same lie as a button that 404s.
+  const signInNote =
+    socialProviders.length > 0
+      ? otpAvailable
+        ? "Your email gets you a code — no password to invent."
+        : "Your email works the same way, with a password, below."
+      : otpAvailable
+        ? "Google and X sign-in aren't offered on this address. Your email gets you a code instead — no password to invent."
+        : "Google and X sign-in aren't offered on this address. Use your email and a password below.";
+
   return (
     <main id="main-content" className="vault-page bg-bg px-5 text-fg">
       <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[max(6.5rem,calc(var(--chrome-bottom)+4.25rem))]">
-        <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle">TrustYourSign</p>
+        <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">
+          Trust Your Sign · {SITE_OWNER.name}
+        </p>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Keep the sky.</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
           Sign in to save your chart, and the charts of people who gave you permission. This house
@@ -287,32 +311,36 @@ function Login() {
 
         {authEnabled ? (
           <div className="mt-8 space-y-3">
-            {GROK_PROVIDERS.filter((p) => p.idp === "google").map((p) => (
-              <button
-                key={p.providerId}
-                type="button"
-                disabled={busy}
-                onClick={() => social(p.providerId)}
-                className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-4 text-sm tracking-wide text-fg hover:bg-bg-subtle disabled:opacity-50"
-              >
-                Continue with {p.label}
-              </button>
-            ))}
-            {GROK_PROVIDERS.filter((p) => p.idp !== "google").map((p) => (
-              <button
-                key={p.providerId}
-                type="button"
-                disabled={busy}
-                onClick={() => social(p.providerId)}
-                className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
-              >
-                Continue with {p.label}
-              </button>
-            ))}
-            {/* No Apple SSO exists (the broker federates Google and X only), so
-                the Apple path is a code by email. This starts that flow for
-                real, and is only rendered when the host can send mail — never a
-                button that merely scrolls the page. */}
+            {socialProviders
+              .filter((p) => p.idp === "google")
+              .map((p) => (
+                <button
+                  key={p.providerId}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => social(p.providerId)}
+                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-4 text-sm tracking-wide text-fg hover:bg-bg-subtle disabled:opacity-50"
+                >
+                  Continue with {p.label}
+                </button>
+              ))}
+            {socialProviders
+              .filter((p) => p.idp !== "google")
+              .map((p) => (
+                <button
+                  key={p.providerId}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => social(p.providerId)}
+                  className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+                >
+                  Continue with {p.label}
+                </button>
+              ))}
+            {/* This host has no SSO for every address (the broker federates
+                Google and X only), so the email-code path covers the rest. It
+                starts that flow for real, and is only rendered when the host can
+                send mail — never a button that merely scrolls the page. */}
             {otpAvailable ? (
               <button
                 type="button"
@@ -320,14 +348,10 @@ function Login() {
                 onClick={() => startCodeSignIn({ sendNow: true })}
                 className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
               >
-                Use Apple or iCloud email
+                Email me a code
               </button>
             ) : null}
-            <p className="pt-1 text-xs leading-relaxed text-fg-subtle">
-              {otpAvailable
-                ? "Apple sign-in isn't offered here. Your iCloud or Apple address gets you a code by email — no password to invent."
-                : "Apple sign-in isn't offered here. Your iCloud or Apple address works the same way, with a password, below."}
-            </p>
+            <p className="pt-1 text-xs leading-relaxed text-fg-subtle">{signInNote}</p>
           </div>
         ) : (
           <p className="mt-8 text-sm text-fg-subtle">Sign-in is disabled.</p>
@@ -386,7 +410,7 @@ function Login() {
             ) : null}
             <label className="block">
               <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
-                {mode === "in" ? "Owner or email" : "Email"}
+                {mode === "in" ? "Name or email" : "Email"}
               </span>
               <input
                 ref={emailRef}
@@ -411,7 +435,7 @@ function Login() {
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                placeholder={mode === "in" ? "ADMIN" : "you@icloud.com"}
+                placeholder={mode === "in" ? "you@email.com" : "you@icloud.com"}
               />
             </label>
             {otpStage === "sent" ? (
@@ -501,13 +525,17 @@ function Login() {
             {turnstileSiteKey() ? <TurnstileWidget /> : null}
             {/* A host can be configured to send mail and still be unable to reach
                 anyone but the owner (a provider sandbox sender). Saying so beats
-                letting a visitor wait for a code that will never arrive. */}
+                letting a visitor wait for a code that will never arrive — and it
+                must not point at a sign-in method this host does not offer. */}
             {otpSandbox &&
             email.trim() &&
             email.trim().toLowerCase() !== SITE_OWNER.email.toLowerCase() ? (
               <p className="text-xs leading-relaxed text-fg-muted">
                 Mail on this host is still in trial mode, so only the owner's address can receive a
-                code right now. Signing in with Google or X works as usual.
+                code right now.{" "}
+                {socialProviders.length > 0
+                  ? "Signing in with Google or X works as usual."
+                  : "There is no Google or X sign-in on this host to fall back on."}
               </p>
             ) : null}
             {error ? (

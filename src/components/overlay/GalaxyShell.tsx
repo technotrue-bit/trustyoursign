@@ -55,22 +55,31 @@ export function GalaxyShell() {
         </div>
       ) : null}
       {!asking && !exploring && worldFade > 0.08 ? (
-        <div
-          data-no-fly
-          className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-1"
-          style={{ opacity: worldFade }}
-        >
-          {introSkip ? (
-            <button
-              type="button"
-              onClick={() => skipIntro()}
-              className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
-            >
-              Skip
-            </button>
-          ) : null}
-          <AuthSlot />
-        </div>
+        <>
+          <p
+            data-no-fly
+            className="pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] max-w-[3.25rem] text-[0.6rem] leading-tight tracking-[0.2em] text-fg-subtle uppercase md:max-w-none"
+            style={{ opacity: worldFade }}
+          >
+            Closed beta
+          </p>
+          <div
+            data-no-fly
+            className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-1"
+            style={{ opacity: worldFade }}
+          >
+            {introSkip ? (
+              <button
+                type="button"
+                onClick={() => skipIntro()}
+                className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+              >
+                Skip
+              </button>
+            ) : null}
+            <AuthSlot />
+          </div>
+        </>
       ) : null}
 
       {exploring ? <SignGalaxyHud /> : null}
@@ -78,7 +87,7 @@ export function GalaxyShell() {
       {!exploring ? (
         <GlossRoot>
           <div
-            className="galaxy-title-slot absolute top-[var(--chrome-top)] right-16 left-16 text-center md:top-[max(2.5rem,var(--safe-top))] md:right-24 md:left-24"
+            className="galaxy-title-slot absolute top-[var(--chrome-top)] right-20 left-16 text-center md:top-[max(2.5rem,var(--safe-top))] md:right-24 md:left-24"
             onPointerDown={noteControl}
             style={{
               opacity: asking || moved ? undefined : introTitle,
@@ -102,6 +111,12 @@ export function GalaxyShell() {
                   </span>
                   <span className="word">?</span>
                 </h1>
+              ) : null}
+              {/* Hero value proposition — fades in with the title, gone once the belt moves. */}
+              {!moved && !asking && introTitle > 0.3 ? (
+                <p className="col-start-1 row-start-2 mx-auto mt-2 max-w-md px-1 text-sm leading-relaxed text-fg-muted md:mt-3 md:text-base">
+                  Pick a sign, fly its sky, then unlock a chart that actually belongs to a birth.
+                </p>
               ) : null}
               {moved && sign ? (
                 <div key={sign.id} className="sign-swap pointer-events-auto col-start-1 row-start-1">

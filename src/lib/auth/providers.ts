@@ -29,3 +29,16 @@ export const GROK_PROVIDERS: readonly GrokProvider[] = [
   { providerId: "grok-google", idp: "google", label: "Google" },
   { providerId: "grok-x", idp: "twitter", label: "X" },
 ];
+
+/**
+ * The provider ids a host can actually START, given whether the broker client is
+ * configured — the same flag that registers the broker's OAuth plugin
+ * (`authConfigured`, see `server.ts`), which is what serves `/sign-in/oauth2`.
+ *
+ * Empty means "offer no provider at all": without that plugin a button could only
+ * 404. The sign-in page renders from this list (arriving from the server, see
+ * `signInAvailability`), so it can never advertise a provider that cannot answer.
+ */
+export function servedProviderIds(brokerConfigured: boolean): string[] {
+  return brokerConfigured ? GROK_PROVIDERS.map((provider) => provider.providerId) : [];
+}

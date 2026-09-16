@@ -70,6 +70,14 @@ export const OPEN_T = 0;
 /** Max look offset inside a sign galaxy (camera-right, world units). */
 export const EXPLORE_LOOK_MAX_X = 8.5;
 export const EXPLORE_LOOK_MAX_Y = 5.5;
+/** Inside-sign wheel/pinch zoom — pull-back below 1 keeps multiple nodes readable. */
+export const EXPLORE_ZOOM_MIN = 0.72;
+export const EXPLORE_ZOOM_MAX = 3.2;
+/** Soft framing zoom after a travel-point seek (within the inside clamp). */
+const SEEK_FRAME_ZOOM = 1.12;
+/** Corridor pinch stays tighter so the hero station doesn't drift out. */
+const CORRIDOR_ZOOM_MIN = 1;
+const CORRIDOR_ZOOM_MAX = 2.7;
 /** Drag pixels → look units. Grab-the-sky: drag right moves stars right. */
 const EXPLORE_LOOK_DRAG_X = 78;
 const EXPLORE_LOOK_DRAG_Y = 92;
@@ -519,6 +527,13 @@ export function seekGalaxyPoint(pointIndex: number) {
   galaxyTravel.pointSeek = i;
   galaxyTravel.pointTTarget = i;
   galaxyTravel.pointIndex = i;
+  // Frame the star: drop any pan offset so settle lands on the node, then ease zoom.
+  resetExploreLook();
+  galaxyTravel.zoomTarget = clamp(
+    galaxyTravel.zoomTarget + (SEEK_FRAME_ZOOM - galaxyTravel.zoomTarget) * 0.45,
+    EXPLORE_ZOOM_MIN,
+    EXPLORE_ZOOM_MAX,
+  );
   noteControl();
   publishExplore();
   return true;
@@ -814,7 +829,11 @@ export function applyPinch(ratio: number) {
   if (flyLocked()) return;
   if (!Number.isFinite(ratio) || ratio <= 0) return;
   const next = galaxyTravel.zoomTarget * ratio;
-  galaxyTravel.zoomTarget = Math.min(2.7, Math.max(1, next));
+  if (insideSignGalaxy()) {
+    galaxyTravel.zoomTarget = Math.min(EXPLORE_ZOOM_MAX, Math.max(EXPLORE_ZOOM_MIN, next));
+  } else {
+    galaxyTravel.zoomTarget = Math.min(CORRIDOR_ZOOM_MAX, Math.max(CORRIDOR_ZOOM_MIN, next));
+  }
   galaxyTravel.handsOn = true;
   galaxyTravel.awaken = 1;
   pinchQuietUntil = nowMs() + 420;

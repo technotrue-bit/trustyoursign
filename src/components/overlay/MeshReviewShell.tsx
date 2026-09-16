@@ -45,7 +45,7 @@ export function MeshReviewShell() {
             onClick={leaveReview}
             className="pointer-events-auto min-h-11 shrink-0 rounded-md border border-border/80 bg-bg-elevated/80 px-3 text-xs tracking-[0.18em] text-fg-muted uppercase backdrop-blur-sm hover:border-accent/40 hover:text-fg"
           >
-            Back to Vault
+            Back to Trust Your Sign
           </button>
         </div>
         <p className="absolute bottom-[max(1rem,var(--safe-bottom))] left-1/2 -translate-x-1/2 text-[0.65rem] tracking-[0.22em] text-fg-subtle uppercase">

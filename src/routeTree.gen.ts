@@ -14,6 +14,8 @@ import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -42,6 +44,16 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -59,6 +71,8 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/register': typeof RegisterRoute
+  '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -68,6 +82,8 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/register': typeof RegisterRoute
+  '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -78,6 +94,8 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/register': typeof RegisterRoute
+  '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -89,6 +107,8 @@ export interface FileRouteTypes {
     | '/admin'
     | '/login'
     | '/privacy'
+    | '/register'
+    | '/signup'
     | '/terms'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +118,8 @@ export interface FileRouteTypes {
     | '/admin'
     | '/login'
     | '/privacy'
+    | '/register'
+    | '/signup'
     | '/terms'
     | '/api/auth/$'
   id:
@@ -107,6 +129,8 @@ export interface FileRouteTypes {
     | '/admin'
     | '/login'
     | '/privacy'
+    | '/register'
+    | '/signup'
     | '/terms'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
@@ -117,6 +141,8 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
+  RegisterRoute: typeof RegisterRoute
+  SignupRoute: typeof SignupRoute
   TermsRoute: typeof TermsRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
@@ -158,6 +184,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -181,6 +221,8 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
+  RegisterRoute: RegisterRoute,
+  SignupRoute: SignupRoute,
   TermsRoute: TermsRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
