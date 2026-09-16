@@ -16,6 +16,7 @@ import {
   ensureFlyInput,
   galaxyTravel,
   prefersReducedMotion,
+  seekSign,
   skipBirth,
   stopAutoClock,
 } from "@/lib/galaxy/travel";
@@ -88,11 +89,16 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const st = useSessionStore.getState();
+      const target = e.target instanceof Element ? e.target : null;
+      // Typing in a form field must keep native key behavior — the galaxy
+      // shortcuts below only apply outside inputs.
+      const inField =
+        target?.closest("input, select, textarea, [contenteditable]") != null;
       if (e.key === "Escape") {
         if (st.session?.selection) st.clear();
         else st.close();
       }
-      if (e.key === "Enter" && !st.session) {
+      if (e.key === "Enter" && !st.session && !inField) {
         if (st.surface === "galaxy") {
           if (st.claim) return;
           if (galaxyTravel.birth < 1) {
@@ -107,8 +113,35 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
           } else st.openLibrary();
         }
       }
+      // Belt keyboard navigation (B4): left/right walks the signs, only
+      // while the landing belt is the active surface — not inside a sign
+      // galaxy, a claim, a session, or a form field.
+      if (
+        (e.key === "ArrowLeft" || e.key === "ArrowRight") &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !inField
+      ) {
+        const g = useGalaxy.getState();
+        if (
+          g.born &&
+          g.explore.phase === "idle" &&
+          st.surface === "galaxy" &&
+          !st.session &&
+          !st.claim
+        ) {
+          e.preventDefault();
+          const next =
+            e.key === "ArrowLeft"
+              ? (g.signIndex + 11) % 12
+              : (g.signIndex + 1) % 12;
+          // Direct seek — same short lerp as clicking a name in the belt.
+          seekSign(next, { direct: true });
+        }
+      }
       const n = Number(e.key);
-      if (n >= 1 && n <= 7) {
+      if (n >= 1 && n <= 7 && !inField) {
         const kind = st.session?.kind;
         if (!kind) return;
         const mode = roomsFor(kind)[n - 1];
