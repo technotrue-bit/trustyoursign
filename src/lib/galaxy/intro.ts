@@ -85,12 +85,41 @@ function windowInOut(t: number, a: number, b: number) {
   return smoother((t - a) / Math.max(0.001, b - a));
 }
 
+/** Durable across tabs/visits; sessionStorage kept for same-tab parity. */
+function readSeen(): boolean {
+  try {
+    if (localStorage.getItem(INTRO_KEY) === "1") return true;
+  } catch {
+    /* private mode */
+  }
+  try {
+    if (sessionStorage.getItem(INTRO_KEY) === "1") return true;
+  } catch {
+    /* private mode */
+  }
+  return false;
+}
+
 function markSeen() {
+  try {
+    localStorage.setItem(INTRO_KEY, "1");
+  } catch {
+    /* private mode */
+  }
   try {
     sessionStorage.setItem(INTRO_KEY, "1");
   } catch {
     /* private mode */
   }
+}
+
+/** Finish intro immediately (returning visitor or reduced motion). */
+function finishIntroNow() {
+  templeIntro.asking = false;
+  templeIntro.askT = ASK;
+  templeIntro.t = Math.max(templeIntro.t, 1);
+  templeIntro.seen = true;
+  skipIntro();
 }
 
 function publish() {
@@ -257,30 +286,31 @@ export function bootIntro() {
   if (templeIntro.booted) return;
   templeIntro.booted = true;
   useGalaxy.getState().markBorn();
-  let seen = false;
-  try {
-    seen = sessionStorage.getItem(INTRO_KEY) === "1";
-  } catch {
-    seen = false;
-  }
-  // Reduced motion: no splash at all — land straight on the landing overlay.
-  // `seen` + `done` are both set so every intro accessor returns its settled
-  // value (1 / 0) even if `done` is ever cleared.
-  if (prefersReducedMotion()) {
-    templeIntro.seen = true;
-    templeIntro.asking = false;
-    templeIntro.askT = ASK;
-    templeIntro.t = templeIntro.duration;
-    // Sets done = true, marks seen/born, and pushes the settled intro state.
-    skipIntro();
-    publish();
+  const seen = readSeen();
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Returning visitors (and reduced-motion) skip the ask + full temple load.
+  if (reduceMotion || seen) {
+    finishIntroNow();
     return;
   }
-  templeIntro.seen = seen;
-  templeIntro.duration = seen ? INTRO_SHORT : INTRO_FULL;
+  templeIntro.seen = false;
+  templeIntro.duration = INTRO_FULL;
   templeIntro.t = 0;
   templeIntro.done = false;
-  templeIntro.asking = !seen;
-  templeIntro.askT = seen ? ASK : 0;
+  templeIntro.asking = true;
+  templeIntro.askT = 0;
   publish();
+}
+
+/** Test helper — reset mutable intro machine between cases. */
+export function resetIntroForTests() {
+  templeIntro.t = 0;
+  templeIntro.duration = INTRO_FULL;
+  templeIntro.done = false;
+  templeIntro.seen = false;
+  templeIntro.booted = false;
+  templeIntro.asking = false;
+  templeIntro.askT = 0;
 }
