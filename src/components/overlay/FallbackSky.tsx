@@ -91,7 +91,7 @@ function finishBirth() {
 }
 
 /** 2D sky so a WebGL failure never blanks the page. */
-export function FallbackSky() {
+export function FallbackSky({ note }: { note?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -730,6 +730,14 @@ export function FallbackSky() {
   return (
     <div className="canvas-root" style={{ background: "#0c0b0a" }}>
       <canvas ref={canvasRef} className="h-full w-full touch-none" aria-hidden />
+      {note ? (
+        <p
+          role="status"
+          className="pointer-events-none absolute inset-x-0 bottom-[calc(var(--chrome-bottom)+11rem)] z-[1] px-4 text-center text-[0.6rem] leading-snug tracking-[0.18em] text-fg-subtle uppercase"
+        >
+          {note}
+        </p>
+      ) : null}
     </div>
   );
 }

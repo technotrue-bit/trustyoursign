@@ -36,6 +36,10 @@ const FallbackSky = lazy(() =>
   import("./FallbackSky").then((m) => ({ default: m.FallbackSky })),
 );
 
+/** J4/I2: honest copy when the 3D sky fails — the 2D sky is not a dead end. */
+const FALLBACK_NOTE =
+  "The 3D sky could not load here — flying the 2D sky instead. Every sign still opens.";
+
 type VaultAppProps = {
   /** From route search — keeps SSR/client mesh-review branch in sync. */
   meshParam?: string;
@@ -220,7 +224,7 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
         <SceneErrorBoundary
           fallback={
             <Suspense fallback={null}>
-              <FallbackSky />
+              <FallbackSky note={FALLBACK_NOTE} />
             </Suspense>
           }
         >
@@ -228,7 +232,9 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
         </SceneErrorBoundary>
       ) : (
         <Suspense fallback={null}>
-          <FallbackSky />
+          {/* Reduced motion chose the 2D sky on purpose — only a real
+              WebGL failure gets the "could not load" note. */}
+          <FallbackSky note={prefersReducedMotion() ? undefined : FALLBACK_NOTE} />
         </Suspense>
       )}
       {showStarBack ? <StarBack /> : null}
