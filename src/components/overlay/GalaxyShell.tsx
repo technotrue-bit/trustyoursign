@@ -1,4 +1,5 @@
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
+import { SIGN_INSIGHTS, insightToneLabel } from "@/lib/galaxy/signInsights";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
 import { enterSignGalaxy, noteControl } from "@/lib/galaxy/travel";
 import { skipIntro } from "@/lib/galaxy/intro";
@@ -200,6 +201,32 @@ export function GalaxyShell() {
         >
           This is my sign
         </button>
+        {/* D4/J2: one finished star card + how a chart talks here — the
+            voice is the product, so the landing shows it before login.
+            Collapsed by default; the belt chrome stays quiet on mobile. */}
+        <details className="pointer-events-auto mx-auto w-full max-w-md px-2">
+          <summary className="min-h-11 cursor-pointer list-none text-center text-[0.6rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg [&::-webkit-details-marker]:hidden">
+            How a chart talks here
+          </summary>
+          {(() => {
+            const sample = SIGN_INSIGHTS.taurus[0];
+            if (!sample) return null;
+            return (
+              <div className="mt-2 space-y-2 text-center">
+                <p className="text-[0.6rem] tracking-[0.22em] text-fg-subtle uppercase">
+                  Sample reading · {insightToneLabel(sample.tone)}
+                </p>
+                <p className="font-display text-lg leading-snug text-fg italic">{sample.title}</p>
+                <p className="text-sm leading-relaxed text-fg-muted">{sample.body}</p>
+                <p className="text-xs leading-relaxed text-fg-subtle">
+                  Every sky speaks in four registers — insight, spice, horror, warning. Inside any
+                  galaxy, the Tone control decides how dark it gets. Full readings belong to your
+                  own birth, not a sample.
+                </p>
+              </div>
+            );
+          })()}
+        </details>
       </div>
     </div>
   );
