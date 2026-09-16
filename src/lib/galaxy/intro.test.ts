@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-<<<<<<< HEAD
-import test from "node:test";
+import test, { afterEach, beforeEach, describe, it } from "node:test";
 import {
+  INTRO_KEY,
   ariesConstellationLineCount,
   ariesConstellationLineReveal,
   ariesConstellationReveal,
+  bootIntro,
+  resetIntroForTests,
+  templeIntro,
 } from "./intro.ts";
-
 test("Aries constellation reveal is hidden before the silhouette gathers", () => {
   assert.equal(ariesConstellationReveal(0), 0);
   assert.equal(ariesConstellationReveal(0.16), 0);
@@ -32,14 +34,7 @@ test("reduced motion lands immediately on the finished constellation", () => {
   assert.equal(ariesConstellationReveal(0.2, true), 1);
   assert.equal(ariesConstellationLineCount(0, 24, true), 24);
   assert.equal(ariesConstellationLineReveal(0, 23, 24, true), 1);
-=======
-import { afterEach, beforeEach, describe, it } from "node:test";
-import {
-  INTRO_KEY,
-  bootIntro,
-  resetIntroForTests,
-  templeIntro,
-} from "./intro.ts";
+});
 
 function memoryStorage(): Storage {
   const map = new Map<string, string>();
@@ -142,5 +137,4 @@ describe("bootIntro returning visitors", () => {
     bootIntro();
     assert.equal(templeIntro.asking, false);
   });
->>>>>>> 0c78d1b (Skip temple intro for returning visitors via durable storage)
 });

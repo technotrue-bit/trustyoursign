@@ -286,25 +286,6 @@ export function bootIntro() {
   if (templeIntro.booted) return;
   templeIntro.booted = true;
   useGalaxy.getState().markBorn();
-<<<<<<< HEAD
-  let seen = false;
-  try {
-    seen = sessionStorage.getItem(INTRO_KEY) === "1";
-  } catch {
-    seen = false;
-  }
-  // Reduced motion: no splash at all — land straight on the landing overlay.
-  // `seen` + `done` are both set so every intro accessor returns its settled
-  // value (1 / 0) even if `done` is ever cleared.
-  if (prefersReducedMotion()) {
-    templeIntro.seen = true;
-    templeIntro.asking = false;
-    templeIntro.askT = ASK;
-    templeIntro.t = templeIntro.duration;
-    // Sets done = true, marks seen/born, and pushes the settled intro state.
-    skipIntro();
-    publish();
-=======
   const seen = readSeen();
   const reduceMotion =
     typeof window !== "undefined" &&
@@ -312,7 +293,6 @@ export function bootIntro() {
   // Returning visitors (and reduced-motion) skip the ask + full temple load.
   if (reduceMotion || seen) {
     finishIntroNow();
->>>>>>> 0c78d1b (Skip temple intro for returning visitors via durable storage)
     return;
   }
   templeIntro.seen = false;
