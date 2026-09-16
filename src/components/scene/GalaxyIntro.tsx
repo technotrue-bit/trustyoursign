@@ -56,6 +56,7 @@ import {
   introPlaying,
   introAries,
   ariesConstellationReveal,
+  ariesConstellationLineCount,
   skipIntro,
   stepIntro,
   uAssemble,
@@ -861,7 +862,8 @@ function AriesConstellationReveal() {
     const reduced = prefersReducedMotion();
     const reveal = ariesConstellationReveal(introAries(), reduced);
     const count = geometry.getAttribute("position")?.count ?? 0;
-    const lineCount = Math.floor((count / 2) * reveal);
+    const segmentCount = Math.floor(count / 2);
+    const lineCount = ariesConstellationLineCount(introAries(), segmentCount, reduced);
     geometry.setDrawRange(0, lineCount * 2);
     mesh.visible = lineCount > 0;
     const material = mesh.material as MeshBasicMaterial;

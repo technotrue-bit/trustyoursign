@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BufferAttribute, BufferGeometry } from "three";
 import { GALAXY_FRAG } from "./celestial.ts";
-import { STAR_APPEARANCE } from "./starAppearance.ts";
+import { STAR_APPEARANCE, starRenderProfile } from "./starAppearance.ts";
 import { STAR_FRAG, STAR_VERT, setCloudDrawRange } from "./starRender.ts";
 
 describe("station star shader", () => {
@@ -18,6 +18,23 @@ describe("station star shader", () => {
     assert.match(GALAXY_FRAG, /smoothstep\(0\.205, 0\.25/);
     assert.match(GALAXY_FRAG, /a < 0\.002/);
     assert.equal(STAR_APPEARANCE.alphaCutoff, 0.002);
+  });
+});
+
+describe("star render profiles", () => {
+  it("keeps modest devices lighter without changing the hierarchy", () => {
+    const small = starRenderProfile(true);
+    const full = starRenderProfile(false);
+    assert.ok(small.stationCount < full.stationCount);
+    assert.ok(small.galaxyArmCount < full.galaxyArmCount);
+    assert.ok(small.dustCount < full.dustCount);
+    assert.equal(small.fieldStarSize < full.fieldStarSize, true);
+    assert.equal(small.stationPixelScale < full.stationPixelScale, true);
+  });
+
+  it("returns stable profiles instead of device-dependent randomness", () => {
+    assert.deepEqual(starRenderProfile(true), starRenderProfile(true));
+    assert.deepEqual(starRenderProfile(false), starRenderProfile(false));
   });
 });
 

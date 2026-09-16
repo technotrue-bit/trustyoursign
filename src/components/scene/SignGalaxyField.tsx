@@ -11,7 +11,10 @@ import {
 import { getSignGalaxy, GALAXY_SPAN, type SignGalaxy } from "@/lib/galaxy/signGalaxy";
 import { galaxyTravel, seekGalaxyPoint } from "@/lib/galaxy/travel";
 import { PLATE_WIDE, type TempleSign } from "@/lib/galaxy/temple";
-import { STAR_APPEARANCE } from "@/lib/galaxy/starAppearance";
+import { STAR_APPEARANCE, starRenderProfile } from "@/lib/galaxy/starAppearance";
+import { isSmallGpu } from "@/lib/gpu";
+
+const STAR_PROFILE = starRenderProfile(typeof window !== "undefined" && isSmallGpu());
 
 function noopRaycast() {
   /* ambient field never steals picks */
@@ -71,14 +74,14 @@ export function SignGalaxyField({
       starMat.opacity = Math.min(1, fieldReveal * STAR_APPEARANCE.fieldStarOpacity);
       if (starMat.color) starMat.color.copy(tint);
       if (typeof starMat.size === "number") {
-        starMat.size = STAR_APPEARANCE.fieldStarSize + form * STAR_APPEARANCE.fieldStarSizeGrowth;
+        starMat.size = STAR_PROFILE.fieldStarSize + form * 0.12;
       }
     }
     if (pointMat) {
       pointMat.opacity = Math.min(1, fieldReveal * STAR_APPEARANCE.fieldPointOpacity);
       if (pointMat.color) pointMat.color.copy(accent);
       if (typeof pointMat.size === "number") {
-        pointMat.size = STAR_APPEARANCE.fieldPointSize + form * STAR_APPEARANCE.fieldPointSizeGrowth;
+        pointMat.size = STAR_PROFILE.fieldPointSize + form * 0.12;
       }
     }
   });
@@ -97,7 +100,7 @@ export function SignGalaxyField({
       <points geometry={starGeo} frustumCulled={false} raycast={noopRaycast}>
         <pointsMaterial
           color={sign.palette.chest}
-          size={0.3}
+          size={STAR_PROFILE.fieldStarSize}
           sizeAttenuation
           transparent
           opacity={0}
@@ -109,7 +112,7 @@ export function SignGalaxyField({
       <points geometry={pointGeo} frustumCulled={false} raycast={noopRaycast}>
         <pointsMaterial
           color={sign.palette.accent}
-          size={0.7}
+          size={STAR_PROFILE.fieldPointSize}
           sizeAttenuation
           transparent
           opacity={0}

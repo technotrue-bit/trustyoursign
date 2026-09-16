@@ -10,11 +10,11 @@ import {
 } from "three";
 import { TEMPLE_CURVE } from "./temple";
 import { isSmallGpu } from "@/lib/gpu";
-import { STAR_APPEARANCE } from "./starAppearance";
+import { STAR_APPEARANCE, starRenderProfile } from "./starAppearance";
 
-const SMALL = typeof window !== "undefined" && isSmallGpu();
-const ARM_N = SMALL ? 4200 : 8000;
-const FIELD_N = SMALL ? 1400 : 2400;
+const STAR_PROFILE = starRenderProfile(typeof window !== "undefined" && isSmallGpu());
+const ARM_N = STAR_PROFILE.galaxyArmCount;
+const FIELD_N = STAR_PROFILE.galaxyFieldCount;
 const CLEAR = 50;
 const CLEAR2 = CLEAR * CLEAR;
 
