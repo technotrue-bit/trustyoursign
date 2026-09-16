@@ -60,7 +60,7 @@ describe("mail settings survive a dashboard's casing", () => {
 
 describe("the code email", () => {
   it("subject reads per purpose", () => {
-    assert.equal(otpSubject("sign-in"), "Your Vault sign-in code");
+    assert.equal(otpSubject("sign-in"), "Your Trust Your Sign sign-in code");
     assert.match(otpSubject("forget-password"), /reset/);
   });
 
@@ -177,7 +177,7 @@ describe("the sign-in link the code email can carry", () => {
     const html = otpHtml({ otp: "481920", purpose: "sign-in", expiresInSeconds: 300 });
     const text = otpText({ otp: "481920", purpose: "sign-in", expiresInSeconds: 300 });
     assert.equal(html.includes("magic-link"), false);
-    assert.equal(html.includes("Sign in to The Vault"), false);
+    assert.equal(html.includes("Sign in to Trust Your Sign"), false);
     assert.equal(text.includes("Open this link"), false);
   });
 
@@ -195,7 +195,7 @@ describe("the sign-in link the code email can carry", () => {
   it("stands alone when it is the whole message", () => {
     assert.match(signInLinkSubject(), /link/);
     assert.match(signInLinkText({ url: link, expiresInSeconds: 900 }), /expires in 15 minutes/);
-    assert.match(signInLinkHtml({ url: link, expiresInSeconds: 900 }), /Sign in to The Vault/);
+    assert.match(signInLinkHtml({ url: link, expiresInSeconds: 900 }), /Sign in to Trust Your Sign/);
   });
 });
 
@@ -205,7 +205,7 @@ describe("detecting a sandbox sender", () => {
   it("spots the provider's sandbox domain, however EMAIL_FROM is written", () => {
     assert.equal(emailSenderIsSandbox({ ...base, EMAIL_FROM: "onboarding@resend.dev" }), true);
     assert.equal(
-      emailSenderIsSandbox({ ...base, EMAIL_FROM: "The Vault <onboarding@resend.dev>" }),
+      emailSenderIsSandbox({ ...base, EMAIL_FROM: "Trust Your Sign <onboarding@resend.dev>" }),
       true,
     );
     assert.equal(emailSenderIsSandbox({ ...base, EMAIL_FROM: "MAIL@SEND.RESEND.DEV" }), true);
@@ -214,7 +214,7 @@ describe("detecting a sandbox sender", () => {
   it("treats a domain of your own as real delivery", () => {
     assert.equal(emailSenderIsSandbox({ ...base, EMAIL_FROM: "vault@trustyoursign.com" }), false);
     assert.equal(
-      emailSenderIsSandbox({ ...base, EMAIL_FROM: "The Vault <vault@trustyoursign.com>" }),
+      emailSenderIsSandbox({ ...base, EMAIL_FROM: "Trust Your Sign <vault@trustyoursign.com>" }),
       false,
       "a display name never changes the answer",
     );
