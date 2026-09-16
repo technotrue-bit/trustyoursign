@@ -87,7 +87,7 @@ export function GalaxyShell() {
       {!exploring ? (
         <GlossRoot>
           <div
-            className="galaxy-title-slot absolute top-[var(--chrome-top)] right-16 left-16 text-center md:top-[max(2.5rem,var(--safe-top))] md:right-24 md:left-24"
+            className="galaxy-title-slot absolute top-[var(--chrome-top)] right-20 left-16 text-center md:top-[max(2.5rem,var(--safe-top))] md:right-24 md:left-24"
             onPointerDown={noteControl}
             style={{
               opacity: asking || moved ? undefined : introTitle,
