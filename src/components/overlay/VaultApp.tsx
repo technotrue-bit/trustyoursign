@@ -21,6 +21,7 @@ import {
   stopAutoClock,
 } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
+import { readGuestDraft } from "@/lib/ui/guestDraft";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { GalaxyShell } from "./GalaxyShell";
@@ -154,6 +155,17 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
 
   useEffect(() => {
     bootIntro();
+    // D2/F7: an in-progress guest birth survives reloads and sign-in
+    // redirects — reopen it if this tab still holds one and nothing else
+    // is open. In-tab storage only (see guestDraft).
+    const draft = readGuestDraft();
+    if (draft) {
+      const st = useSessionStore.getState();
+      if (!st.session && !st.claim) {
+        st.openClaim(draft.signId);
+        if (draft.birth) st.setClaimBirth(draft.birth);
+      }
+    }
     galaxyTravel.birth = 1;
     ensureAutoClock();
     ensureFlyInput();

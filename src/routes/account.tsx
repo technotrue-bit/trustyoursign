@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { RedirectToSignIn, SessionUnavailable } from "@/lib/auth/gates";
+import { Link, Navigate, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { SessionUnavailable } from "@/lib/auth/gates";
 import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import {
@@ -14,7 +14,8 @@ import {
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { daysForSign, monthsForSign } from "@/lib/chart/sun";
 import type { SignId } from "@/lib/chart/types";
-import { openSavedChart } from "@/lib/chart/session";
+import { openSavedChart, useSessionStore } from "@/lib/chart/session";
+import { readGuestDraft } from "@/lib/ui/guestDraft";
 import { MIN_AGE } from "@/lib/legal";
 import { claimSite } from "@/lib/site";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
@@ -40,6 +41,7 @@ const MONTHS = [
 
 function Account() {
   const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
+  const navigate = useNavigate();
   const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [charts, setCharts] = useState<SavedChart[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,10 +74,32 @@ function Account() {
     );
   }
   if (guard === "unavailable") return <SessionUnavailable onRetry={refetchSession} />;
-  if (!user) return <RedirectToSignIn />;
+  if (!user) return <Navigate to="/login" search={{ from: "account" }} />;
 
   const mine = charts?.filter((c) => c.relation === "self") ?? [];
   const others = charts?.filter((c) => c.relation === "other") ?? [];
+  // In-tab guest draft (D2/F7) — offer to resume a birth started before sign-in.
+  const draft = typeof window === "undefined" ? null : readGuestDraft();
+  const exportData = async () => {
+    if (!user) return;
+    try {
+      const rows = charts ?? (await listCharts().catch(() => [] as SavedChart[]));
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        account: user.primaryEmail,
+        charts: rows,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `trust-your-sign-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not export");
+    }
+  };
 
   return (
     <main id="main-content" className="vault-page bg-bg px-5 py-10 text-fg">
@@ -135,9 +159,38 @@ function Account() {
           {charts === null ? (
             <div className="mt-3 h-16 animate-pulse rounded-md bg-bg-subtle" />
           ) : mine.length === 0 ? (
-            <p className="mt-3 text-sm text-fg-muted">
-              None saved yet. Lock a sign in the sky, or add one below.
-            </p>
+            <div className="mt-3 space-y-4">
+              <p className="text-sm text-fg-muted">
+                None saved yet. About two minutes to place a birth — date first, time and place if you have them.
+              </p>
+              {draft ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const st = useSessionStore.getState();
+                    st.openClaim(draft.signId);
+                    if (draft.birth) st.setClaimBirth(draft.birth);
+                    void navigate({ to: "/" });
+                  }}
+                  className="min-h-12 rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase hover:bg-fg"
+                >
+                  Resume your chart
+                </button>
+              ) : null}
+              <Link
+                to="/"
+                className="inline-flex min-h-12 items-center rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase hover:bg-fg"
+              >
+                Place a birth
+              </Link>
+              <p className="text-xs leading-relaxed text-fg-subtle">
+                The sky is always open for a tour —{" "}
+                <Link to="/" className="text-fg underline underline-offset-4">
+                  pick any sign and fly
+                </Link>{" "}
+                without saving. Or add one below.
+              </p>
+            </div>
           ) : (
             <ul className="mt-3 space-y-2">
               {mine.map((c) => (
@@ -167,17 +220,26 @@ function Account() {
             You can erase every chart and Ask conversation we hold for this account. That cannot be
             undone. Session cookies are only for staying signed in.
           </p>
-          <button
-            type="button"
-            disabled={busy}
-            className="mt-4 min-h-12 text-xs tracking-[0.18em] text-wine uppercase"
-            onClick={async () => {
-              if (
-                !window.confirm(
-                  "Delete every saved chart, Ask thread, and legal record on this account?",
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void exportData()}
+              className="min-h-12 text-xs tracking-[0.18em] text-fg uppercase hover:text-accent disabled:opacity-50"
+            >
+              Export my data
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="min-h-12 text-xs tracking-[0.18em] text-wine uppercase"
+              onClick={async () => {
+                if (
+                  !window.confirm(
+                    "Delete every saved chart, Ask thread, and legal record on this account?",
+                  )
                 )
-              )
-                return;
+                  return;
               setBusy(true);
               try {
                 await deleteAllMyData();
@@ -189,8 +251,9 @@ function Account() {
               }
             }}
           >
-            Delete my data
-          </button>
+                Delete my data
+            </button>
+          </div>
           <p className="mt-6 text-xs text-fg-muted">
             You must be {MIN_AGE}+.{" "}
             <Link to="/privacy" className="text-fg underline">

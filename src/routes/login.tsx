@@ -26,12 +26,15 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/login")({
   component: Login,
   // `?create=1` opens the Create-account tab directly, so a link can carry the
-  // intent instead of dropping the visitor on the sign-in form.
-  validateSearch: (search: Record<string, unknown>): { create?: true } => ({
+  // intent instead of dropping the visitor on the sign-in form. `?from=account`
+  // says the visitor was headed to the account area, so the page can explain
+  // why they landed here.
+  validateSearch: (search: Record<string, unknown>): { create?: true; from?: string } => ({
     create:
       search.create === true || search.create === "1" || search.create === "true"
         ? true
         : undefined,
+    from: typeof search.from === "string" ? search.from : undefined,
   }),
 });
 
@@ -49,7 +52,7 @@ function Login() {
     }) === "signed_in";
   const navigate = useNavigate();
   // The route search picks the opening tab; switching tabs after that is local.
-  const { create } = Route.useSearch();
+  const { create, from } = Route.useSearch();
   const [mode, setMode] = useState<"in" | "up">(create ? "up" : "in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -305,8 +308,17 @@ function Login() {
         </p>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Keep the sky.</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-          Sign in to save your chart, and the charts of people who gave you permission. This house
-          belongs to {SITE_OWNER.name} ({SITE_OWNER.handle}).
+          Sign in to save your chart, and the charts of people who gave you permission.
+        </p>
+        {from === "account" ? (
+          <p className="mt-2 text-sm leading-relaxed text-fg-subtle">
+            You were headed to your account — sign in to open your saved charts.
+          </p>
+        ) : null}
+        <p className="mt-2 text-xs leading-relaxed text-fg-subtle">
+          <Link to="/about" className="underline underline-offset-4 hover:text-fg">
+            Who keeps this house
+          </Link>
         </p>
 
         {authEnabled ? (
