@@ -23,6 +23,15 @@ const session = fromVisitor({
   origin: "galaxy",
 });
 
+/** A shelf session: allowed sky + ask only, so a room test has a forbidden mode. */
+const shelfSession = fromShelf({
+  signId: "leo",
+  birth: { year: 2004, month: 7, day: 26, hour: null, minute: null, place: null },
+  skyNatal: null,
+  label: "Shelf",
+  origin: "library",
+});
+
 describe("session actions", () => {
   it("openSessionState replaces session and clears claim", () => {
     const next = openSessionState(
@@ -67,11 +76,20 @@ describe("session actions", () => {
     assert.equal(ask.session?.selection?.id, "sun");
   });
 
-  it("setModeState no-ops forbidden modes for visitor", () => {
+  it("setModeState no-ops forbidden modes for a shelf session", () => {
+    // Visitors are allowed every room (see rooms.ts), so the restriction that
+    // exists today is on shelf sessions: sky + ask only.
+    const opened = openSessionState(empty, shelfSession);
+    const before = opened.session?.mode;
+    const blocked = setModeState(opened, "bones");
+    assert.equal(blocked.session?.mode, before, "the forbidden mode is ignored");
+    assert.equal(blocked, opened, "and nothing is re-created");
+  });
+
+  it("setModeState lets a visitor into every room", () => {
     const opened = openSessionState(empty, session);
-    const blocked = setModeState(opened, "gates");
-    assert.equal(blocked.session?.mode, "sky");
-    assert.equal(blocked, opened);
+    const next = setModeState(opened, "gates");
+    assert.equal(next.session?.mode, "gates");
   });
 
   it("setModeState still applies allowed modes", () => {

@@ -13,6 +13,7 @@ import {
   useSessionSelection,
 } from "@/lib/chart/session/hooks";
 import { useSessionStore } from "@/lib/chart/session/store";
+import { useGalaxy } from "@/lib/galaxy/store";
 import type { AppMode, ChakraId, PlanetId } from "@/lib/chart/types";
 import { ChakraBody, DecisionMachine, GatePortals } from "./Figures";
 import { GalaxyIntro } from "./GalaxyIntro";
@@ -168,6 +169,9 @@ function CameraRig() {
 function ChartWorld() {
   const mode = useSessionMode();
   const selection = useSessionSelection();
+  // I5: the ambient starfield animates on drei's own clock, so the pause has to
+  // reach it as a prop rather than through the shared travel state.
+  const paused = useGalaxy((s) => s.paused);
   const ask = mode === "ask";
   const skyOn = mode === "sky" || mode === "bones" || mode === "readings" || ask;
   const bodyOn = mode === "body" || (ask && selection?.kind === "chakra");
@@ -187,7 +191,9 @@ function ChartWorld() {
         factor={3}
         saturation={0}
         fade={!small}
-        speed={0.35}
+        // I5: drei's starfield drifts on its own internal clock — speed 0 is the
+        // only way to still it, so the pause reaches this layer too.
+        speed={paused ? 0 : 0.35}
       />
       {skyOn ? <SkyWheel active /> : null}
       {bodyOn ? <ChakraBody active /> : null}

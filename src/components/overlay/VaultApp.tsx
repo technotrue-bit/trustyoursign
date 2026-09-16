@@ -15,10 +15,15 @@ import {
   ensureAutoClock,
   ensureFlyInput,
   galaxyTravel,
+  prefersReducedMotion,
+  seekSign,
+  setPaused,
   skipBirth,
   stopAutoClock,
 } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
+import { readGuestDraft } from "@/lib/ui/guestDraft";
+import { readMotionPaused } from "@/lib/ui/motionPreference";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { GalaxyShell } from "./GalaxyShell";
@@ -32,6 +37,10 @@ import { resolveGate } from "./resolveGate";
 const FallbackSky = lazy(() =>
   import("./FallbackSky").then((m) => ({ default: m.FallbackSky })),
 );
+
+/** J4/I2: honest copy when the 3D sky fails — the 2D sky is not a dead end. */
+const FALLBACK_NOTE =
+  "The 3D sky could not load here — flying the 2D sky instead. Every sign still opens.";
 
 type VaultAppProps = {
   /** From route search — keeps SSR/client mesh-review branch in sync. */
@@ -55,7 +64,9 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
     (entered && !shelf) || claiming || (sessionOrigin ?? surface) === "library";
 
   useEffect(() => {
-    if (!shouldUse3D()) {
+    // Reduced motion: never import or mount the WebGL scene - the 2D
+    // FallbackSky is the whole canvas for these users.
+    if (prefersReducedMotion() || !shouldUse3D()) {
       setSceneFailed(true);
       return;
     }
@@ -85,11 +96,16 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const st = useSessionStore.getState();
+      const target = e.target instanceof Element ? e.target : null;
+      // Typing in a form field must keep native key behavior — the galaxy
+      // shortcuts below only apply outside inputs.
+      const inField =
+        target?.closest("input, select, textarea, [contenteditable]") != null;
       if (e.key === "Escape") {
         if (st.session?.selection) st.clear();
         else st.close();
       }
-      if (e.key === "Enter" && !st.session) {
+      if (e.key === "Enter" && !st.session && !inField) {
         if (st.surface === "galaxy") {
           if (st.claim) return;
           if (galaxyTravel.birth < 1) {
@@ -104,8 +120,35 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
           } else st.openLibrary();
         }
       }
+      // Belt keyboard navigation (B4): left/right walks the signs, only
+      // while the landing belt is the active surface — not inside a sign
+      // galaxy, a claim, a session, or a form field.
+      if (
+        (e.key === "ArrowLeft" || e.key === "ArrowRight") &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !inField
+      ) {
+        const g = useGalaxy.getState();
+        if (
+          g.born &&
+          g.explore.phase === "idle" &&
+          st.surface === "galaxy" &&
+          !st.session &&
+          !st.claim
+        ) {
+          e.preventDefault();
+          const next =
+            e.key === "ArrowLeft"
+              ? (g.signIndex + 11) % 12
+              : (g.signIndex + 1) % 12;
+          // Direct seek — same short lerp as clicking a name in the belt.
+          seekSign(next, { direct: true });
+        }
+      }
       const n = Number(e.key);
-      if (n >= 1 && n <= 7) {
+      if (n >= 1 && n <= 7 && !inField) {
         const kind = st.session?.kind;
         if (!kind) return;
         const mode = roomsFor(kind)[n - 1];
@@ -118,9 +161,23 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
 
   useEffect(() => {
     bootIntro();
+    // D2/F7: an in-progress guest birth survives reloads and sign-in
+    // redirects — reopen it if this tab still holds one and nothing else
+    // is open. In-tab storage only (see guestDraft).
+    const draft = readGuestDraft();
+    if (draft) {
+      const st = useSessionStore.getState();
+      if (!st.session && !st.claim) {
+        st.openClaim(draft.signId);
+        if (draft.birth) st.setClaimBirth(draft.birth);
+      }
+    }
     galaxyTravel.birth = 1;
     ensureAutoClock();
     ensureFlyInput();
+    // I5: the stored motion preference applies to the sky itself, not just the
+    // button's label — a returning viewer lands still if that is how they left.
+    if (readMotionPaused()) setPaused(true);
     return () => stopAutoClock();
   }, []);
 
@@ -177,7 +234,7 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
         <SceneErrorBoundary
           fallback={
             <Suspense fallback={null}>
-              <FallbackSky />
+              <FallbackSky note={FALLBACK_NOTE} />
             </Suspense>
           }
         >
@@ -185,7 +242,9 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
         </SceneErrorBoundary>
       ) : (
         <Suspense fallback={null}>
-          <FallbackSky />
+          {/* Reduced motion chose the 2D sky on purpose — only a real
+              WebGL failure gets the "could not load" note. */}
+          <FallbackSky note={prefersReducedMotion() ? undefined : FALLBACK_NOTE} />
         </Suspense>
       )}
       {showStarBack ? <StarBack /> : null}

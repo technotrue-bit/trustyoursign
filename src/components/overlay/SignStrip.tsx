@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CALENDAR_SIGN_INDICES, CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy } from "@/lib/galaxy/store";
-import { noteControl, seekSign } from "@/lib/galaxy/travel";
+import { galaxyTravel, noteControl, seekSign } from "@/lib/galaxy/travel";
 
 /** px/ms — above this, the belt soft-glows while rushing between signs. */
 const RUSH_SPEED = 0.85;
@@ -10,7 +10,14 @@ const RUSH_DECAY = 3.2;
 
 /** Strip jumps always use direct seek so left/right feel the same short lerp. */
 function jumpTo(index: number) {
-  return seekSign(index, { direct: true });
+  const selected = seekSign(index, { direct: true });
+  // Keep the visual selection responsive even if a stale enter guard rejects
+  // the travel write during a just-finished scene transition.
+  if (!useGalaxy.getState().moved) {
+    galaxyTravel.tTarget = galaxyTravel.t;
+    useGalaxy.getState().setTravel(galaxyTravel.t, true, index);
+  }
+  return selected;
 }
 
 function nearestFromScroll(scroller: HTMLElement) {
@@ -110,7 +117,8 @@ export function SignStrip() {
     if (!item) return;
     programmatic.current = true;
     const left = item.offsetLeft - (scroller.clientWidth - item.offsetWidth) / 2;
-    scroller.scrollTo({ left, behavior: smooth ? "smooth" : "instant" });
+    if (smooth) scroller.scrollTo({ left, behavior: "smooth" });
+    else scroller.scrollLeft = left;
     window.clearTimeout(settle.current);
     settle.current = window.setTimeout(
       () => {
@@ -200,7 +208,9 @@ export function SignStrip() {
                 aria-label={`${c.name}, ${c.month}`}
                 aria-pressed={on}
                 aria-current={on ? "true" : undefined}
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   fromStrip.current = true;
                   noteControl();
                   jumpTo(i);

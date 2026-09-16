@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
+import { SIGN_INSIGHTS, insightToneLabel } from "@/lib/galaxy/signInsights";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
-import { enterSignGalaxy, noteControl } from "@/lib/galaxy/travel";
+import { enterSignGalaxy, noteControl, setPaused } from "@/lib/galaxy/travel";
+import { readMotionPaused, writeMotionPaused } from "@/lib/ui/motionPreference";
 import { skipIntro } from "@/lib/galaxy/intro";
 import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/lib/chart/session";
@@ -25,6 +28,17 @@ export function GalaxyShell() {
   const asking = introVeil > 0.04;
   const titleAnimating = !introDone && introTitle > 0.08;
   const openClaim = useSessionStore((s) => s.openClaim);
+  // I5: motion preference is persisted, so the button opens in the state the
+  // viewer left it (VaultApp applies the stored value to the sky on mount).
+  const [paused, setPausedState] = useState(
+    () => typeof window !== "undefined" && readMotionPaused(),
+  );
+  const togglePaused = () => {
+    const next = !paused;
+    setPausedState(next);
+    writeMotionPaused(next);
+    setPaused(next);
+  };
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
   const exploring = explorePhase !== "idle";
   const worldFade = exploring ? exploreWorldFade : 1;
@@ -69,6 +83,15 @@ export function GalaxyShell() {
             className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-1"
             style={{ opacity: worldFade }}
           >
+            <button
+              type="button"
+              onClick={togglePaused}
+              aria-pressed={paused}
+              aria-label={paused ? "Resume the sky's motion" : "Pause the sky's motion"}
+              className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+            >
+              {paused ? "Resume" : "Pause"}
+            </button>
             {introSkip ? (
               <button
                 type="button"
@@ -168,7 +191,7 @@ export function GalaxyShell() {
         <SignStrip />
         <p className="px-2 text-center text-[0.65rem] tracking-wide text-fg-subtle md:px-4 md:text-xs">
           <span className="md:hidden">
-            Slide to fly. Tap the sign to enter. Swipe names to jump.
+            Slide to fly. Tap a sign to choose it, then enter above. Swipe names to jump.
           </span>
           <span className="hidden md:inline">
             Slide to fly. Click the selected sign to enter its galaxy.
@@ -182,13 +205,20 @@ export function GalaxyShell() {
             enterSignGalaxy(signIndex);
           }}
           className={cn(
-            "pointer-events-auto hidden min-h-11 w-auto px-4 text-xs tracking-[0.22em] uppercase md:inline-flex md:items-center",
+            "pointer-events-auto inline-flex min-h-11 w-auto items-center px-4 text-xs tracking-[0.22em] uppercase",
             moved
               ? "sign-claim text-fg hover:text-accent active:text-accent"
               : "cursor-not-allowed border border-border/80 bg-bg-subtle/40 text-fg-muted",
           )}
         >
-          {moved ? "Enter this sign" : "Slide to choose a sign"}
+          {moved ? (
+            <>
+              <span className="md:hidden">Enter selected sign</span>
+              <span className="hidden md:inline">Enter this sign</span>
+            </>
+          ) : (
+            "Slide to choose a sign"
+          )}
         </button>
         {moved ? (
           <button
@@ -199,6 +229,29 @@ export function GalaxyShell() {
             This is my sign
           </button>
         ) : null}
+        <details className="pointer-events-auto mx-auto w-full max-w-md px-2">
+          <summary className="min-h-11 cursor-pointer list-none text-center text-[0.6rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg [&::-webkit-details-marker]:hidden">
+            How a chart talks here
+          </summary>
+          {(() => {
+            const sample = SIGN_INSIGHTS.taurus[0];
+            if (!sample) return null;
+            return (
+              <div className="mt-2 space-y-2 text-center">
+                <p className="text-[0.6rem] tracking-[0.22em] text-fg-subtle uppercase">
+                  Sample reading · {insightToneLabel(sample.tone)}
+                </p>
+                <p className="font-display text-lg leading-snug text-fg italic">{sample.title}</p>
+                <p className="text-sm leading-relaxed text-fg-muted">{sample.body}</p>
+                <p className="text-xs leading-relaxed text-fg-subtle">
+                  Every sky speaks in four registers — insight, spice, horror, warning. Inside any
+                  galaxy, the Tone control decides how dark it gets. Full readings belong to your
+                  own birth, not a sample.
+                </p>
+              </div>
+            );
+          })()}
+        </details>
       </div>
     </div>
   );

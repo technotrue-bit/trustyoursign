@@ -26,12 +26,15 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/login")({
   component: Login,
   // `?create=1` opens the Create-account tab directly, so a link can carry the
-  // intent instead of dropping the visitor on the sign-in form.
-  validateSearch: (search: Record<string, unknown>): { create?: true } => ({
+  // intent instead of dropping the visitor on the sign-in form. `?from=account`
+  // says the visitor was headed to the account area, so the page can explain
+  // why they landed here.
+  validateSearch: (search: Record<string, unknown>): { create?: true; from?: string } => ({
     create:
       search.create === true || search.create === "1" || search.create === "true"
         ? true
         : undefined,
+    from: typeof search.from === "string" ? search.from : undefined,
   }),
 });
 
@@ -49,7 +52,7 @@ function Login() {
     }) === "signed_in";
   const navigate = useNavigate();
   // The route search picks the opening tab; switching tabs after that is local.
-  const { create } = Route.useSearch();
+  const { create, from } = Route.useSearch();
   const [mode, setMode] = useState<"in" | "up">(create ? "up" : "in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -74,6 +77,9 @@ function Login() {
   const [otp, setOtp] = useState("");
   const [codeSentTo, setCodeSentTo] = useState("");
   const [cooldownUntil, setCooldownUntil] = useState(0);
+  // The forgot-password path is a RESET LINK, not a sign-in code — a genuinely
+  // different flow from "Email me a code", so it gets its own sent-state.
+  const [resetSent, setResetSent] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -116,6 +122,34 @@ function Login() {
     }
     if (!email.trim()) return "Enter your email address first.";
     return null;
+  };
+
+  /**
+   * "Forgot password?" — mints a reset LINK (Better Auth request-password-reset)
+   * and mails it. Deliberately distinct from sendCode: the link does not sign
+   * anyone in, it only opens /reset-password to choose a new password. The
+   * server answers generic success either way, so the copy must not promise
+   * an email for an address that has no account.
+   */
+  const sendResetLink = async () => {
+    setError(null);
+    if (!email.trim()) {
+      setError("Enter your email address first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error: err } = await authClient.requestPasswordReset({
+        email: email.trim(),
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (err) throw new Error(err.message ?? "Could not send the reset link");
+      setResetSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not send the reset link");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const sendCode = async () => {
@@ -305,8 +339,17 @@ function Login() {
         </p>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Keep the sky.</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
-          Sign in to save your chart, and the charts of people who gave you permission. This house
-          belongs to {SITE_OWNER.name} ({SITE_OWNER.handle}).
+          Sign in to save your chart, and the charts of people who gave you permission.
+        </p>
+        {from === "account" ? (
+          <p className="mt-2 text-sm leading-relaxed text-fg-subtle">
+            You were headed to your account — sign in to open your saved charts.
+          </p>
+        ) : null}
+        <p className="mt-2 text-xs leading-relaxed text-fg-subtle">
+          <Link to="/about" className="underline underline-offset-4 hover:text-fg">
+            Who keeps this house
+          </Link>
         </p>
 
         {authEnabled ? (
@@ -462,20 +505,42 @@ function Login() {
                 </span>
               </label>
             ) : otpStage === "idle" ? (
-              <label className="block">
-                <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
-                  Password
-                </span>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
-                  autoComplete={mode === "up" ? "new-password" : "current-password"}
-                  minLength={mode === "up" ? 8 : 1}
-                />
-              </label>
+              <div className="space-y-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-[0.7rem] tracking-[0.18em] text-fg-subtle uppercase">
+                    Password
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
+                    autoComplete={mode === "up" ? "new-password" : "current-password"}
+                    minLength={mode === "up" ? 8 : 1}
+                  />
+                </label>
+                {mode === "in" && otpAvailable ? (
+                  // Same mail gate as "Email me a code": never a button the host
+                  // cannot finish. Distinct from the code path — this mails a
+                  // reset LINK that opens /reset-password, it does not sign anyone in.
+                  resetSent ? (
+                    <p className="text-xs leading-relaxed text-fg-subtle">
+                      If that address has an account, a reset link is on its way — it lasts about an
+                      hour and works once.
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void sendResetLink()}
+                      className="min-h-9 text-xs tracking-[0.14em] text-fg-subtle uppercase hover:text-fg disabled:opacity-50"
+                    >
+                      Forgot password?
+                    </button>
+                  )
+                ) : null}
+              </div>
             ) : null}
             <label className="absolute -left-[9999px] h-0 w-0 overflow-hidden" aria-hidden="true">
               <span>Company</span>
