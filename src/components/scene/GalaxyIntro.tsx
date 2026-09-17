@@ -1346,12 +1346,19 @@ function TempleRig() {
     _look.copy(_chest);
     _look.z -= 1.4 + introCam() * 1.0;
     _look.y += frame.portrait ? 0.05 : 0.15;
-    if (!arriving && !exploring) {
+    if (!arriving) {
+      // The pointer sway belongs to the corridor aim, so a sign exit can blend into
+      // it continuously (below) instead of snapping it on in one frame.
       _look.x += galaxyTravel.ptrX * 1.1;
       _look.y += -galaxyTravel.ptrY * 0.6;
+    }
+    if (!arriving && !exploring) {
       _cam.x += galaxyTravel.ptrX * 0.35;
       _cam.y += galaxyTravel.ptrY * 0.2;
     }
+    const corridorLookX = _look.x;
+    const corridorLookY = _look.y;
+    const corridorLookZ = _look.z;
     // Local dive: BirthChat volume hold, or selected-sign galaxy enter.
     const heldSignId = chatting ? state.claim?.signId : shelfOn ? state.session?.signId : undefined;
     const volumeDive = heldSignId && hasVolumeSign(heldSignId) ? 0.35 * PLATE_WIDE : 0;
@@ -1413,6 +1420,17 @@ function TempleRig() {
       _look.addScaledVector(_camRight, local.x);
       _look.addScaledVector(_camUp, local.y);
       _look.z += local.z * 0.12;
+      if (galaxyTravel.explorePhase === "exiting") {
+        // Hand the aim back to the corridor continuously. The exit eases the dive to
+        // zero, so the aim has to arrive on the corridor pose by the frame the phase
+        // reaches idle — switching branches cold snapped the lookAt (measured: 2.7
+        // units of target travel in a single frame, against a 0.01 idle baseline).
+        const s = 1 - Math.min(1, Math.max(0, galaxyTravel.exploreProgress));
+        const w = s * s * (3 - 2 * s);
+        _look.x += (corridorLookX - _look.x) * w;
+        _look.y += (corridorLookY - _look.y) * w;
+        _look.z += (corridorLookZ - _look.z) * w;
+      }
       const settle =
         galaxyTravel.explorePhase === "inside"
           ? 1
