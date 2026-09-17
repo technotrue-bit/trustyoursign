@@ -6,7 +6,6 @@ import { enterSignGalaxy, noteControl, setPaused } from "@/lib/galaxy/travel";
 import { readMotionPaused, writeMotionPaused } from "@/lib/ui/motionPreference";
 import { skipIntro } from "@/lib/galaxy/intro";
 import { cn } from "@/lib/utils";
-import { useSessionStore } from "@/lib/chart/session";
 import { Gloss, GlossRoot, GlossStage } from "./Gloss";
 import { SignStrip } from "./SignStrip";
 import { AuthSlot } from "./AuthSlot";
@@ -27,7 +26,6 @@ export function GalaxyShell() {
   const exploreWorldFade = useGalaxy((s) => s.explore.worldFade);
   const asking = introVeil > 0.04;
   const titleAnimating = !introDone && introTitle > 0.08;
-  const openClaim = useSessionStore((s) => s.openClaim);
   // I5: motion preference is persisted, so the button opens in the state the
   // viewer left it (VaultApp applies the stored value to the sky on mount).
   const [paused, setPausedState] = useState(
@@ -159,16 +157,6 @@ export function GalaxyShell() {
                   <p className="mx-auto mt-2 line-clamp-3 max-w-md px-1 text-sm leading-relaxed text-fg-muted md:mt-3 md:line-clamp-none md:text-base">
                     <Gloss card={false}>{sign.essence}</Gloss>
                   </p>
-                  {sign.id === "sagittarius" ? (
-                    <p className="mt-3">
-                      <a
-                        href="/?mesh=sagittarius"
-                        className="text-[0.65rem] tracking-[0.22em] text-fg-subtle uppercase underline-offset-4 hover:text-accent hover:underline"
-                      >
-                        Review 3D mesh
-                      </a>
-                    </p>
-                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -191,44 +179,12 @@ export function GalaxyShell() {
         <SignStrip />
         <p className="px-2 text-center text-[0.65rem] tracking-wide text-fg-subtle md:px-4 md:text-xs">
           <span className="md:hidden">
-            Slide to fly. Tap a sign to choose it, then enter above. Swipe names to jump.
+            Slide to fly. Tap a sign to choose it, then tap its name to enter. Swipe names to jump.
           </span>
           <span className="hidden md:inline">
             Slide to fly. Click the selected sign to enter its galaxy.
           </span>
         </p>
-        <button
-          type="button"
-          disabled={!moved}
-          onClick={() => {
-            if (!sign) return;
-            enterSignGalaxy(signIndex);
-          }}
-          className={cn(
-            "pointer-events-auto inline-flex min-h-11 w-auto items-center px-4 text-xs tracking-[0.22em] uppercase",
-            moved
-              ? "sign-claim text-fg hover:text-accent active:text-accent"
-              : "cursor-not-allowed border border-border/80 bg-bg-subtle/40 text-fg-muted",
-          )}
-        >
-          {moved ? (
-            <>
-              <span className="md:hidden">Enter selected sign</span>
-              <span className="hidden md:inline">Enter this sign</span>
-            </>
-          ) : (
-            "Slide to choose a sign"
-          )}
-        </button>
-        {moved ? (
-          <button
-            type="button"
-            onClick={() => sign && openClaim(sign.id)}
-            className="sign-claim pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent md:min-h-10 md:w-auto md:px-3 md:text-[0.65rem] md:tracking-[0.18em]"
-          >
-            This is my sign
-          </button>
-        ) : null}
         <details className="pointer-events-auto mx-auto w-full max-w-md px-2">
           <summary className="min-h-11 cursor-pointer list-none text-center text-[0.6rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg [&::-webkit-details-marker]:hidden">
             How a chart talks here
