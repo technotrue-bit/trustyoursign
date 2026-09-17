@@ -33,6 +33,7 @@ import { APIError } from "better-auth/api";
 import { betterAuth } from "better-auth";
 import { bearer, genericOAuth, captcha, magicLink } from "better-auth/plugins";
 import { emailOTP } from "better-auth/plugins/email-otp";
+import { passkey } from "@better-auth/passkey";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie, getRequest } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
@@ -51,6 +52,7 @@ import {
 import { OTP_EXPIRES_SECONDS, OTP_LENGTH } from "./otp-code";
 import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
+import { passkeyAvailable, passkeyRpConfig } from "./passkey-config";
 import { GROK_PROVIDERS } from "./providers";
 import { extraTrustedOrigins } from "./trusted-origins";
 import { pgliteDialect } from "./pglite-dialect";
@@ -121,6 +123,12 @@ const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PreviewOAuthSecret.re
 
 /** True when federated sign-in is active (real auth is enforced). */
 export const authConfigured = !authDisabled && Boolean(grokClientId && grokClientSecret);
+
+/**
+ * True when the passkey plugin is registered. Independent of the broker —
+ * passkeys are app-owned Face ID / Touch ID credentials on this origin.
+ */
+export const passkeysConfigured = passkeyAvailable(authDisabled);
 
 // This app's own Better Auth origin. When deployed the deployer injects the
 // public URL. In the sandbox live preview there's no fixed URL (each preview gets
@@ -231,6 +239,11 @@ const grokOAuthPlugin = authConfigured
       })),
     })
   : null;
+
+// App-owned WebAuthn — Face ID / Touch ID / security keys. Registered whenever
+// auth is on (see `passkeysConfigured`). rpID pins to the stable public host
+// when we have one; otherwise the plugin takes the per-request baseURL hostname.
+const passkeyPlugin = passkeysConfigured ? passkey(passkeyRpConfig(explicitBaseURL)) : null;
 
 /**
  * The sign-in link a code email can carry. This relay keeps the plugin's URL and
@@ -351,6 +364,9 @@ export const auth = betterAuth({
       // send path is capped harder than the verify path.
       "/email-otp/send-verification-otp": { window: 60, max: 3 },
       "/sign-in/email-otp": { window: 60, max: 5 },
+      "/sign-in/passkey": { window: 60, max: 10 },
+      "/passkey/generate-authenticate-options": { window: 60, max: 10 },
+      "/passkey/generate-register-options": { window: 60, max: 5 },
     },
   },
 
@@ -446,6 +462,9 @@ export const auth = betterAuth({
           }),
         ]
       : []),
+
+    // Face ID / Touch ID / security keys — app-owned, not broker-federated.
+    ...(passkeyPlugin ? [passkeyPlugin] : []),
 
     // One genericOAuth provider per upstream (when auth is on), all federating
     // to the broker with the SAME client and differing only by the `idp` hint.

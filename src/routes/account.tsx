@@ -20,7 +20,8 @@ import { MIN_AGE } from "@/lib/legal";
 import { claimSite } from "@/lib/site";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
-import { signOut } from "@/lib/auth/client";
+import { authClient, signOut } from "@/lib/auth/client";
+import { signInAvailability } from "@/lib/auth/email-otp";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/account")({ component: Account });
@@ -140,6 +141,8 @@ function Account() {
               : "The Big Three, a timed natal (Sky · Body · Bones · Ask), and one deep cut a week are free. Paid bones are not billed yet — this house is still being built."}
           </p>
         </section>
+
+        <PasskeySection onError={setError} />
 
         <AddChart
           onSaved={() => {
@@ -271,6 +274,148 @@ function Account() {
         </section>
       </div>
     </main>
+  );
+}
+
+type PasskeyRow = {
+  id: string;
+  name?: string | null;
+  deviceType?: string;
+  createdAt?: string | Date;
+  backedUp?: boolean;
+};
+
+function PasskeySection({ onError }: { onError: (msg: string | null) => void }) {
+  const [enabled, setEnabled] = useState(false);
+  const [rows, setRows] = useState<PasskeyRow[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    void (async () => {
+      try {
+        const { data, error } = await authClient.$fetch<PasskeyRow[]>("/passkey/list-user-passkeys", {
+          method: "GET",
+        });
+        if (error) {
+          setRows([]);
+          return;
+        }
+        setRows(Array.isArray(data) ? data : []);
+      } catch {
+        setRows([]);
+      }
+    })();
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    signInAvailability()
+      .then((status) => {
+        if (cancelled) return;
+        setEnabled(status.passkeyAvailable);
+        if (status.passkeyAvailable) load();
+      })
+      .catch(() => {
+        if (!cancelled) setEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!enabled) return null;
+
+  const add = async () => {
+    onError(null);
+    setBusy(true);
+    try {
+      const label =
+        typeof navigator !== "undefined" && /iPhone|iPad|Mac/.test(navigator.userAgent)
+          ? "This Apple device"
+          : "This device";
+      const { error } = await authClient.passkey.addPasskey({
+        name: label,
+        authenticatorAttachment: "platform",
+      });
+      if (error) throw new Error(error.message ?? "Could not add a passkey");
+      load();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not add a passkey";
+      if (!/cancel|abort|notallowed/i.test(message)) onError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    onError(null);
+    setBusy(true);
+    try {
+      const { error } = await authClient.$fetch("/passkey/delete-passkey", {
+        method: "POST",
+        body: { id },
+      });
+      if (error) throw new Error(error.message ?? "Could not remove that passkey");
+      load();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not remove that passkey");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section id="passkeys" className="mt-8 scroll-mt-24">
+      <h2 className="font-display text-2xl text-fg italic">Passkeys</h2>
+      <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+        Unlock next time with Face ID or Touch ID. Passkeys sync through iCloud Keychain on your
+        Apple devices — this is not Sign in with Apple.
+      </p>
+      {rows === null ? (
+        <div className="mt-3 h-12 animate-pulse rounded-md bg-bg-subtle" />
+      ) : rows.length === 0 ? (
+        <p className="mt-3 text-sm text-fg-subtle">None on this account yet.</p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {rows.map((pk) => (
+            <li
+              key={pk.id}
+              className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated/70 px-4 py-3"
+            >
+              <div>
+                <p className="text-sm text-fg">{pk.name?.trim() || "Passkey"}</p>
+                <p className="text-xs tracking-wide text-fg-subtle uppercase">
+                  {pk.backedUp ? "Synced" : "This device"}
+                  {pk.createdAt
+                    ? ` · ${new Date(pk.createdAt).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}`
+                    : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                className="min-h-11 text-xs tracking-[0.16em] text-fg-subtle uppercase hover:text-wine disabled:opacity-50"
+                onClick={() => void remove(pk.id)}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void add()}
+        className="mt-4 min-h-12 rounded-md border border-border px-4 text-xs tracking-[0.18em] text-fg uppercase hover:bg-bg-elevated disabled:opacity-50"
+      >
+        Unlock next time with Face ID
+      </button>
+    </section>
   );
 }
 

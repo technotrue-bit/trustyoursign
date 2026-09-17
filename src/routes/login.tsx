@@ -79,6 +79,7 @@ function Login() {
   const [otpAvailable, setOtpAvailable] = useState(false);
   const [otpSandbox, setOtpSandbox] = useState(false);
   const [servedProviders, setServedProviders] = useState<readonly string[]>([]);
+  const [passkeyOk, setPasskeyOk] = useState(false);
   const [otpStage, setOtpStage] = useState<"idle" | "code" | "sent">("idle");
   const [otp, setOtp] = useState("");
   const [codeSentTo, setCodeSentTo] = useState("");
@@ -96,6 +97,7 @@ function Login() {
         setOtpAvailable(status.codeAvailable);
         setOtpSandbox(status.codeSandbox);
         setServedProviders(status.providers);
+        setPasskeyOk(status.passkeyAvailable);
       })
       .catch(() => {
         /* leave everything hidden rather than offer a path that may not work */
@@ -104,6 +106,25 @@ function Login() {
       cancelled = true;
     };
   }, []);
+
+  // Conditional UI: preload the browser's passkey autofill when the host can
+  // finish a passkey sign-in (Safari / iOS offer Face ID in the keyboard bar).
+  useEffect(() => {
+    if (!passkeyOk || !authEnabled) return;
+    let cancelled = false;
+    void authClient
+      .signIn.passkey({ autoFill: true })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.data) goToProfile();
+      })
+      .catch(() => {
+        /* autofill abort / no credential is expected — ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [passkeyOk]);
 
   // Ticks only while a code is on screen, to re-enable "send another code".
   useEffect(() => {
@@ -252,6 +273,25 @@ function Login() {
     }
   };
 
+  const passkeySignIn = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const { error: err } = await authClient.signIn.passkey({ autoFill: false });
+      if (err) throw new Error(err.message ?? "Passkey sign-in failed");
+      goToProfile();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Passkey sign-in failed";
+      // User dismissed the sheet — not an error worth alarming over.
+      if (/cancel|abort|notallowed/i.test(message)) {
+        setBusy(false);
+        return;
+      }
+      setError(message);
+      setBusy(false);
+    }
+  };
+
   const emailAuth = async () => {
     setError(null);
     if (hpCompany.trim()) {
@@ -343,14 +383,20 @@ function Login() {
 
   // The note under the buttons. It must not imply Google/X exist when the
   // broker cannot be served — that is the same lie as a button that 404s.
-  const signInNote =
-    socialProviders.length > 0
-      ? otpAvailable
-        ? "Your email gets you a code — no password to invent."
-        : "Your email works the same way, with a password, below."
-      : otpAvailable
-        ? "Google and X sign-in aren't offered on this address. Your email gets you a code instead — no password to invent."
-        : "Google and X sign-in aren't offered on this address. Use your email and a password below.";
+  // Passkeys are Face ID / iCloud Keychain, not Sign in with Apple.
+  const signInNote = (() => {
+    const passkeyHint = passkeyOk
+      ? " A saved passkey unlocks with Face ID or Touch ID on Apple devices."
+      : "";
+    if (socialProviders.length > 0) {
+      return otpAvailable
+        ? `Your email gets you a code — no password to invent.${passkeyHint}`
+        : `Your email works the same way, with a password, below.${passkeyHint}`;
+    }
+    return otpAvailable
+      ? `Google and X sign-in aren't offered on this address. Your email gets you a code instead — no password to invent.${passkeyHint}`
+      : `Google and X sign-in aren't offered on this address. Use your email and a password below.${passkeyHint}`;
+  })();
 
   return (
     <main id="main-content" className="vault-page relative bg-bg px-5 text-fg">
@@ -421,6 +467,18 @@ function Login() {
                 className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
               >
                 Email me a code
+              </button>
+            ) : null}
+            {/* App-owned WebAuthn — only when the passkey plugin is registered.
+                Not Sign in with Apple; Face ID comes from a passkey on this vault. */}
+            {passkeyOk ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void passkeySignIn()}
+                className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+              >
+                Continue with passkey
               </button>
             ) : null}
             <p className="pt-1 text-xs leading-relaxed text-fg-subtle">{signInNote}</p>
@@ -500,7 +558,9 @@ function Login() {
                   }
                 }}
                 className="min-h-12 w-full rounded-md border border-border bg-bg-elevated px-3 text-base text-fg"
-                autoComplete={mode === "in" ? "username" : "email"}
+                autoComplete={
+                  mode === "in" && passkeyOk ? "username webauthn" : mode === "in" ? "username" : "email"
+                }
                 /* iOS otherwise capitalises the first letter and autocorrects:
                    an email typed on an iPhone arrives as "Technotrue@…". */
                 inputMode="email"
