@@ -159,16 +159,6 @@ export function GalaxyShell() {
                   <p className="mx-auto mt-2 line-clamp-3 max-w-md px-1 text-sm leading-relaxed text-fg-muted md:mt-3 md:line-clamp-none md:text-base">
                     <Gloss card={false}>{sign.essence}</Gloss>
                   </p>
-                  {sign.id === "sagittarius" ? (
-                    <p className="mt-3">
-                      <a
-                        href="/?mesh=sagittarius"
-                        className="text-[0.65rem] tracking-[0.22em] text-fg-subtle uppercase underline-offset-4 hover:text-accent hover:underline"
-                      >
-                        Review 3D mesh
-                      </a>
-                    </p>
-                  ) : null}
                 </div>
               ) : null}
             </div>

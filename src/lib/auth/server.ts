@@ -410,16 +410,38 @@ export const auth = betterAuth({
             allowedAttempts: 5,
             storeOTP: "hashed",
             async sendVerificationOTP({ email, otp, type }) {
-              // Only a sign-in carries the link — a reset or verification code
-              // has nothing to sign in to.
-              const signInUrl = type === "sign-in" ? await createSignInLink(email) : undefined;
-              await sendOtpEmail({
-                email,
-                otp,
-                type,
-                expiresInSeconds: OTP_EXPIRES_SECONDS,
-                signInUrl,
-              });
+              const { recordOtpDelivery } = await import("@/lib/email/otp-delivery.server");
+              const { emailSenderIsSandbox } = await import("@/lib/email/send.server");
+              const { SITE_OWNER } = await import("@/lib/owner");
+              // Sandbox senders only reach the provider account — refuse every
+              // other address before we claim success to the visitor.
+              if (
+                emailSenderIsSandbox() &&
+                email.trim().toLowerCase() !== SITE_OWNER.email.toLowerCase()
+              ) {
+                const message =
+                  "Mail on this host is still in trial mode, so only the owner's address can receive a code.";
+                recordOtpDelivery(email, { ok: false, message });
+                throw new Error(message);
+              }
+              try {
+                // Only a sign-in carries the link — a reset or verification code
+                // has nothing to sign in to.
+                const signInUrl = type === "sign-in" ? await createSignInLink(email) : undefined;
+                await sendOtpEmail({
+                  email,
+                  otp,
+                  type,
+                  expiresInSeconds: OTP_EXPIRES_SECONDS,
+                  signInUrl,
+                });
+                recordOtpDelivery(email, { ok: true });
+              } catch (err) {
+                const message =
+                  err instanceof Error ? err.message : "Could not send the code";
+                recordOtpDelivery(email, { ok: false, message });
+                throw err instanceof Error ? err : new Error(message);
+              }
             },
           }),
         ]

@@ -69,3 +69,25 @@ export const signInAvailability = createServerFn({ method: "GET" }).handler(
     };
   },
 );
+
+/**
+ * Better Auth always answers `{ success: true }` for send-OTP even when delivery
+ * failed (it swallows the throw). After the client call, ask here for the real
+ * outcome recorded by `sendVerificationOTP`.
+ */
+export const confirmOtpDelivery = createServerFn({ method: "POST" })
+  .validator((email: string) => email.trim().slice(0, 320))
+  .handler(async ({ data: email }) => {
+    const { takeOtpDelivery } = await import("@/lib/email/otp-delivery.server");
+    const row = takeOtpDelivery(email);
+    if (!row) {
+      // No record — treat as failure so we never advance on a silent miss.
+      return {
+        ok: false as const,
+        message: "Could not confirm the code was sent. Try again in a moment.",
+      };
+    }
+    return row.ok
+      ? { ok: true as const }
+      : { ok: false as const, message: row.message ?? "Could not send the code" };
+  });

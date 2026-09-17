@@ -24,6 +24,10 @@ export function LegalFooter() {
           How
         </Link>
         {" · "}
+        <Link to="/faq" className="text-fg/90 hover:text-fg">
+          FAQ
+        </Link>
+        {" · "}
         <Link to="/contact" className="text-fg/90 hover:text-fg">
           Contact
         </Link>

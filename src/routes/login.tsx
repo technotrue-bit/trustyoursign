@@ -12,6 +12,7 @@ import {
   OTP_LENGTH,
   OTP_RESEND_COOLDOWN_SECONDS,
   SIGN_IN_LINK_EXPIRES_SECONDS,
+  confirmOtpDelivery,
   cooldownSecondsLeft,
   isCompleteOtp,
   normalizeOtpInput,
@@ -172,6 +173,12 @@ function Login() {
         fetchOptions: { headers: turnstileCaptchaHeaders() },
       });
       if (err) throw new Error(err.message ?? "Could not send the code");
+      // Better Auth returns success even when delivery threw — confirm the
+      // real outcome recorded by sendVerificationOTP before advancing the UI.
+      const delivery = await confirmOtpDelivery({ data: email.trim() });
+      if (!delivery.ok) {
+        throw new Error(delivery.message ?? "Could not send the code");
+      }
       setOtp("");
       setCodeSentTo(email.trim());
       setOtpStage("sent");
