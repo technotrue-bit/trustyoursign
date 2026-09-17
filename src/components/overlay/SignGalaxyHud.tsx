@@ -13,7 +13,7 @@ import { useSignExploreAccess } from "@/hooks/useSignExploreAccess";
 import { Gloss } from "./Gloss";
 import { AuthSlot } from "./AuthSlot";
 import { cn } from "@/lib/utils";
-import type { CSSProperties } from "react";
+import { useEffect, type CSSProperties } from "react";
 
 /** Genre label that tolerates the hub kind (TS cannot prove non-hub points never carry it). */
 function kindLabel(kind: PointPurposeKind): string {
@@ -34,6 +34,11 @@ export function SignGalaxyHud() {
   );
   const viewerTone = useViewerTone((s) => s.tone);
   const setViewerTone = useViewerTone((s) => s.setTone);
+  const hydrateTone = useViewerTone((s) => s.hydrateTone);
+
+  useEffect(() => {
+    hydrateTone();
+  }, [hydrateTone]);
 
   if (explore.phase === "idle" || explore.signIndex == null || !sign || !galaxy) return null;
 
@@ -223,8 +228,15 @@ export function SignGalaxyHud() {
               </p>
             ) : null}
             {inside ? (
-              <div className="pointer-events-auto flex items-center gap-3 text-[0.6rem] tracking-[0.18em] uppercase">
-                <span className="text-fg-subtle">Tone</span>
+              <div
+                className="pointer-events-auto flex items-center gap-3 text-[0.6rem] tracking-[0.18em] uppercase"
+                role="group"
+                aria-label="Reading tone"
+                data-no-fly
+              >
+                <span className="text-fg-subtle" aria-hidden>
+                  Tone
+                </span>
                 <button
                   type="button"
                   aria-pressed={viewerTone === "warm"}
@@ -247,6 +259,11 @@ export function SignGalaxyHud() {
                 >
                   Full
                 </button>
+                <span className="sr-only" aria-live="polite">
+                  {viewerTone === "warm"
+                    ? "Tone Warm. Dark horror stars stay sealed."
+                    : "Tone Full. All star registers are open."}
+                </span>
               </div>
             ) : null}
             {inside && point ? (
