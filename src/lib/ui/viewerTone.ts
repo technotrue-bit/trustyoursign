@@ -13,10 +13,13 @@ export type ViewerTone = "vault" | "warm";
 
 const KEY = "vault.viewer-tone.v1";
 
+export function parseViewerTone(value: string | null | undefined): ViewerTone {
+  return value === "vault" || value === "warm" ? value : "warm";
+}
+
 function readStoredTone(): ViewerTone {
   try {
-    const v = localStorage.getItem(KEY);
-    return v === "vault" || v === "warm" ? v : "warm";
+    return parseViewerTone(localStorage.getItem(KEY));
   } catch {
     return "warm";
   }
@@ -25,17 +28,23 @@ function readStoredTone(): ViewerTone {
 type ViewerToneState = {
   tone: ViewerTone;
   setTone: (tone: ViewerTone) => void;
+  /** Re-read storage after mount (SSR / first paint may have missed it). */
+  hydrateTone: () => void;
 };
 
 export const useViewerTone = create<ViewerToneState>((set) => ({
   // Safe default: a first-time viewer is never surprised by horror copy.
-  tone: readStoredTone(),
+  tone: "warm",
   setTone: (tone) => {
     try {
       localStorage.setItem(KEY, tone);
     } catch {
       /* private mode */
     }
+    set({ tone });
+  },
+  hydrateTone: () => {
+    const tone = readStoredTone();
     set({ tone });
   },
 }));

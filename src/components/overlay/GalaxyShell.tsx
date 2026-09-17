@@ -179,36 +179,13 @@ export function GalaxyShell() {
         <SignStrip />
         <p className="px-2 text-center text-[0.65rem] tracking-wide text-fg-subtle md:px-4 md:text-xs">
           <span className="md:hidden">
-            Slide to fly. Tap a sign to choose it, then enter above. Swipe names to jump.
+            Slide to fly. Tap a sign to choose it, then tap its name to enter. Swipe names to jump.
           </span>
           <span className="hidden md:inline">
             Slide to fly. Click the selected sign to enter its galaxy.
           </span>
         </p>
-        <button
-          type="button"
-          disabled={!moved}
-          onClick={() => {
-            if (!sign) return;
-            enterSignGalaxy(signIndex);
-          }}
-          className={cn(
-            "pointer-events-auto inline-flex min-h-11 w-auto items-center px-4 text-xs tracking-[0.22em] uppercase",
-            moved
-              ? "sign-claim text-fg hover:text-accent active:text-accent"
-              : "cursor-not-allowed border border-border/80 bg-bg-subtle/40 text-fg-muted",
-          )}
-        >
-          {moved ? (
-            <>
-              <span className="md:hidden">Enter selected sign</span>
-              <span className="hidden md:inline">Enter this sign</span>
-            </>
-          ) : (
-            "Slide to choose a sign"
-          )}
-        </button>
-        <details className="pointer-events-auto mx-auto w-full max-w-md px-2">
+        <details className="chart-talks pointer-events-auto relative mx-auto w-full max-w-md px-2" data-no-fly>
           <summary className="min-h-11 cursor-pointer list-none text-center text-[0.6rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg [&::-webkit-details-marker]:hidden">
             How a chart talks here
           </summary>
@@ -216,13 +193,13 @@ export function GalaxyShell() {
             const sample = SIGN_INSIGHTS.taurus[0];
             if (!sample) return null;
             return (
-              <div className="mt-2 space-y-2 text-center">
+              <div className="chart-talks-pop absolute inset-x-2 bottom-full z-20 mb-2 rounded-md border border-border bg-bg/95 px-3.5 py-3 text-center shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-fg)_8%,transparent),0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-sm md:px-4 md:py-3.5">
                 <p className="text-[0.6rem] tracking-[0.22em] text-fg-subtle uppercase">
                   Sample reading · {insightToneLabel(sample.tone)}
                 </p>
-                <p className="font-display text-lg leading-snug text-fg italic">{sample.title}</p>
-                <p className="text-sm leading-relaxed text-fg-muted">{sample.body}</p>
-                <p className="text-xs leading-relaxed text-fg-subtle">
+                <p className="font-display mt-1.5 text-lg leading-snug text-fg italic">{sample.title}</p>
+                <p className="mt-2 text-sm leading-relaxed text-fg-muted">{sample.body}</p>
+                <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
                   Every sky speaks in four registers — insight, spice, horror, warning. Inside any
                   galaxy, the Tone control decides how dark it gets. Full readings belong to your
                   own birth, not a sample.

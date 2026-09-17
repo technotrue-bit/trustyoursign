@@ -55,6 +55,8 @@ describe("the wheel belongs to the sky, not to whatever it happens to be over", 
     assert.equal(wheelFlies(targetMatching((s) => s.includes("[data-no-fly]"))), false);
     assert.equal(wheelFlies(targetMatching((s) => s.includes("button"))), false);
     assert.equal(wheelFlies(targetMatching((s) => s.includes(".sign-strip"))), false);
+    assert.equal(wheelFlies(targetMatching((s) => s.includes("details"))), false);
+    assert.equal(wheelFlies(targetMatching((s) => s.includes(".chart-talks"))), false);
     // a bare backdrop behind the chrome is still the sky
     assert.equal(wheelFlies(targetMatching(() => false)), true);
   });
