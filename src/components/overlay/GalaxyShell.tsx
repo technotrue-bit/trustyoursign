@@ -6,7 +6,6 @@ import { enterSignGalaxy, noteControl, setPaused } from "@/lib/galaxy/travel";
 import { readMotionPaused, writeMotionPaused } from "@/lib/ui/motionPreference";
 import { skipIntro } from "@/lib/galaxy/intro";
 import { cn } from "@/lib/utils";
-import { useSessionStore } from "@/lib/chart/session";
 import { Gloss, GlossRoot, GlossStage } from "./Gloss";
 import { SignStrip } from "./SignStrip";
 import { AuthSlot } from "./AuthSlot";
@@ -27,7 +26,6 @@ export function GalaxyShell() {
   const exploreWorldFade = useGalaxy((s) => s.explore.worldFade);
   const asking = introVeil > 0.04;
   const titleAnimating = !introDone && introTitle > 0.08;
-  const openClaim = useSessionStore((s) => s.openClaim);
   // I5: motion preference is persisted, so the button opens in the state the
   // viewer left it (VaultApp applies the stored value to the sky on mount).
   const [paused, setPausedState] = useState(
@@ -210,15 +208,6 @@ export function GalaxyShell() {
             "Slide to choose a sign"
           )}
         </button>
-        {moved ? (
-          <button
-            type="button"
-            onClick={() => sign && openClaim(sign.id)}
-            className="sign-claim pointer-events-auto min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent md:min-h-10 md:w-auto md:px-3 md:text-[0.65rem] md:tracking-[0.18em]"
-          >
-            This is my sign
-          </button>
-        ) : null}
         <details className="pointer-events-auto mx-auto w-full max-w-md px-2">
           <summary className="min-h-11 cursor-pointer list-none text-center text-[0.6rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg [&::-webkit-details-marker]:hidden">
             How a chart talks here

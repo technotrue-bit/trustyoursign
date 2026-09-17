@@ -113,11 +113,10 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
             useGalaxy.getState().markBorn();
             return;
           }
+          // Enter dives into the selected sign (GalaxyIntro owns that key). The
+          // birth chat is no longer a way in from the sky — there is one way in.
           const g = useGalaxy.getState();
-          if (g.moved) {
-            const sign = CONSTELLATIONS[g.signIndex];
-            if (sign) st.openClaim(sign.id);
-          } else st.openLibrary();
+          if (!g.moved) st.openLibrary();
         }
       }
       // Belt keyboard navigation (B4): left/right walks the signs, only

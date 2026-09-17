@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { ASPECT_COLOR } from "@/lib/chart/aspects";
 import { lonToXZ } from "@/lib/chart/geometry";
-import { CONSTELLATIONS, constellationDust, nearestSign, pairFigures } from "@/lib/galaxy/constellations";
+import { CONSTELLATIONS, constellationDust, pairFigures } from "@/lib/galaxy/constellations";
 import { preloadSignArt, signArtImage } from "@/lib/galaxy/signArt";
 import { getSignVolume } from "@/lib/galaxy/signVolume";
 import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, decayWheelGlide, ensureAutoClock, ensureFlyInput, exploringSign, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepShaderTime, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
@@ -710,11 +710,10 @@ export function FallbackSky({ note }: { note?: string }) {
       if (r.width < 1 || r.height < 1) return;
       const nx = (e.clientX - r.left) / r.width - 0.5;
       const ny = (e.clientY - r.top) / r.height - 0.48;
-      if (Math.hypot(nx, ny * 1.15) < 0.3) {
-        const idx = nearestSign(galaxyTravel.t);
-        const sign = CONSTELLATIONS[idx];
-        if (sign) useSessionStore.getState().openClaim(sign.id);
-      }
+      // Tapping the open sky is inert: there is exactly one way into a sign (the
+      // sign-name affordance), so the centre-tap no longer opens the birth chat.
+      void nx;
+      void ny;
     };
     const onDownTap = (e: PointerEvent) => {
       downX = e.clientX;
