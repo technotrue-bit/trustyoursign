@@ -142,18 +142,12 @@ export function GalaxyShell() {
               ) : null}
               {moved && sign ? (
                 <div key={sign.id} className="sign-swap pointer-events-auto col-start-1 row-start-1">
-                  <button
-                    type="button"
-                    onClick={() => enterSignGalaxy(signIndex)}
-                    className="w-full min-h-11"
-                  >
-                    <p className="text-[0.65rem] tracking-[0.28em] text-fg-muted uppercase md:text-xs">
-                      {sign.month}
-                    </p>
-                    <h1 className="galaxy-sign-name mt-1 font-display leading-[1.05] font-medium tracking-tight text-fg italic">
-                      {sign.name}
-                    </h1>
-                  </button>
+                  <p className="text-[0.65rem] tracking-[0.28em] text-fg-muted uppercase md:text-xs">
+                    {sign.month}
+                  </p>
+                  <h1 className="galaxy-sign-name mt-1 font-display leading-[1.05] font-medium tracking-tight text-fg italic">
+                    {sign.name}
+                  </h1>
                   <p className="mx-auto mt-2 line-clamp-3 max-w-md px-1 text-sm leading-relaxed text-fg-muted md:mt-3 md:line-clamp-none md:text-base">
                     <Gloss card={false}>{sign.essence}</Gloss>
                   </p>
@@ -177,12 +171,24 @@ export function GalaxyShell() {
       >
         <LegalFooter />
         <SignStrip />
+        {moved ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (!sign) return;
+              enterSignGalaxy(signIndex);
+            }}
+            className="sign-claim pointer-events-auto inline-flex min-h-11 w-auto items-center px-5 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent active:text-accent md:min-h-12 md:px-6"
+          >
+            Enter this sign
+          </button>
+        ) : null}
         <p className="px-2 text-center text-[0.65rem] tracking-wide text-fg-subtle md:px-4 md:text-xs">
           <span className="md:hidden">
-            Slide to fly. Tap a sign to choose it, then tap its name to enter. Swipe names to jump.
+            Slide to fly. Tap a sign to choose it, then tap Enter this sign. Swipe names to jump.
           </span>
           <span className="hidden md:inline">
-            Slide to fly. Click the selected sign to enter its galaxy.
+            Slide to fly. Click a sign to choose it, then Enter this sign.
           </span>
         </p>
         <details className="chart-talks pointer-events-auto relative mx-auto w-full max-w-md px-2" data-no-fly>
