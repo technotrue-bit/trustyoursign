@@ -20,6 +20,7 @@ import { MIN_AGE } from "@/lib/legal";
 import { claimSite } from "@/lib/site";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
+import { signOut } from "@/lib/auth/client";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/account")({ component: Account });
@@ -217,8 +218,8 @@ function Account() {
         <section className="mt-12 border-t border-border pt-6">
           <h2 className="font-display text-xl text-fg italic">Your data</h2>
           <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-            You can erase every chart and Ask conversation we hold for this account. That cannot be
-            undone. Session cookies are only for staying signed in.
+            You can erase every chart and Ask conversation we hold, and close this account. That
+            cannot be undone. Afterward you can register again with the same address.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-4">
             <button
@@ -236,22 +237,21 @@ function Account() {
               onClick={async () => {
                 if (
                   !window.confirm(
-                    "Delete every saved chart, Ask thread, and legal record on this account?",
+                    "Close this account and delete every saved chart, Ask thread, and legal record? You can register again with the same email.",
                   )
                 )
                   return;
-              setBusy(true);
-              try {
-                await deleteAllMyData();
-                load();
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "Could not delete");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-                Delete my data
+                setBusy(true);
+                try {
+                  await deleteAllMyData();
+                  await signOut("/");
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Could not delete");
+                  setBusy(false);
+                }
+              }}
+            >
+              Delete my data
             </button>
           </div>
           <p className="mt-6 text-xs text-fg-muted">

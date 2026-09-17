@@ -319,12 +319,21 @@ export const deleteAllMyData = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const { getSql } = await import("@/lib/db.server");
+    const { AppRls } = await import("@/lib/db-rls.server");
+    const { OWNER_USER_ID } = await import("@/lib/owner");
+    if (context.userId === OWNER_USER_ID) {
+      throw new Error("The owner account cannot be closed from this control.");
+    }
     const sql = await getSql();
+    // App rows first, then the Better Auth user — session/account cascade.
     await sql`delete from charts where user_id = ${context.userId}`;
     await sql`delete from chart_ask where user_id = ${context.userId}`;
     await sql`delete from sky_pass where user_id = ${context.userId}`;
     await sql`delete from legal_acceptances where user_id = ${context.userId}`;
-    return { ok: true };
+    await AppRls.bypass(async () => {
+      await sql`delete from "user" where "id" = ${context.userId}`;
+    });
+    return { ok: true, closedAccount: true as const };
   });
 
 export const acceptLegal = createServerFn({ method: "POST" })
