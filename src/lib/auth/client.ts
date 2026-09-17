@@ -1,4 +1,5 @@
 import { emailOTPClient, genericOAuthClient } from "better-auth/client/plugins";
+import { passkeyClient } from "@better-auth/passkey/client";
 import { createAuthClient } from "better-auth/react";
 import { runPreSignInSignOut, runSignOut } from "../../../scripts/sign-out-plan.mjs";
 import { signInAvailability } from "./email-otp";
@@ -19,7 +20,7 @@ import { GROK_PROVIDERS } from "./providers";
  * the visitor stays signed in.
  */
 export const authClient = createAuthClient({
-  plugins: [genericOAuthClient(), emailOTPClient()],
+  plugins: [genericOAuthClient(), emailOTPClient(), passkeyClient()],
   fetchOptions: {
     onRequest(ctx) {
       const token = getBearerToken();

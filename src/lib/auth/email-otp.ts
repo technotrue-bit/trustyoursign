@@ -46,6 +46,11 @@ export type SignInAvailability = {
    * buttons from THIS list, never from the static provider table.
    */
   providers: string[];
+  /**
+   * Passkey (WebAuthn) sign-in is registered on this host. Independent of the
+   * broker — Face ID / Touch ID credentials live on this app's origin.
+   */
+  passkeyAvailable: boolean;
 };
 
 /**
@@ -60,12 +65,14 @@ export const signInAvailability = createServerFn({ method: "GET" }).handler(
       await import("@/lib/email/send.server");
     // `authConfigured` is the flag that adds the broker's OAuth plugin to the
     // Better Auth instance (and with it `/sign-in/oauth2`) — see server.ts.
-    const { authConfigured } = await import("@/lib/auth/server");
+    // `passkeysConfigured` is independent: passkeys are app-owned.
+    const { authConfigured, passkeysConfigured } = await import("@/lib/auth/server");
     const available = emailDeliveryConfigured();
     return {
       codeAvailable: available,
       codeSandbox: available && emailSenderIsSandbox(),
       providers: servedProviderIds(authConfigured),
+      passkeyAvailable: passkeysConfigured,
     };
   },
 );
