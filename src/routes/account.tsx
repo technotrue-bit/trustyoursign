@@ -23,7 +23,10 @@ import { AccountMenu } from "@/components/overlay/AccountMenu";
 import { authClient, signOut } from "@/lib/auth/client";
 import { signInAvailability } from "@/lib/auth/email-otp";
 import { platformAuthenticatorAvailable } from "@/lib/auth/passkey-sign-in";
-import { rememberLocalPasskeyCredentialIds } from "@/lib/auth/passkey-local";
+import {
+  clearLocalPasskeyCredentialIds,
+  rememberLocalPasskeyCredentialIds,
+} from "@/lib/auth/passkey-local";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/account")({
@@ -316,7 +319,12 @@ function PasskeySection({
     const ids = list
       .map((pk) => pk.credentialID)
       .filter((id): id is string => typeof id === "string" && id.length > 0);
-    if (ids.length > 0) rememberLocalPasskeyCredentialIds(ids);
+    if (ids.length > 0) {
+      rememberLocalPasskeyCredentialIds(ids);
+    } else {
+      // Account has no passkeys — drop stale local IDs so /login stays gated.
+      clearLocalPasskeyCredentialIds();
+    }
   };
 
   const load = () => {
@@ -367,14 +375,21 @@ function PasskeySection({
         typeof navigator !== "undefined" && /iPhone|iPad|Mac/.test(navigator.userAgent)
           ? "This Apple device"
           : "This device";
-      const { data, error } = await authClient.passkey.addPasskey({
+      const { data, error, ...rest } = await authClient.passkey.addPasskey({
         name: label,
         authenticatorAttachment: "platform",
+        returnWebAuthnResponse: true,
       });
       if (error) throw new Error(error.message ?? "Could not add a passkey");
       // Better Auth returns the new passkey row (includes credentialID).
+      // Also capture the WebAuthn credential id if the row shape is missing it.
       const created = data as PasskeyRow | null | undefined;
-      if (created?.credentialID) rememberLocalPasskeyCredentialIds(created.credentialID);
+      const webauthnId = (rest as { webauthn?: { response?: { id?: string } } }).webauthn
+        ?.response?.id;
+      const ids = [created?.credentialID, webauthnId].filter(
+        (id): id is string => typeof id === "string" && id.length > 0,
+      );
+      if (ids.length > 0) rememberLocalPasskeyCredentialIds(ids);
       setNudgeDismissed(true);
       load();
     } catch (e) {

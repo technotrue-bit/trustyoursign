@@ -52,3 +52,21 @@ export function withPlatformAuthOptions(
     allowCredentials: [...existing, ...extras],
   };
 }
+
+/** True when options already carry at least one allowCredentials entry. */
+export function hasAllowCredentials(
+  options: PublicKeyCredentialRequestOptionsJSON | null | undefined,
+): boolean {
+  return (options?.allowCredentials?.length ?? 0) > 0;
+}
+
+/**
+ * Modal Face ID is only safe when the merged options include allowCredentials.
+ * Hints alone still open iOS hybrid QR on an empty discoverable get.
+ */
+export function canSafelyStartPlatformPasskey(
+  options: PublicKeyCredentialRequestOptionsJSON,
+  localCredentialIds: readonly string[],
+): boolean {
+  return hasAllowCredentials(withPlatformAuthOptions(options, localCredentialIds));
+}

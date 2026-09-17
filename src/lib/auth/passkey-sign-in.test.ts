@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 import {
   PLATFORM_AUTH_HINTS,
+  canSafelyStartPlatformPasskey,
   withPlatformAuthHints,
   withPlatformAuthOptions,
 } from "./passkey-hints.ts";
@@ -58,6 +59,35 @@ describe("withPlatformAuthOptions", () => {
     assert.equal(
       merged.allowCredentials?.find((c) => c.id === "local-one")?.transports?.[0],
       "internal",
+    );
+  });
+});
+
+describe("canSafelyStartPlatformPasskey", () => {
+  it("is false for empty discoverable options with no local IDs", () => {
+    assert.equal(
+      canSafelyStartPlatformPasskey({ challenge: "c", allowCredentials: [] }, []),
+      false,
+    );
+  });
+
+  it("is true when local IDs supply allowCredentials", () => {
+    assert.equal(
+      canSafelyStartPlatformPasskey({ challenge: "c", allowCredentials: [] }, ["cred-1"]),
+      true,
+    );
+  });
+
+  it("is true when the server already listed allowCredentials", () => {
+    assert.equal(
+      canSafelyStartPlatformPasskey(
+        {
+          challenge: "c",
+          allowCredentials: [{ id: "server-cred", type: "public-key" }],
+        },
+        [],
+      ),
+      true,
     );
   });
 });
