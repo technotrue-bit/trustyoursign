@@ -18,6 +18,10 @@ import {
   normalizeOtpInput,
   signInAvailability,
 } from "@/lib/auth/email-otp";
+import {
+  platformAuthenticatorAvailable,
+  signInWithPlatformPasskey,
+} from "@/lib/auth/passkey-sign-in";
 import { MIN_AGE } from "@/lib/legal";
 import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
 import { resolveSessionGuardState } from "@/lib/auth/session-guard";
@@ -80,6 +84,8 @@ function Login() {
   const [otpSandbox, setOtpSandbox] = useState(false);
   const [servedProviders, setServedProviders] = useState<readonly string[]>([]);
   const [passkeyOk, setPasskeyOk] = useState(false);
+  // Platform authenticator (Face ID / Touch ID) — label only; button stays offered.
+  const [platformPasskey, setPlatformPasskey] = useState(false);
   const [otpStage, setOtpStage] = useState<"idle" | "code" | "sent">("idle");
   const [otp, setOtp] = useState("");
   const [codeSentTo, setCodeSentTo] = useState("");
@@ -109,6 +115,7 @@ function Login() {
 
   // Conditional UI: preload the browser's passkey autofill when the host can
   // finish a passkey sign-in (Safari / iOS offer Face ID in the keyboard bar).
+  // Stock client on purpose — autofill already uses the local credential path.
   useEffect(() => {
     if (!passkeyOk || !authEnabled) return;
     let cancelled = false;
@@ -121,6 +128,17 @@ function Login() {
       .catch(() => {
         /* autofill abort / no credential is expected — ignore */
       });
+    return () => {
+      cancelled = true;
+    };
+  }, [passkeyOk]);
+
+  useEffect(() => {
+    if (!passkeyOk) return;
+    let cancelled = false;
+    void platformAuthenticatorAvailable().then((ok) => {
+      if (!cancelled) setPlatformPasskey(ok);
+    });
     return () => {
       cancelled = true;
     };
@@ -277,7 +295,8 @@ function Login() {
     setError(null);
     setBusy(true);
     try {
-      const { error: err } = await authClient.signIn.passkey({ autoFill: false });
+      // Prefer platform (Face ID / Touch ID) over iOS hybrid QR — see passkey-sign-in.ts.
+      const { error: err } = await signInWithPlatformPasskey();
       if (err) throw new Error(err.message ?? "Passkey sign-in failed");
       goToProfile();
     } catch (e) {
@@ -470,7 +489,8 @@ function Login() {
               </button>
             ) : null}
             {/* App-owned WebAuthn — only when the passkey plugin is registered.
-                Not Sign in with Apple; Face ID comes from a passkey on this vault. */}
+                Not Sign in with Apple; Face ID comes from a passkey on this vault.
+                Platform label when available; button stays offered either way. */}
             {passkeyOk ? (
               <button
                 type="button"
@@ -478,7 +498,7 @@ function Login() {
                 onClick={() => void passkeySignIn()}
                 className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
               >
-                Continue with passkey
+                {platformPasskey ? "Face ID on this device" : "Continue with passkey"}
               </button>
             ) : null}
             <p className="pt-1 text-xs leading-relaxed text-fg-subtle">{signInNote}</p>
