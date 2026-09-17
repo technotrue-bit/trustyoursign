@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   TurnstileWidget,
   resetTurnstile,
@@ -22,6 +22,12 @@ import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
 import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
+
+/** Always land on the profile after a successful sign-in — never linger on /login. */
+function goToProfile() {
+  if (typeof window === "undefined") return;
+  window.location.assign("/account");
+}
 
 export const Route = createFileRoute("/login")({
   component: Login,
@@ -50,7 +56,6 @@ function Login() {
       isReadFailed: sessionReadFailed,
       hasUser: user !== null,
     }) === "signed_in";
-  const navigate = useNavigate();
   // The route search picks the opening tab; switching tabs after that is local.
   const { create, from } = Route.useSearch();
   const [mode, setMode] = useState<"in" | "up">(create ? "up" : "in");
@@ -202,7 +207,7 @@ function Login() {
       // ("Owner desk" on /account), so routing by the address typed here is no
       // longer needed — and guessing from a string disagreed with what the
       // session actually was.
-      window.location.href = "/account";
+      goToProfile();
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "That code did not work");
@@ -231,6 +236,8 @@ function Login() {
     setError(null);
     setBusy(true);
     try {
+      // OAuth / preview popup both use callbackURL=/account — do not navigate
+      // here afterward or we overwrite the broker redirect with /account.
       await signIn(id, { callbackURL: "/account" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign-in failed");
@@ -280,7 +287,7 @@ function Login() {
         });
         if (err) throw new Error(err.message ?? "Could not sign in");
       }
-      window.location.href = "/account";
+      goToProfile();
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not continue");
@@ -290,12 +297,11 @@ function Login() {
 
   // A session can outlive the page that made it: a dropped session read bounces
   // a signed-in visitor back here, and this page then has nothing to offer them.
-  // Carry them to their profile rather than leave them at a form that would mean
-  // signing in twice.
+  // Hard-navigate to the profile — soft client routing can leave the form up.
   useEffect(() => {
     if (!alreadySignedIn) return;
-    void navigate({ to: "/account", replace: true });
-  }, [alreadySignedIn, navigate]);
+    window.location.replace("/account");
+  }, [alreadySignedIn]);
 
   if (alreadySignedIn) {
     return (
@@ -303,12 +309,20 @@ function Login() {
         <div className="mx-auto max-w-sm text-center">
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">Signed in</p>
           <h1 className="mt-2 font-display text-2xl text-fg italic">Taking you to your profile…</h1>
-          <Link
-            to="/account"
+          <a
+            href="/account"
             className="mt-6 inline-flex min-h-11 items-center text-xs tracking-[0.18em] text-fg uppercase underline"
           >
             Go now
-          </Link>
+          </a>
+          <p className="mt-8">
+            <Link
+              to="/"
+              className="back-to-sky inline-flex min-h-11 items-center text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+            >
+              Back to the sky
+            </Link>
+          </p>
         </div>
       </main>
     );
@@ -332,11 +346,19 @@ function Login() {
         : "Google and X sign-in aren't offered on this address. Use your email and a password below.";
 
   return (
-    <main id="main-content" className="vault-page bg-bg px-5 text-fg">
+    <main id="main-content" className="vault-page relative bg-bg px-5 text-fg">
       <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[max(6.5rem,calc(var(--chrome-bottom)+4.25rem))]">
-        <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">
-          Trust Your Sign · {SITE_OWNER.name}
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">
+            Trust Your Sign · {SITE_OWNER.name}
+          </p>
+          <Link
+            to="/"
+            className="chrome-glow back-to-sky shrink-0 px-2 py-2 text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+          >
+            Back to the sky
+          </Link>
+        </div>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Keep the sky.</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
           Sign in to save your chart, and the charts of people who gave you permission.
