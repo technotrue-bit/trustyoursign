@@ -183,11 +183,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     const state = get();
     // Leaving claim/natal while a sign galaxy is open must exit the dive —
     // otherwise StarBack only clears claim and remounts the trapped hub HUD.
-    if (exploringSign()) exitSignGalaxy();
+    // The exit unwinds the dive itself, so the corridor must NOT be hard-reset in
+    // the same tick: that aborted the unwind before a single frame rendered and
+    // snapped the camera (measured: a 6.9-unit look jump in one frame, ~695x the
+    // idle frame delta, corridor teleported to t=0). The reset stays for the
+    // non-galaxy cases it was written for.
+    const leavingSign = exploringSign();
+    if (leavingSign) exitSignGalaxy();
     const returnsToGalaxy =
       state.session?.origin === "galaxy" ||
       (!state.session && !state.claim && state.surface === "library");
-    if (returnsToGalaxy) resetGalaxyTravel();
+    if (returnsToGalaxy && !leavingSign) resetGalaxyTravel();
     set((current) => applyCloseState(current));
   },
 

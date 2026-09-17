@@ -3,7 +3,16 @@ import { beforeEach, describe, it } from "node:test";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
 import type { Nativity } from "@/lib/chart/schema";
 import { useGalaxy } from "@/lib/galaxy/store";
-import { OPEN_T } from "@/lib/galaxy/travel";
+import {
+  OPEN_T,
+  enterSignGalaxy,
+  exploringSign,
+  galaxyTravel,
+  resetExplore,
+  resetTravel,
+  stepExplore,
+} from "@/lib/galaxy/travel";
+import { skipIntro, templeIntro } from "@/lib/galaxy/intro";
 import { useSessionStore } from "./store.ts";
 
 const nativity = {
@@ -243,5 +252,50 @@ describe("session store", () => {
     state.close();
     state = useSessionStore.getState();
     assert.equal(state.surface, "galaxy");
+  });
+});
+
+describe("backing out of a sign galaxy", () => {
+  beforeEach(() => {
+    templeIntro.t = Math.max(templeIntro.t, 0.4);
+    skipIntro();
+    resetTravel(false);
+    galaxyTravel.birth = 1;
+    resetExplore(true);
+    useGalaxy.setState({ born: true, moved: true, t: OPEN_T, signIndex: 4 });
+    useSessionStore.setState({ session: null, claim: null, surface: "galaxy" });
+  });
+
+  it("leaves the dive unwinding instead of snapping the corridor home", () => {
+    assert.equal(enterSignGalaxy(4), true);
+    for (let i = 0; i < 400 && galaxyTravel.explorePhase !== "inside"; i += 1) {
+      stepExplore(1 / 60);
+    }
+    assert.equal(galaxyTravel.explorePhase, "inside");
+    const tBefore = useGalaxy.getState().t;
+    const indexBefore = useGalaxy.getState().signIndex;
+
+    // The case the old code reset on: nothing open but the library surface, so
+    // close() reached for resetGalaxyTravel() while the dive was still winding.
+    useSessionStore.setState({ surface: "library" });
+    useSessionStore.getState().close();
+
+    assert.equal(
+      galaxyTravel.explorePhase,
+      "exiting",
+      "close() must start the exit and let it run, not abort it in the same tick",
+    );
+    assert.equal(useGalaxy.getState().moved, true, "the corridor must not be reset home");
+    assert.equal(useGalaxy.getState().signIndex, indexBefore);
+    assert.equal(useGalaxy.getState().t, tBefore);
+  });
+
+  it("still resets the corridor when no sign galaxy is open", () => {
+    assert.equal(exploringSign(), false);
+    useSessionStore.setState({ surface: "library", session: null, claim: null });
+    useSessionStore.getState().close();
+    assert.equal(useGalaxy.getState().moved, false);
+    assert.equal(useGalaxy.getState().t, OPEN_T);
+    assert.equal(useGalaxy.getState().signIndex, 0);
   });
 });
