@@ -22,9 +22,21 @@ import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
 import { authClient, signOut } from "@/lib/auth/client";
 import { signInAvailability } from "@/lib/auth/email-otp";
+import { platformAuthenticatorAvailable } from "@/lib/auth/passkey-sign-in";
+import { rememberLocalPasskeyCredentialIds } from "@/lib/auth/passkey-local";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/account")({ component: Account });
+export const Route = createFileRoute("/account")({
+  component: Account,
+  validateSearch: (search: Record<string, unknown>): { enablePasskey?: true } => ({
+    enablePasskey:
+      search.enablePasskey === true ||
+      search.enablePasskey === "1" ||
+      search.enablePasskey === "true"
+        ? true
+        : undefined,
+  }),
+});
 
 const MONTHS = [
   "January",
@@ -44,6 +56,7 @@ const MONTHS = [
 function Account() {
   const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
   const navigate = useNavigate();
+  const { enablePasskey } = Route.useSearch();
   const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [charts, setCharts] = useState<SavedChart[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -142,7 +155,7 @@ function Account() {
           </p>
         </section>
 
-        <PasskeySection onError={setError} />
+        <PasskeySection onError={setError} nudgeEnable={Boolean(enablePasskey)} />
 
         <AddChart
           onSaved={() => {
@@ -280,15 +293,31 @@ function Account() {
 type PasskeyRow = {
   id: string;
   name?: string | null;
+  credentialID?: string;
   deviceType?: string;
   createdAt?: string | Date;
   backedUp?: boolean;
 };
 
-function PasskeySection({ onError }: { onError: (msg: string | null) => void }) {
+function PasskeySection({
+  onError,
+  nudgeEnable,
+}: {
+  onError: (msg: string | null) => void;
+  nudgeEnable?: boolean;
+}) {
   const [enabled, setEnabled] = useState(false);
   const [rows, setRows] = useState<PasskeyRow[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [platformOk, setPlatformOk] = useState(false);
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
+
+  const rememberFromRows = (list: PasskeyRow[]) => {
+    const ids = list
+      .map((pk) => pk.credentialID)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+    if (ids.length > 0) rememberLocalPasskeyCredentialIds(ids);
+  };
 
   const load = () => {
     void (async () => {
@@ -300,7 +329,9 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
           setRows([]);
           return;
         }
-        setRows(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setRows(list);
+        rememberFromRows(list);
       } catch {
         setRows([]);
       }
@@ -318,6 +349,9 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
       .catch(() => {
         if (!cancelled) setEnabled(false);
       });
+    void platformAuthenticatorAvailable().then((ok) => {
+      if (!cancelled) setPlatformOk(ok);
+    });
     return () => {
       cancelled = true;
     };
@@ -333,11 +367,15 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
         typeof navigator !== "undefined" && /iPhone|iPad|Mac/.test(navigator.userAgent)
           ? "This Apple device"
           : "This device";
-      const { error } = await authClient.passkey.addPasskey({
+      const { data, error } = await authClient.passkey.addPasskey({
         name: label,
         authenticatorAttachment: "platform",
       });
       if (error) throw new Error(error.message ?? "Could not add a passkey");
+      // Better Auth returns the new passkey row (includes credentialID).
+      const created = data as PasskeyRow | null | undefined;
+      if (created?.credentialID) rememberLocalPasskeyCredentialIds(created.credentialID);
+      setNudgeDismissed(true);
       load();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not add a passkey";
@@ -364,6 +402,13 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
     }
   };
 
+  const showNudge =
+    Boolean(nudgeEnable) &&
+    !nudgeDismissed &&
+    platformOk &&
+    rows !== null &&
+    rows.length === 0;
+
   return (
     <section id="passkeys" className="mt-8 scroll-mt-24">
       <h2 className="font-display text-2xl text-fg italic">Passkeys</h2>
@@ -371,6 +416,32 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
         Unlock next time with Face ID or Touch ID. Passkeys sync through iCloud Keychain on your
         Apple devices — this is not Sign in with Apple.
       </p>
+      {showNudge ? (
+        <div className="mt-4 space-y-3 rounded-md border border-accent/40 bg-bg-elevated/80 px-4 py-4">
+          <p className="text-sm leading-relaxed text-fg">
+            Enable Face ID on this device so next time you can unlock without the email code — and
+            without Safari’s Scan QR sheet.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void add()}
+              className="min-h-12 rounded-md bg-accent px-4 text-xs tracking-[0.18em] text-accent-fg uppercase disabled:opacity-50"
+            >
+              Enable Face ID now
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setNudgeDismissed(true)}
+              className="min-h-11 text-xs tracking-[0.16em] text-fg-subtle uppercase hover:text-fg disabled:opacity-50"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      ) : null}
       {rows === null ? (
         <div className="mt-3 h-12 animate-pulse rounded-md bg-bg-subtle" />
       ) : rows.length === 0 ? (

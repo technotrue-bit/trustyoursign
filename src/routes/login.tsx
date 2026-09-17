@@ -19,6 +19,8 @@ import {
   signInAvailability,
 } from "@/lib/auth/email-otp";
 import {
+  hasUsableLocalPasskeyEvidence,
+  markLocalPasskeyAutofillOk,
   platformAuthenticatorAvailable,
   signInWithPlatformPasskey,
 } from "@/lib/auth/passkey-sign-in";
@@ -29,9 +31,16 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
 
 /** Always land on the profile after a successful sign-in — never linger on /login. */
-function goToProfile() {
+function goToProfile(opts?: { enablePasskey?: boolean }) {
   if (typeof window === "undefined") return;
-  window.location.assign("/account");
+  window.location.assign(opts?.enablePasskey ? "/account?enablePasskey=1#passkeys" : "/account");
+}
+
+/** After email/OTP/password: nudge Face ID enroll when this device can do UVPA. */
+function goToProfileAfterPasswordlessGate(platformOk: boolean) {
+  goToProfile({
+    enablePasskey: platformOk && !hasUsableLocalPasskeyEvidence(),
+  });
 }
 
 export const Route = createFileRoute("/login")({
@@ -84,8 +93,10 @@ function Login() {
   const [otpSandbox, setOtpSandbox] = useState(false);
   const [servedProviders, setServedProviders] = useState<readonly string[]>([]);
   const [passkeyOk, setPasskeyOk] = useState(false);
-  // Platform authenticator (Face ID / Touch ID) — label only; button stays offered.
+  // Platform authenticator (Face ID / Touch ID) — required to offer the modal button.
   const [platformPasskey, setPlatformPasskey] = useState(false);
+  // Local credential evidence — without it, Safari opens hybrid QR on discoverable get.
+  const [localPasskeyEvidence, setLocalPasskeyEvidence] = useState(false);
   const [otpStage, setOtpStage] = useState<"idle" | "code" | "sent">("idle");
   const [otp, setOtp] = useState("");
   const [codeSentTo, setCodeSentTo] = useState("");
@@ -123,7 +134,11 @@ function Login() {
       .signIn.passkey({ autoFill: true })
       .then((result) => {
         if (cancelled) return;
-        if (result.data) goToProfile();
+        if (result.data) {
+          markLocalPasskeyAutofillOk();
+          setLocalPasskeyEvidence(true);
+          goToProfile();
+        }
       })
       .catch(() => {
         /* autofill abort / no credential is expected — ignore */
@@ -136,6 +151,7 @@ function Login() {
   useEffect(() => {
     if (!passkeyOk) return;
     let cancelled = false;
+    setLocalPasskeyEvidence(hasUsableLocalPasskeyEvidence());
     void platformAuthenticatorAvailable().then((ok) => {
       if (!cancelled) setPlatformPasskey(ok);
     });
@@ -143,6 +159,9 @@ function Login() {
       cancelled = true;
     };
   }, [passkeyOk]);
+
+  // Modal button only when UVPA + local evidence — never a naked discoverable get.
+  const offerModalPasskey = passkeyOk && platformPasskey && localPasskeyEvidence;
 
   // Ticks only while a code is on screen, to re-enable "send another code".
   useEffect(() => {
@@ -249,11 +268,9 @@ function Login() {
         fetchOptions: { headers: turnstileCaptchaHeaders() },
       });
       if (err) throw new Error(err.message ?? "That code did not work");
-      // Everyone lands on their profile. The owner's desk is one tap from it
-      // ("Owner desk" on /account), so routing by the address typed here is no
-      // longer needed — and guessing from a string disagreed with what the
-      // session actually was.
-      goToProfile();
+      // Everyone lands on their profile. Nudge Face ID enroll when this device
+      // can do UVPA but has no local passkey evidence yet.
+      goToProfileAfterPasswordlessGate(platformPasskey);
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "That code did not work");
@@ -353,7 +370,7 @@ function Login() {
         });
         if (err) throw new Error(err.message ?? "Could not sign in");
       }
-      goToProfile();
+      goToProfileAfterPasswordlessGate(platformPasskey);
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not continue");
@@ -403,10 +420,13 @@ function Login() {
   // The note under the buttons. It must not imply Google/X exist when the
   // broker cannot be served — that is the same lie as a button that 404s.
   // Passkeys are Face ID / iCloud Keychain, not Sign in with Apple.
+  // Only mention the modal button when it is actually offered.
   const signInNote = (() => {
-    const passkeyHint = passkeyOk
-      ? " A saved passkey unlocks with Face ID or Touch ID on Apple devices."
-      : "";
+    const passkeyHint = offerModalPasskey
+      ? " A saved passkey unlocks with Face ID or Touch ID on this device."
+      : passkeyOk
+        ? " Sign in with email, then enable Face ID under Account."
+        : "";
     if (socialProviders.length > 0) {
       return otpAvailable
         ? `Your email gets you a code — no password to invent.${passkeyHint}`
@@ -488,18 +508,24 @@ function Login() {
                 Email me a code
               </button>
             ) : null}
-            {/* App-owned WebAuthn — only when the passkey plugin is registered.
-                Not Sign in with Apple; Face ID comes from a passkey on this vault.
-                Platform label when available; button stays offered either way. */}
-            {passkeyOk ? (
+            {/* App-owned WebAuthn — only when UVPA + local credential evidence.
+                Never call discoverable get without allowCredentials — iOS opens hybrid QR.
+                Not Sign in with Apple; Face ID comes from a passkey on this vault. */}
+            {passkeyOk && offerModalPasskey ? (
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void passkeySignIn()}
                 className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
               >
-                {platformPasskey ? "Face ID on this device" : "Continue with passkey"}
+                Face ID on this device
               </button>
+            ) : passkeyOk ? (
+              <p className="rounded-md border border-border/70 bg-bg-elevated/40 px-4 py-3 text-xs leading-relaxed text-fg-subtle">
+                Sign in with email, then enable Face ID under Account. The passkey button stays
+                off until Face ID is enrolled on this device — that avoids Safari’s Scan QR Code
+                sheet.
+              </p>
             ) : null}
             <p className="pt-1 text-xs leading-relaxed text-fg-subtle">{signInNote}</p>
           </div>
