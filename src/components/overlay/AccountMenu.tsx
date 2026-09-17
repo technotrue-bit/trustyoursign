@@ -96,7 +96,7 @@ export function AccountMenu() {
             Profile
           </MenuLink>
           <MenuLink to="/account#subscription" onPick={() => setOpen(false)}>
-            Manage subscription
+            Subscription
           </MenuLink>
           {owner ? (
             <>
