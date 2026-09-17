@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { signOut } from "@/lib/auth/client";
+import { clearBearerTokens } from "@/lib/auth/bearer-storage";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
 import { cn } from "@/lib/utils";
@@ -48,12 +50,12 @@ export function AccountMenu() {
   }
   if (!user) {
     return (
-      <a
-        href="/login"
+      <Link
+        to="/login"
         className="auth-sign-in pointer-events-auto inline-flex min-h-11 items-center px-3 text-[0.65rem] tracking-[0.2em] text-fg-muted uppercase hover:text-fg"
       >
         Sign in
-      </a>
+      </Link>
     );
   }
 
@@ -89,21 +91,27 @@ export function AccountMenu() {
           <p className="truncate px-4 pt-3 pb-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
             {owner ? "Owner" : label}
           </p>
-          <MenuLink to={owner ? "/?desk=joey" : "/account#charts"} onPick={() => setOpen(false)}>
-            My Chart
-          </MenuLink>
-          <MenuLink to="/account#profile" onPick={() => setOpen(false)}>
+          {owner ? (
+            <MenuLink to="/" search={{ desk: "joey" }} onPick={() => setOpen(false)}>
+              My Chart
+            </MenuLink>
+          ) : (
+            <MenuLink to="/account" hash="charts" onPick={() => setOpen(false)}>
+              My Chart
+            </MenuLink>
+          )}
+          <MenuLink to="/account" hash="profile" onPick={() => setOpen(false)}>
             Profile
           </MenuLink>
-          <MenuLink to="/account#subscription" onPick={() => setOpen(false)}>
+          <MenuLink to="/account" hash="subscription" onPick={() => setOpen(false)}>
             Subscription
           </MenuLink>
           {owner ? (
             <>
-              <MenuLink to="/admin#research" onPick={() => setOpen(false)}>
+              <MenuLink to="/admin" hash="research" onPick={() => setOpen(false)}>
                 Research desk
               </MenuLink>
-              <MenuLink to="/?desk=library" onPick={() => setOpen(false)}>
+              <MenuLink to="/" search={{ desk: "library" }} onPick={() => setOpen(false)}>
                 The library
               </MenuLink>
             </>
@@ -117,8 +125,10 @@ export function AccountMenu() {
               setLeaving(true);
               try {
                 sessionStorage.setItem("grok-auth.skip-owner-bind", "1");
-                sessionStorage.removeItem("grok-auth.bearer-token");
-                localStorage.removeItem("grok-auth.bearer-token");
+                clearBearerTokens({
+                  session: sessionStorage,
+                  local: localStorage,
+                });
               } catch {
                 /* ignore */
               }
@@ -135,21 +145,30 @@ export function AccountMenu() {
 
 function MenuLink({
   to,
+  hash,
+  search,
   onPick,
   children,
 }: {
-  to: string;
+  to: "/account" | "/admin" | "/" | "/login";
+  hash?: string;
+  search?: { desk?: string };
   onPick: () => void;
   children: string;
 }) {
+  // Client-side navigation keeps the Better Auth session atom warm. Hard <a href>
+  // reloads remounted the app, re-ran OwnerBind bearer restore, and were the
+  // moments Joey saw intermittent /login bounces from the account menu.
   return (
-    <a
-      href={to}
+    <Link
+      to={to}
+      hash={hash}
+      search={search}
       role="menuitem"
       onClick={onPick}
       className="flex min-h-11 items-center px-4 text-sm text-fg hover:bg-bg-subtle"
     >
       {children}
-    </a>
+    </Link>
   );
 }

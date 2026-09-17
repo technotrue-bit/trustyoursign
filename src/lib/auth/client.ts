@@ -4,6 +4,10 @@ import { createAuthClient } from "better-auth/react";
 import { runPreSignInSignOut, runSignOut } from "../../../scripts/sign-out-plan.mjs";
 import { signInAvailability } from "./email-otp";
 import { GROK_PROVIDERS } from "./providers";
+import {
+  readBearerTokenForRequest,
+  writeSessionBearerToken,
+} from "./bearer-storage";
 
 /**
  * Better Auth client for this React SPA (browser-side).
@@ -50,28 +54,26 @@ function providerLabel(providerId: string): string {
 // ── Live-preview bearer token ────────────────────────────────────────────────
 // The embedded preview iframe has partitioned cookies, so we keep the session's
 // bearer token in sessionStorage and attach it to every Better Auth request (and
-// to server functions, via `@/lib/auth/middleware`). Empty everywhere except the
-// preview after a popup sign-in, so the cookie path is untouched elsewhere.
-const BEARER_KEY = "grok-auth.bearer-token";
-
-/** The stored preview bearer token, or null. */
+// to server functions, via `@/lib/auth/middleware`). Deployed hosts MUST NOT
+// attach a bearer: Better Auth's bearer plugin replaces the cookie with it, so
+// a leftover token shadows a good `__Host-` session and `/account` bounces to
+// login. See `./bearer-storage`.
+/** The stored preview bearer token, or null (always null outside live preview). */
 export function getBearerToken(): string | null {
   if (typeof window === "undefined") return null;
-  try {
-    return window.sessionStorage.getItem(BEARER_KEY);
-  } catch {
-    return null;
-  }
+  return readBearerTokenForRequest({
+    hostname: window.location.hostname,
+    session: window.sessionStorage,
+    local: window.localStorage,
+  });
 }
 
 function setBearerToken(token: string | null): void {
   if (typeof window === "undefined") return;
-  try {
-    if (token) window.sessionStorage.setItem(BEARER_KEY, token);
-    else window.sessionStorage.removeItem(BEARER_KEY);
-  } catch {
-    /* storage unavailable — ignore */
-  }
+  writeSessionBearerToken(token, {
+    session: window.sessionStorage,
+    local: window.localStorage,
+  });
 }
 
 /**
