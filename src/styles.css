@@ -252,6 +252,36 @@
   }
 }
 
+/* “How a chart talks here” — rises above the summary as a soft card. */
+@keyframes chart-talks-in {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.chart-talks > summary {
+  transition: color 0.2s ease-out;
+}
+
+.chart-talks[open] > summary {
+  color: var(--color-fg);
+}
+
+.chart-talks[open] > .chart-talks-pop {
+  animation: chart-talks-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-talks[open] > .chart-talks-pop {
+    animation: none;
+  }
+}
+
 .canvas-root {
   position: absolute;
   inset: 0;
