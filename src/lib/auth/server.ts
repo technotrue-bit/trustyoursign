@@ -240,9 +240,10 @@ const grokOAuthPlugin = authConfigured
     })
   : null;
 
-// App-owned WebAuthn — Face ID / Touch ID / security keys. Registered whenever
-// auth is on (see `passkeysConfigured`). rpID pins to the stable public host
-// when we have one; otherwise the plugin takes the per-request baseURL hostname.
+// App-owned WebAuthn — Face ID / Touch ID only (platform authenticatorSelection).
+// Registered whenever auth is on (see `passkeysConfigured`). rpID pins to the
+// stable public host when we have one; otherwise the plugin takes the
+// per-request baseURL hostname.
 const passkeyPlugin = passkeysConfigured ? passkey(passkeyRpConfig(explicitBaseURL)) : null;
 
 /**
@@ -463,7 +464,7 @@ export const auth = betterAuth({
         ]
       : []),
 
-    // Face ID / Touch ID / security keys — app-owned, not broker-federated.
+    // Face ID / Touch ID — app-owned platform passkeys (not broker-federated).
     ...(passkeyPlugin ? [passkeyPlugin] : []),
 
     // One genericOAuth provider per upstream (when auth is on), all federating
