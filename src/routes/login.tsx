@@ -33,15 +33,38 @@ import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
 
-/** Always land on the profile after a successful sign-in — never linger on /login. */
-function goToProfile(opts?: { enablePasskey?: boolean }) {
+/** Profile URL after a successful sign-in — never linger on /login. */
+function profileHref(opts?: { enablePasskey?: boolean }) {
+  return opts?.enablePasskey ? "/account?enablePasskey=1#passkeys" : "/account";
+}
+
+/**
+ * Confirm the session is readable, then hard-navigate to the profile.
+ * Without this, a race after email/OTP can load /account before the cookie is
+ * visible — /account treats that as signed out and bounces straight back here,
+ * which feels like "I signed in and nothing happened."
+ */
+async function goToProfileAfterSignIn(opts?: { enablePasskey?: boolean }) {
   if (typeof window === "undefined") return;
-  window.location.assign(opts?.enablePasskey ? "/account?enablePasskey=1#passkeys" : "/account");
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const { data } = await authClient.getSession();
+      if (data?.user) {
+        window.location.replace(profileHref(opts));
+        return;
+      }
+    } catch {
+      /* retry — a dropped read is not "still signed out" */
+    }
+    await new Promise((r) => window.setTimeout(r, 120 * (attempt + 1)));
+  }
+  // Last resort: full navigation still gives the next document a fresh cookie read.
+  window.location.assign(profileHref(opts));
 }
 
 /** After email/OTP/password: nudge Face ID enroll when this device can do UVPA. */
 function goToProfileAfterPasswordlessGate(platformOk: boolean) {
-  goToProfile({
+  return goToProfileAfterSignIn({
     enablePasskey: platformOk && !hasUsableLocalPasskeyEvidence(),
   });
 }
@@ -152,7 +175,7 @@ function Login() {
           if (credId) rememberLocalPasskeyCredentialIds(credId);
           markLocalPasskeyAutofillOk();
           setLocalPasskeyEvidence(hasUsableLocalPasskeyEvidence());
-          goToProfile();
+          void goToProfileAfterSignIn();
         }
       })
       .catch(() => {
@@ -311,7 +334,7 @@ function Login() {
       if (err) throw new Error(err.message ?? "That code did not work");
       // Everyone lands on their profile. Nudge Face ID enroll when this device
       // can do UVPA but has no local passkey evidence yet.
-      goToProfileAfterPasswordlessGate(platformPasskey);
+      await goToProfileAfterPasswordlessGate(platformPasskey);
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "That code did not work");
@@ -320,11 +343,11 @@ function Login() {
   };
 
   /**
-   * The email-code path, for anyone the broker cannot federate (it serves
-   * Google and X only). Choosing it puts the form into that mode for real: the
-   * address field takes focus, and if an address is already typed the code goes
-   * out immediately. (Scrolling to a form the visitor can already see is not an
-   * action.)
+   * Apple / iCloud users have no SSO here (the broker federates Google and X
+   * only), so their path is a code by email. Tapping the Apple button puts the
+   * form into that mode for real: the address field takes focus, and if an
+   * address is already typed the code goes out immediately. (Scrolling to a
+   * form the visitor can already see is not an action.)
    */
   const startCodeSignIn = (opts: { sendNow?: boolean } = {}) => {
     setError(null);
@@ -356,7 +379,7 @@ function Login() {
       // Prefer platform (Face ID / Touch ID) over iOS hybrid QR — see passkey-sign-in.ts.
       const { error: err } = await signInWithPlatformPasskey();
       if (err) throw new Error(err.message ?? "Passkey sign-in failed");
-      goToProfile();
+      await goToProfileAfterSignIn();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Passkey sign-in failed";
       // User dismissed the sheet — not an error worth alarming over.
@@ -411,7 +434,7 @@ function Login() {
         });
         if (err) throw new Error(err.message ?? "Could not sign in");
       }
-      goToProfileAfterPasswordlessGate(platformPasskey);
+      await goToProfileAfterPasswordlessGate(platformPasskey);
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not continue");
@@ -470,12 +493,12 @@ function Login() {
         : "";
     if (socialProviders.length > 0) {
       return otpAvailable
-        ? `Your email gets you a code — no password to invent.${passkeyHint}`
+        ? `Apple Sign-In isn't offered here — use your iCloud or Apple email for a code instead, no password to invent.${passkeyHint}`
         : `Your email works the same way, with a password, below.${passkeyHint}`;
     }
     return otpAvailable
-      ? `Google and X sign-in aren't offered on this address. Your email gets you a code instead — no password to invent.${passkeyHint}`
-      : `Google and X sign-in aren't offered on this address. Use your email and a password below.${passkeyHint}`;
+      ? `Google, X, and Apple Sign-In aren't offered on this address. Your iCloud or Apple email gets you a code instead — no password to invent.${passkeyHint}`
+      : `Google, X, and Apple Sign-In aren't offered on this address. Use your email and a password below.${passkeyHint}`;
   })();
 
   return (
@@ -535,10 +558,10 @@ function Login() {
                   Continue with {p.label}
                 </button>
               ))}
-            {/* This host has no SSO for every address (the broker federates
-                Google and X only), so the email-code path covers the rest. It
-                starts that flow for real, and is only rendered when the host can
-                send mail — never a button that merely scrolls the page. */}
+            {/* No Apple SSO exists (the broker federates Google and X only), so
+                the Apple path is a code by email. This starts that flow for
+                real, and is only rendered when the host can send mail — never a
+                button that merely scrolls the page. */}
             {otpAvailable ? (
               <button
                 type="button"
@@ -546,7 +569,7 @@ function Login() {
                 onClick={() => startCodeSignIn({ sendNow: true })}
                 className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
               >
-                Email me a code
+                Use Apple or iCloud email
               </button>
             ) : null}
             {/* App-owned WebAuthn — only when UVPA + local credential evidence.
@@ -776,7 +799,7 @@ function Login() {
                 code right now.{" "}
                 {socialProviders.length > 0
                   ? "Signing in with Google or X works as usual."
-                  : "There is no Google or X sign-in on this host to fall back on."}
+                  : "There is no Google, X, or Apple Sign-In on this host to fall back on. Use a password below, or wait until mail is fully open."}
               </p>
             ) : null}
             {error ? (

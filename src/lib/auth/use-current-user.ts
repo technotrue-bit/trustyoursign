@@ -1,4 +1,9 @@
+import { useEffect, useState } from "react";
 import { authClient, authEnabled } from "./client";
+import {
+  STICKY_EMPTY_GRACE_MS,
+  applySessionObservation,
+} from "./session-sticky";
 
 /** Normalized user shape used across the app, auth on or off. */
 export type AppUser = {
@@ -36,11 +41,30 @@ export type CurrentUserState = {
    * server hiccup). NOT "signed out": the cookie may be perfectly good. A phone
    * waking from the app switcher fires exactly this request, so treating it as
    * signed out logs people out on resume. See `session-guard`.
+   *
+   * Also true briefly when `/get-session` returns empty after we already knew a
+   * user — sticky session holds the identity so Profile clicks cannot bounce
+   * you to sign-in over a transient miss (see `session-sticky`).
    */
   isReadFailed: boolean;
   /** Re-read the session (the "try again" path after a failed read). */
   refetchSession: () => void;
 };
+
+function mapUser(user: {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}): AppUser {
+  return {
+    id: user.id,
+    displayName: user.name ?? null,
+    primaryEmail: user.email ?? null,
+    profileImageUrl: user.image ?? null,
+    isDevFallback: false,
+  };
+}
 
 /**
  * Current user + loading state. Same behavior in live preview and when deployed:
@@ -68,19 +92,28 @@ export function useCurrentUserState(): CurrentUserState {
     return { user: DEV_USER, isPending: false, isReadFailed: false, refetchSession: () => {} };
   }
   const { data, isPending, error, refetch } = authClient.useSession();
-  const user = data?.user;
-  return {
-    user: user
-      ? {
-          id: user.id,
-          displayName: user.name ?? null,
-          primaryEmail: user.email ?? null,
-          profileImageUrl: user.image ?? null,
-          isDevFallback: false,
-        }
-      : null,
+  // Tick so a sticky empty grace can expire and re-resolve without another
+  // Better Auth event.
+  const [, setStickTick] = useState(0);
+
+  const liveUser = data?.user ? mapUser(data.user) : null;
+  const resolved = applySessionObservation({
+    liveUser,
     isPending,
-    isReadFailed: Boolean(error),
+    hasError: Boolean(error),
+  });
+
+  useEffect(() => {
+    if (!resolved.shouldRefetch) return;
+    void refetch();
+    const id = window.setTimeout(() => setStickTick((n) => n + 1), STICKY_EMPTY_GRACE_MS);
+    return () => window.clearTimeout(id);
+  }, [resolved.shouldRefetch, refetch]);
+
+  return {
+    user: resolved.user,
+    isPending: resolved.isPending,
+    isReadFailed: resolved.isReadFailed,
     refetchSession: () => void refetch(),
   };
 }
