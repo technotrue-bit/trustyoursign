@@ -13,6 +13,7 @@ import {
   applyWheel,
   enterSignGalaxy,
   galaxyTravel,
+  pointerTracksHover,
   resetExplore,
   resetTravel,
   seekGalaxyPoint,
@@ -39,6 +40,12 @@ function landInside(index = 4) {
 
 describe("explore look inside a locked galaxy", () => {
   beforeEach(() => landInside(4));
+
+  it("touch does not arm hover sway — only mouse does", () => {
+    assert.equal(pointerTracksHover("mouse"), true);
+    assert.equal(pointerTracksHover("touch"), false);
+    assert.equal(pointerTracksHover("pen"), false);
+  });
 
   it("drag pans look and does not change corridor t", () => {
     const t0 = galaxyTravel.tTarget;

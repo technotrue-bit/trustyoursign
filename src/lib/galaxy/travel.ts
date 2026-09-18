@@ -789,7 +789,17 @@ export function wheelFlies(target: EventTarget | null): boolean {
   return !scrollsItself(el);
 }
 
+/**
+ * Hover / pointer sway is mouse-only. Touch has no hover — tracking the finger
+ * on pointerdown made the sky ease toward the contact point before any drag,
+ * which feels like the camera starts moving on its own.
+ */
+export function pointerTracksHover(pointerType: string) {
+  return pointerType === "mouse";
+}
+
 function trackPtr(e: PointerEvent) {
+  if (!pointerTracksHover(e.pointerType)) return;
   const w = window.innerWidth || 1;
   const h = window.innerHeight || 1;
   galaxyTravel.ptrX = Math.min(0.5, Math.max(-0.5, e.clientX / w - 0.5));
@@ -1009,7 +1019,8 @@ export function ensureFlyInput() {
     pid = e.pointerId;
     originX = lastX = e.clientX;
     originY = lastY = e.clientY;
-    trackPtr(e);
+    if (pointerTracksHover(e.pointerType)) trackPtr(e);
+    else galaxyTravel.ptrOn = false;
     galaxyTravel.handsOn = true;
     if (e.pointerType !== "mouse") e.preventDefault();
     if (e.button === 1) {
@@ -1036,7 +1047,7 @@ export function ensureFlyInput() {
       return;
     }
     if (leftoverLock || mode === "pinch") return;
-    trackPtr(e);
+    if (pointerTracksHover(e.pointerType)) trackPtr(e);
     if (e.pointerId !== pid) return;
     if (mode === "pending") {
       const dist = Math.hypot(e.clientX - originX, e.clientY - originY);
