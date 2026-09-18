@@ -6,3 +6,5 @@ export const MIN_AGE = 16;
 export const OPERATOR = `${SITE_OWNER.name} / Trust Your Sign`;
 export const CONTACT_HANDLE = `@${SITE_OWNER.handle}`;
 export const CONTACT_EMAIL = "privacy@trustyoursign.com";
+/** Product bugs + beta feedback → Ultron AgentMail inbox (not privacy/legal). */
+export const FEEDBACK_EMAIL = "tys-feedback@agentmail.to";
