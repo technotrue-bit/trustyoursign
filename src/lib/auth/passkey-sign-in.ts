@@ -1,5 +1,5 @@
 /**
- * Platform-preferring passkey sign-in for the modal "Continue with passkey" button.
+ * Platform-preferring passkey sign-in for the modal "Face ID on this device" button.
  *
  * Better Auth's stock `authClient.signIn.passkey({ autoFill: false })` calls
  * `startAuthentication` with server options only — no WebAuthn `hints`. On iOS
@@ -9,11 +9,12 @@
  * This wrapper mirrors the Better Auth passkey client ceremony, then injects
  * `hints: ["client-device"]` and any locally remembered credential IDs so the
  * browser prefers the on-device authenticator. Callers MUST gate the button on
- * UVPA + local credential evidence — never start a naked discoverable get.
+ * UVPA + local credential IDs — never start a naked discoverable get.
  *
  * Keep conditional autofill on the stock client:
- *   `authClient.signIn.passkey({ autoFill: true })`
- * — keyboard / saved-passkey Face ID already uses the local credential path.
+ *   `authClient.signIn.passkey({ autoFill: true, returnWebAuthnResponse: true })`
+ * — keyboard / saved-passkey Face ID already uses the local credential path;
+ * capture the assertion id so the modal button can recover after storage loss.
  */
 import {
   WebAuthnError,
@@ -21,15 +22,21 @@ import {
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 import { authClient } from "./client";
-import { withPlatformAuthOptions } from "./passkey-hints";
+import {
+  canSafelyStartPlatformPasskey,
+  withPlatformAuthOptions,
+} from "./passkey-hints";
 import { rememberLocalPasskeyCredentialIds, readLocalPasskeyCredentialIds } from "./passkey-local";
 
 export {
   PLATFORM_AUTH_HINTS,
+  canSafelyStartPlatformPasskey,
   withPlatformAuthHints,
   withPlatformAuthOptions,
 } from "./passkey-hints";
 export {
+  clearLocalPasskeyCredentialIds,
+  hasLocalPasskeyCredentialIds,
   hasUsableLocalPasskeyEvidence,
   markLocalPasskeyAutofillOk,
   readLocalPasskeyCredentialIds,
@@ -63,8 +70,10 @@ export async function platformAuthenticatorAvailable(): Promise<boolean> {
 /**
  * Modal passkey sign-in: generate options → platform-hinted get → verify.
  * Same endpoints and response shape as Better Auth's passkey client.
+ * Refuses to call `startAuthentication` when allowCredentials would be empty.
  */
 export async function signInWithPlatformPasskey(): Promise<PasskeySignInResult> {
+  const localIds = readLocalPasskeyCredentialIds();
   const options = await authClient.$fetch<PublicKeyCredentialRequestOptionsJSON>(
     "/passkey/generate-authenticate-options",
     { method: "GET" },
@@ -82,10 +91,23 @@ export async function signInWithPlatformPasskey(): Promise<PasskeySignInResult> 
     };
   }
 
+  if (!canSafelyStartPlatformPasskey(options.data, localIds)) {
+    return {
+      data: null,
+      error: {
+        code: "NO_ALLOW_CREDENTIALS",
+        message:
+          "Face ID isn’t ready on this device yet. Sign in with email, then enable Face ID under Account.",
+        status: 400,
+        statusText: "BAD_REQUEST",
+      },
+    };
+  }
+
   let assertion: Awaited<ReturnType<typeof startAuthentication>>;
   try {
     assertion = await startAuthentication({
-      optionsJSON: withPlatformAuthOptions(options.data, readLocalPasskeyCredentialIds()),
+      optionsJSON: withPlatformAuthOptions(options.data, localIds),
       useBrowserAutofill: false,
     });
   } catch (err) {

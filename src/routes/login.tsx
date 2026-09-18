@@ -18,10 +18,13 @@ import {
   normalizeOtpInput,
   signInAvailability,
 } from "@/lib/auth/email-otp";
+import { lookupPasskeyCredentialIds } from "@/lib/auth/passkey-lookup";
+import { normalizePasskeyLookupEmail } from "@/lib/auth/passkey-lookup-email";
 import {
   hasUsableLocalPasskeyEvidence,
   markLocalPasskeyAutofillOk,
   platformAuthenticatorAvailable,
+  rememberLocalPasskeyCredentialIds,
   signInWithPlatformPasskey,
 } from "@/lib/auth/passkey-sign-in";
 import { MIN_AGE } from "@/lib/legal";
@@ -41,6 +44,14 @@ function goToProfileAfterPasswordlessGate(platformOk: boolean) {
   goToProfile({
     enablePasskey: platformOk && !hasUsableLocalPasskeyEvidence(),
   });
+}
+
+/** Pull credential id out of Better Auth’s optional webauthn return payload. */
+function credentialIdFromWebauthn(result: {
+  webauthn?: { response?: { id?: string } };
+} | null): string | null {
+  const id = result?.webauthn?.response?.id;
+  return typeof id === "string" && id.length > 0 ? id : null;
 }
 
 export const Route = createFileRoute("/login")({
@@ -126,17 +137,21 @@ function Login() {
 
   // Conditional UI: preload the browser's passkey autofill when the host can
   // finish a passkey sign-in (Safari / iOS offer Face ID in the keyboard bar).
-  // Stock client on purpose — autofill already uses the local credential path.
+  // Capture the assertion id so modal evidence survives after autofill success.
   useEffect(() => {
     if (!passkeyOk || !authEnabled) return;
     let cancelled = false;
     void authClient
-      .signIn.passkey({ autoFill: true })
+      .signIn.passkey({ autoFill: true, returnWebAuthnResponse: true })
       .then((result) => {
         if (cancelled) return;
         if (result.data) {
+          const credId = credentialIdFromWebauthn(
+            result as { webauthn?: { response?: { id?: string } } },
+          );
+          if (credId) rememberLocalPasskeyCredentialIds(credId);
           markLocalPasskeyAutofillOk();
-          setLocalPasskeyEvidence(true);
+          setLocalPasskeyEvidence(hasUsableLocalPasskeyEvidence());
           goToProfile();
         }
       })
@@ -160,7 +175,33 @@ function Login() {
     };
   }, [passkeyOk]);
 
-  // Modal button only when UVPA + local evidence — never a naked discoverable get.
+  // When localStorage was cleared but the account still has passkeys, re-seed
+  // credential IDs once a plausible email is known — then the modal button can
+  // safely call WebAuthn with allowCredentials (no hybrid QR).
+  useEffect(() => {
+    if (!passkeyOk || !authEnabled) return;
+    const lookupEmail = normalizePasskeyLookupEmail(email);
+    if (!lookupEmail) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void lookupPasskeyCredentialIds({ data: lookupEmail })
+        .then((result) => {
+          if (cancelled) return;
+          if (result.credentialIds.length === 0) return;
+          rememberLocalPasskeyCredentialIds(result.credentialIds);
+          setLocalPasskeyEvidence(true);
+        })
+        .catch(() => {
+          /* keep gated UI — recovery is best-effort */
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [passkeyOk, email]);
+
+  // Modal button only when UVPA + credential IDs — never a naked discoverable get.
   const offerModalPasskey = passkeyOk && platformPasskey && localPasskeyEvidence;
 
   // Ticks only while a code is on screen, to re-enable "send another code".
@@ -522,9 +563,9 @@ function Login() {
               </button>
             ) : passkeyOk ? (
               <p className="rounded-md border border-border/70 bg-bg-elevated/40 px-4 py-3 text-xs leading-relaxed text-fg-subtle">
-                Sign in with email, then enable Face ID under Account. The passkey button stays
-                off until Face ID is enrolled on this device — that avoids Safari’s Scan QR Code
-                sheet.
+                Sign in with email, then enable Face ID under Account. The Face ID button stays
+                off until a passkey is enrolled on this device — or until you enter the email
+                that already has one — so Safari never opens its Scan QR Code sheet.
               </p>
             ) : null}
             <p className="pt-1 text-xs leading-relaxed text-fg-subtle">{signInNote}</p>
