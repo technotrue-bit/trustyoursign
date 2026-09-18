@@ -131,7 +131,7 @@ function purposeCatalog(temple: TempleSign): PointPurpose[] {
     {
       kind: "hub",
       title: "Galaxy threshold",
-      body: `You are inside ${temple.name}'s galaxy. Fill out your birth chart to open the nodes deeper in.`,
+      body: `You are inside ${temple.name}'s galaxy. Tap a star to learn this sign — or begin a birth chart for your own sky.`,
     },
   ];
   for (const insight of insights) {
