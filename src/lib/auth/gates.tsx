@@ -1,7 +1,8 @@
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Navigate } from "@tanstack/react-router";
-import { GROK_PROVIDERS, authEnabled, signIn, signOut } from "./client";
+import { GROK_PROVIDERS, authClient, authEnabled, signIn, signOut } from "./client";
 import { hasGateSessionMarker } from "./gate-session-marker";
+import { hardRecoverSession, softRecoverSession } from "./session-recover";
 import { resolveSignInGateState } from "./sign-in-gate";
 import { useCurrentUser, useCurrentUserState } from "./use-current-user";
 
@@ -54,8 +55,43 @@ export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
  * not signed out — we simply never got an answer, which is what a phone waking
  * from the app switcher produces. Offering a retry keeps them signed in through
  * a dropped request instead of stranding them at sign-in.
+ *
+ * On mount we wake the auth server and soft-refetch once (cold functions / sleeping
+ * DB). Try Again wakes again, then hard-reloads — a bare soft refetch was leaving
+ * this screen unchanged so the button looked dead.
  */
-export function SessionUnavailable({ onRetry }: { onRetry: () => void }) {
+/** Cap auto-wake attempts so a failing soft recover cannot remount-loop. */
+let sessionUnavailableAutoWakes = 0;
+
+export function SessionUnavailable() {
+  const { refetch } = authClient.useSession();
+  const [busy, setBusy] = useState(sessionUnavailableAutoWakes === 0);
+  const autoStarted = useRef(false);
+
+  useEffect(() => {
+    if (autoStarted.current) return;
+    autoStarted.current = true;
+    if (sessionUnavailableAutoWakes >= 1) {
+      setBusy(false);
+      return;
+    }
+    sessionUnavailableAutoWakes += 1;
+    let cancelled = false;
+    void (async () => {
+      await softRecoverSession({ refetch });
+      // If soft recover worked, the parent unmounts this screen. If not, clear
+      // busy so Try Again is tappable again.
+      if (!cancelled) {
+        window.setTimeout(() => {
+          if (!cancelled) setBusy(false);
+        }, 800);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refetch]);
+
   return (
     <main className="grid vault-page place-items-center bg-bg px-5 text-fg">
       <div className="mx-auto max-w-sm text-center">
@@ -67,10 +103,15 @@ export function SessionUnavailable({ onRetry }: { onRetry: () => void }) {
         </p>
         <button
           type="button"
-          onClick={onRetry}
-          className="mt-6 inline-flex min-h-11 items-center rounded-full border border-border px-5 text-xs tracking-[0.18em] text-fg uppercase hover:border-accent"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            // Hard reload resets sessionUnavailableAutoWakes with the SPA boot.
+            void hardRecoverSession();
+          }}
+          className="mt-6 inline-flex min-h-11 items-center rounded-full border border-border px-5 text-xs tracking-[0.18em] text-fg uppercase hover:border-accent disabled:cursor-wait disabled:opacity-60"
         >
-          Try again
+          {busy ? "Checking…" : "Try again"}
         </button>
       </div>
     </main>

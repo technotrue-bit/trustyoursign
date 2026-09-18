@@ -13,7 +13,7 @@ import { AccountMenu } from "@/components/overlay/AccountMenu";
 export const Route = createFileRoute("/admin")({ component: Admin });
 
 function Admin() {
-  const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
+  const { user, isPending, isReadFailed } = useCurrentUserState();
   const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [claimed, setClaimed] = useState<boolean | null>(null);
 
@@ -34,7 +34,7 @@ function Admin() {
       </main>
     );
   }
-  if (guard === "unavailable") return <SessionUnavailable onRetry={refetchSession} />;
+  if (guard === "unavailable") return <SessionUnavailable />;
   if (!user) return <RedirectToSignIn />;
   if (!isSiteOwner(user) && claimed !== true) {
     return (

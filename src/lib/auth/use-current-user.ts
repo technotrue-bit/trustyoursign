@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { authClient, authEnabled } from "./client";
+import { softRecoverSession } from "./session-recover";
 import {
   STICKY_EMPTY_GRACE_MS,
   STICKY_REFETCH_OFFSETS_MS,
@@ -48,7 +49,11 @@ export type CurrentUserState = {
    * you to sign-in over a transient miss (see `session-sticky`).
    */
   isReadFailed: boolean;
-  /** Re-read the session (the "try again" path after a failed read). */
+  /**
+   * Re-read the session after a failed read. Wakes the auth server first, then
+   * refetches with cookie-cache bypass — a bare `refetch()` is what made Try
+   * Again look dead when the function was still cold.
+   */
   refetchSession: () => void;
 };
 
@@ -92,15 +97,18 @@ export function useCurrentUserState(): CurrentUserState {
   if (!authEnabled) {
     return { user: DEV_USER, isPending: false, isReadFailed: false, refetchSession: () => {} };
   }
-  const { data, isPending, error, refetch } = authClient.useSession();
+  const { data, isPending, isRefetching, error, refetch } = authClient.useSession();
   // Tick so sticky empty grace can expire / re-resolve without another BA event.
   const [, setStickTick] = useState(0);
 
   const liveUser = data?.user ? mapUser(data.user) : null;
+  // Better Auth only sets isPending on the first load (or when data is null).
+  // A Try Again after an error sets isRefetching — treat that as pending so the
+  // guard can leave the dead error screen.
   const resolved = applySessionObservation({
     liveUser,
-    isPending,
-    hasError: Boolean(error),
+    isPending: isPending || isRefetching,
+    hasError: Boolean(error) && !isRefetching,
   });
 
   useEffect(() => {
@@ -109,7 +117,8 @@ export function useCurrentUserState(): CurrentUserState {
     for (const offset of STICKY_REFETCH_OFFSETS_MS) {
       timers.push(
         window.setTimeout(() => {
-          void refetch();
+          // Soft atom retry — wake/reload is reserved for the explicit Try Again path.
+          void refetch({ query: { disableCookieCache: true } });
           setStickTick((n) => n + 1);
         }, offset),
       );
@@ -127,7 +136,9 @@ export function useCurrentUserState(): CurrentUserState {
     user: resolved.user,
     isPending: resolved.isPending,
     isReadFailed: resolved.isReadFailed,
-    refetchSession: () => void refetch(),
+    refetchSession: () => {
+      void softRecoverSession({ refetch });
+    },
   };
 }
 

@@ -113,7 +113,7 @@ function Account() {
       </main>
     );
   }
-  if (guard === "unavailable") return <SessionUnavailable onRetry={refetchSession} />;
+  if (guard === "unavailable") return <SessionUnavailable />;
   if (!user) return <Navigate to="/login" search={{ from: "account" }} />;
 
   const mine = charts?.filter((c) => c.relation === "self") ?? [];
