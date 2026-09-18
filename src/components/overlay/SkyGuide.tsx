@@ -117,6 +117,7 @@ export function SkyGuide() {
   const finish = () => {
     markSkyGuideDone();
     setActive(false);
+    window.dispatchEvent(new Event("vault-sky-guide-done"));
   };
   const next = () => {
     if (!more) {

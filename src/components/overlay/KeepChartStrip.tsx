@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { upsertChart } from "@/lib/charts";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { shouldStartSkyGuide } from "@/lib/chart/sky-guide";
 import { useSession, useSessionStore } from "@/lib/chart/session";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +15,18 @@ export function KeepChartStrip() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [guideBlocking, setGuideBlocking] = useState(() =>
+    shouldStartSkyGuide(session?.kind ?? null),
+  );
 
+  useEffect(() => {
+    setGuideBlocking(shouldStartSkyGuide(session?.kind ?? null));
+    const onDone = () => setGuideBlocking(false);
+    window.addEventListener("vault-sky-guide-done", onDone);
+    return () => window.removeEventListener("vault-sky-guide-done", onDone);
+  }, [session?.kind]);
+
+  if (guideBlocking) return null;
   if (!session || session.kind !== "visitor" || session.savedId || saved) return null;
   if (!user) {
     return (
