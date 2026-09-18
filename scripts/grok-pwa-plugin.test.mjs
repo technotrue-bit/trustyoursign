@@ -595,15 +595,26 @@ test("nitro middleware and its bundled assets exist", () => {
   readFileSync(join(TEMPLATE_ROOT, "public/__grok/install/styles.css"));
 });
 
-test("react root uses shared PWA chrome constants (no capable-meta conflict)", () => {
+test("react root uses browser-safe PWA chrome constants (no capable-meta conflict)", () => {
   const root = readFileSync(join(TEMPLATE_ROOT, "src/routes/__root.tsx"), "utf8");
-  assert.match(root, /from ["']\.\.\/\.\.\/scripts\/grok-pwa-shared\.mjs["']/);
+  assert.match(root, /from ["']\.\.\/\.\.\/scripts\/grok-pwa-chrome\.mjs["']/);
+  assert.doesNotMatch(root, /from ["'].*grok-pwa-shared\.mjs["']/);
   assert.match(root, /PWA_THEME_COLOR/);
   assert.match(root, /PWA_STATUS_BAR_STYLE/);
   assert.match(root, /PWA_ICON_PATHS/);
   assert.doesNotMatch(root, /name:\s*"(?:apple-)?mobile-web-app-capable"/);
   assert.doesNotMatch(root, /content:\s*"#000000"/);
   assert.match(root, /AndroidInstallCapture/);
+});
+
+test("vercel.json forces preview builds (never ignore)", () => {
+  const cfg = JSON.parse(readFileSync(join(TEMPLATE_ROOT, "vercel.json"), "utf8"));
+  assert.equal(cfg.ignoreCommand, "sh scripts/vercel-force-build.sh");
+  assert.equal(cfg.installCommand, "npm install");
+  assert.equal(cfg.buildCommand, "npm run build");
+  assert.equal(cfg.git?.deploymentEnabled, true);
+  const script = readFileSync(join(TEMPLATE_ROOT, "scripts/vercel-force-build.sh"), "utf8");
+  assert.match(script, /exit 1/);
 });
 
 test("vite plugin bakes og identity as a virtual module", () => {

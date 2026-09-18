@@ -5,11 +5,15 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  PWA_ICON_PATHS,
+  PWA_STATUS_BAR_STYLE,
+  PWA_THEME_COLOR,
+} from "./grok-pwa-chrome.mjs";
 
 export const DEFAULT_APP_NAME = "Grok App";
-/** Match app chrome in `src/routes/__root.tsx` (edge-to-edge / safe-area). */
-export const PWA_THEME_COLOR = "#0c0b0a";
-export const PWA_STATUS_BAR_STYLE = "black-translucent";
+/** Re-export browser-safe chrome constants (also imported by `src/routes/__root.tsx`). */
+export { PWA_ICON_PATHS, PWA_STATUS_BAR_STYLE, PWA_THEME_COLOR };
 export const OG_SERVICE_URL_DEFAULT = "https://og.grok.me";
 export const OG_SITE_REL_PATH = "src/lib/og/site.json";
 
@@ -175,14 +179,6 @@ export function renderInstallPageHtml(template, { host, url, site } = {}) {
     .replaceAll("{{APP_NAME}}", escapeHtml(resolvePwaAppName(host, site)))
     .replaceAll("{{APP_URL}}", escapeHtml(stripInstallParams(url)));
 }
-
-/** Manifest + apple-touch icons under public/__grok/. Theme matches document chrome. */
-export const PWA_ICON_PATHS = {
-  appleTouch: "/__grok/icon-180.png",
-  any192: "/__grok/icon-192.png",
-  any512: "/__grok/icon-512.png",
-  maskable512: "/__grok/icon-512-maskable.png",
-};
 
 export function renderWebManifest(hostHeader, site) {
   const name = resolvePwaAppName(hostHeader, site);

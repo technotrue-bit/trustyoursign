@@ -8,16 +8,16 @@ import {
   PWA_ICON_PATHS,
   PWA_STATUS_BAR_STYLE,
   PWA_THEME_COLOR,
-} from "../../scripts/grok-pwa-shared.mjs";
+} from "../../scripts/grok-pwa-chrome.mjs";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Trust Your Sign";
 
 export const Route = createRootRoute({
   head: () => ({
-    // Values come from scripts/grok-pwa-shared.mjs (same source the Vite plugin /
-    // Nitro middleware inject). Omit legacy *-web-app-capable metas — standalone
-    // comes from the manifest. Do not hard-code a second theme color.
+    // Values come from scripts/grok-pwa-chrome.mjs (re-exported by grok-pwa-shared
+    // for the Vite plugin / Nitro middleware). Omit legacy *-web-app-capable metas —
+    // standalone comes from the manifest. Do not hard-code a second theme color.
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },

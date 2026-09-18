@@ -1,4 +1,11 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "ignoreCommand": "sh scripts/vercel-force-build.sh",
+  "git": {
+    "deploymentEnabled": true
+  },
   "headers": [
     {
       "source": "/(.*)",
