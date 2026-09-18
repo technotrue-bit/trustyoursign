@@ -311,11 +311,15 @@ export const auth = betterAuth({
     },
   },
 
-  // Cache the session in the short-lived signed `session_data` cookie so reads
-  // (incl. the client's `/get-session`) skip the DB — this shrinks the "loading"
-  // window and reduces auth flicker. See the `auth` skill for the full
-  // flicker-prevention guidance (gate on `isPending`; SSR the session).
-  session: { cookieCache: { enabled: true, maxAge: 300 } },
+  // Durable sessions: visitors expect to stay signed in when they come back.
+  // expiresIn is the cookie + DB lifetime; updateAge slides that window forward
+  // on active use so a regular visitor is not bounced after a quiet week.
+  // cookieCache keeps `/get-session` off the DB for a few minutes (flicker).
+  session: {
+    expiresIn: 60 * 60 * 24 * 30,
+    updateAge: 60 * 60 * 24,
+    cookieCache: { enabled: true, maxAge: 300 },
+  },
 
   // Local email/password — toggled only via `./email-password` (not a plugin).
   // sendResetPassword is the callback that makes "Forgot password?" real:
