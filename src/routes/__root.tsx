@@ -1,14 +1,23 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
+import { AndroidInstallCapture } from "@/components/AndroidInstallCapture";
 import { StageLock } from "@/components/StageLock";
 import { OwnerBind } from "@/components/OwnerBind";
+import {
+  PWA_ICON_PATHS,
+  PWA_STATUS_BAR_STYLE,
+  PWA_THEME_COLOR,
+} from "../../scripts/grok-pwa-shared.mjs";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Trust Your Sign";
 
 export const Route = createRootRoute({
   head: () => ({
+    // Values come from scripts/grok-pwa-shared.mjs (same source the Vite plugin /
+    // Nitro middleware inject). Omit legacy *-web-app-capable metas — standalone
+    // comes from the manifest. Do not hard-code a second theme color.
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
@@ -17,18 +26,16 @@ export const Route = createRootRoute({
         name: "description",
         content: "Trust Your Sign · a natal fly-through. Pick a sign, fly its sky, unlock a chart.",
       },
-      { name: "theme-color", content: "#0c0b0a" },
+      { name: "theme-color", content: PWA_THEME_COLOR },
       { name: "color-scheme", content: "dark" },
-      { name: "mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-title", content: APP_NAME },
-      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-status-bar-style", content: PWA_STATUS_BAR_STYLE },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
+      { rel: "apple-touch-icon", href: PWA_ICON_PATHS.appleTouch },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -42,22 +49,22 @@ export const Route = createRootRoute({
       lang="en"
       suppressHydrationWarning
       className="antialiased"
-      style={{ background: "#0c0b0a", color: "#efe8dc", colorScheme: "dark" }}
+      style={{ background: PWA_THEME_COLOR, color: "#efe8dc", colorScheme: "dark" }}
     >
       <head>
         <HeadContent />
         <style
           dangerouslySetInnerHTML={{
-            __html:
-              "html,body,#app,#root{background:#0c0b0a!important;color:#efe8dc;margin:0;min-height:100%;}",
+            __html: `html,body,#app,#root{background:${PWA_THEME_COLOR}!important;color:#efe8dc;margin:0;min-height:100%;}`,
           }}
         />
       </head>
-      <body style={{ background: "#0c0b0a", color: "#efe8dc", margin: 0 }}>
+      <body style={{ background: PWA_THEME_COLOR, color: "#efe8dc", margin: 0 }}>
         <a href="#main-content" className="skip-to-content">
           Skip to content
         </a>
         <PreviewHostBridge />
+        <AndroidInstallCapture />
         <StageLock />
         <AuthProvider>
           <OwnerBind />

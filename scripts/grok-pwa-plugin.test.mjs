@@ -456,9 +456,11 @@ test("streaming injector falls back when no </head> is seen", () => {
 test("detects install query", () => {
   assert.equal(isInstallQuery("/?install=1&platform=ios"), true);
   assert.equal(isInstallQuery("/app?foo=1&install=true&platform=ios"), true);
-  assert.equal(isInstallQuery("/?install=1"), false);
-  assert.equal(isInstallQuery("/?install=1&platform=android"), false);
+  assert.equal(isInstallQuery("/?install=1"), true);
+  assert.equal(isInstallQuery("/?install=1&platform=android"), true);
+  assert.equal(isInstallQuery("/?install=true&platform=android"), true);
   assert.equal(isInstallQuery("/?install=0&platform=ios"), false);
+  assert.equal(isInstallQuery("/?install=1&platform=windows"), false);
   assert.equal(isInstallQuery("/"), false);
 });
 
@@ -473,6 +475,8 @@ test("filters non-document paths", () => {
 test("strips install params from the app link", () => {
   assert.equal(stripInstallParams("/?install=1&platform=ios"), "/");
   assert.equal(stripInstallParams("/app?install=1&platform=ios&tab=2"), "/app?tab=2");
+  assert.equal(stripInstallParams("/?install=1&platform=android"), "/");
+  assert.equal(stripInstallParams("/?install=1"), "/");
 });
 
 test("names the install page from host slug", () => {
@@ -505,12 +509,17 @@ test("rejects hosts that are not plain slugs", () => {
 test("renders install page markup", () => {
   const html = renderInstallPage("wild-race.grok.me", "/?install=1&platform=ios", {});
   assert.match(html, /Add Wild Race to your/);
+  assert.match(html, /Install Wild Race/);
   assert.match(html, /\/__grok\/install\/styles\.css/);
   assert.match(html, /href="\/"/);
   assert.equal(html.includes("{{APP_NAME}}"), false);
   assert.equal(html.includes("{{APP_URL}}"), false);
   assert.match(html, /theme-color" content="#0c0b0a"/);
   assert.match(html, /apple-mobile-web-app-status-bar-style" content="black-translucent"/);
+  assert.match(html, /beforeinstallprompt/);
+  assert.match(html, /content-android/);
+  assert.match(html, /Install app/);
+  assert.match(html, /Add to Home screen/);
 });
 
 test("install page uses site title on custom domain", () => {
@@ -518,7 +527,18 @@ test("install page uses site title on custom domain", () => {
     title: "Trust Your Sign",
   });
   assert.match(html, /Add Trust Your Sign to your/);
+  assert.match(html, /Install Trust Your Sign/);
   assert.match(html, /apple-mobile-web-app-title" content="Trust Your Sign"/);
+});
+
+test("android install query renders the same tutorial shell", () => {
+  const html = renderInstallPage("trustyoursign.com", "/?install=1&platform=android", {
+    title: "Trust Your Sign",
+  });
+  assert.match(html, /content-android/);
+  assert.match(html, /beforeinstallprompt/);
+  assert.match(html, /icon-192\.png/);
+  assert.doesNotMatch(html, /\{\{APP_NAME\}\}/);
 });
 
 test("escapes host-derived values in the install page", () => {
@@ -530,7 +550,14 @@ test("renders the manifest with the per-app name", () => {
   const fromHost = JSON.parse(renderWebManifest("wild-race.grok.me", {}));
   assert.equal(fromHost.name, "Wild Race");
   assert.equal(fromHost.short_name, "Wild Race");
+  assert.equal(fromHost.icons.length, 4);
   assert.equal(fromHost.icons[0].src, "/__grok/icon-180.png");
+  assert.equal(fromHost.icons[1].src, "/__grok/icon-192.png");
+  assert.equal(fromHost.icons[1].sizes, "192x192");
+  assert.equal(fromHost.icons[2].src, "/__grok/icon-512.png");
+  assert.equal(fromHost.icons[2].sizes, "512x512");
+  assert.equal(fromHost.icons[3].src, "/__grok/icon-512-maskable.png");
+  assert.equal(fromHost.icons[3].purpose, "maskable");
   assert.equal(fromHost.theme_color, PWA_THEME_COLOR);
   assert.equal(fromHost.background_color, PWA_THEME_COLOR);
 
@@ -562,7 +589,21 @@ test("nitro middleware and its bundled assets exist", () => {
   assert.match(middleware, /grokOgIdentity\.site/);
   readFileSync(join(TEMPLATE_ROOT, "scripts/install-page.html"));
   readFileSync(join(TEMPLATE_ROOT, "public/__grok/icon-180.png"));
+  readFileSync(join(TEMPLATE_ROOT, "public/__grok/icon-192.png"));
+  readFileSync(join(TEMPLATE_ROOT, "public/__grok/icon-512.png"));
+  readFileSync(join(TEMPLATE_ROOT, "public/__grok/icon-512-maskable.png"));
   readFileSync(join(TEMPLATE_ROOT, "public/__grok/install/styles.css"));
+});
+
+test("react root uses shared PWA chrome constants (no capable-meta conflict)", () => {
+  const root = readFileSync(join(TEMPLATE_ROOT, "src/routes/__root.tsx"), "utf8");
+  assert.match(root, /from ["']\.\.\/\.\.\/scripts\/grok-pwa-shared\.mjs["']/);
+  assert.match(root, /PWA_THEME_COLOR/);
+  assert.match(root, /PWA_STATUS_BAR_STYLE/);
+  assert.match(root, /PWA_ICON_PATHS/);
+  assert.doesNotMatch(root, /name:\s*"(?:apple-)?mobile-web-app-capable"/);
+  assert.doesNotMatch(root, /content:\s*"#000000"/);
+  assert.match(root, /AndroidInstallCapture/);
 });
 
 test("vite plugin bakes og identity as a virtual module", () => {
