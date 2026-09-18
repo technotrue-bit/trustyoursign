@@ -24,6 +24,8 @@ import { cn } from "@/lib/utils";
 import { AskPanel } from "./AskPanel";
 import { AuthSlot } from "./AuthSlot";
 import { DetailPanel } from "./DetailPanel";
+import { KeepChartStrip } from "./KeepChartStrip";
+import { SkyGuide } from "./SkyGuide";
 import { TourGuide } from "./TourGuide";
 
 function chartRole(id: ChartId | null, date?: string) {
@@ -67,6 +69,7 @@ function Chrome() {
   const tourRoom = beatById(tourBeat)?.mode;
   return (
     <>
+      <div className="pointer-events-none absolute inset-0 z-0" data-sky-guide="sky" aria-hidden />
       {mode !== "bones" ? (
         <header className="pointer-events-none absolute top-0 right-0 left-0 z-20 flex items-start justify-between gap-4 p-4 pt-[var(--chrome-top)] pl-[max(4.75rem,calc(var(--safe-left)+3.5rem))] md:p-6 md:pt-[max(1.25rem,var(--safe-top))] md:pl-32">
           <div>
@@ -112,6 +115,7 @@ function Chrome() {
       <nav
         className="pointer-events-auto absolute right-0 bottom-0 left-0 z-30 flex w-full items-center justify-center pb-[var(--chrome-bottom)] md:bottom-5 md:left-1/2 md:w-auto md:-translate-x-1/2 md:pb-0"
         aria-label="Chart rooms"
+        data-sky-guide="dock"
       >
         <ul className="flex w-full items-stretch justify-between gap-0 border-t border-border bg-bg-elevated/95 px-1 py-1 md:w-auto md:gap-1 md:rounded-lg md:border md:px-1.5 md:py-1.5">
           {rooms.map((m) => {
@@ -123,6 +127,7 @@ function Chrome() {
                   type="button"
                   onClick={() => setMode(m.id)}
                   aria-pressed={on}
+                  data-sky-guide={m.id === "ask" ? "ask" : undefined}
                   className={cn(
                     "flex min-h-12 w-full flex-col items-center justify-center gap-0.5 rounded-md px-2 text-xs tracking-wide transition-colors duration-150 md:min-h-11 md:flex-row md:gap-2 md:px-3",
                     on ? "bg-bg-subtle text-fg" : "text-fg-muted hover:text-fg",
@@ -145,7 +150,9 @@ export function NatalShell() {
   return (
     <>
       <Chrome />
+      <KeepChartStrip />
       <TourGuide />
+      <SkyGuide />
     </>
   );
 }

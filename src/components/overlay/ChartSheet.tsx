@@ -37,6 +37,7 @@ export function ChartSheet({
         type="button"
         aria-expanded={!folded}
         onClick={() => foldSheet(!folded)}
+        data-sky-guide="sheet"
         className="flex min-h-11 w-full shrink-0 items-center justify-between gap-2 px-4 text-left"
       >
         <span className="text-[0.7rem] tracking-[0.2em] text-fg-subtle uppercase">

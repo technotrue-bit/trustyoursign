@@ -530,6 +530,64 @@ export function exitSignGalaxy() {
   return true;
 }
 
+/**
+ * Snap the corridor camera onto a sign station (no cruise lerp). Used when a
+ * refresh / deep link restores belt selection.
+ */
+export function snapToSign(index: number) {
+  const i = ((Math.round(index) % 12) + 12) % 12;
+  const dest = stationT(i);
+  const sign = CONSTELLATIONS[i];
+  if (!sign) return false;
+  if (exploringSign()) resetExplore(false);
+  clearDirectSeek();
+  galaxyTravel.t = dest;
+  galaxyTravel.tTarget = dest;
+  galaxyTravel.seek = null;
+  galaxyTravel.playUntil = null;
+  galaxyTravel.moved = true;
+  galaxyTravel.awaken = 1;
+  galaxyTravel.birth = 1;
+  galaxyTravel.zoom = 1;
+  galaxyTravel.zoomTarget = 1;
+  primeSignArt(sign.id);
+  armSelectionHold();
+  publishTravel(dest, true);
+  noteControl();
+  return true;
+}
+
+/**
+ * Land inside a sign galaxy immediately (no enter dive). Refresh / deep-link
+ * restore path — same end state as finishing or skipping the dive.
+ */
+export function restoreInsideSignGalaxy(index: number, pointIndex = 0) {
+  const i = ((Math.round(index) % 12) + 12) % 12;
+  const sign = CONSTELLATIONS[i];
+  if (!sign) return false;
+  skipBirth();
+  skipIntro();
+  useGalaxy.getState().markBorn();
+  snapToSign(i);
+  galaxyTravel.exploreSignIndex = i;
+  galaxyTravel.starsUnlocked = false;
+  galaxyTravel.claimPrompt = false;
+  clearEnterSkip();
+  primeSignArt(sign.id);
+  const galaxy = getSignGalaxy(sign.id);
+  landInsideHub();
+  const n = galaxy.points.length;
+  if (n > 0 && pointIndex > 0) {
+    const p = ((Math.round(pointIndex) % n) + n) % n;
+    galaxyTravel.pointIndex = p;
+    galaxyTravel.pointT = p;
+    galaxyTravel.pointTTarget = p;
+    galaxyTravel.pointSeek = null;
+    publishExplore();
+  }
+  return true;
+}
+
 export function setExploreStarsUnlocked(unlocked: boolean) {
   galaxyTravel.starsUnlocked = Boolean(unlocked);
 }
