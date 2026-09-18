@@ -1,0 +1,44 @@
+# After every merge to main, climb the product version one step toward 1.0.
+# Never sets 1.0 — that is a manual edit of src/lib/site-version.json only.
+name: Bump site version
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: ${{ !contains(github.event.head_commit.message, 'chore(site): bump version') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Push the bump commit back to main.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump version
+        id: bump
+        run: |
+          before=$(node -e "const t=require('fs').readFileSync('src/lib/site-version.ts','utf8'); const m=t.match(/export const SITE_VERSION = \"([^\"]+)\";/); if(!m) process.exit(1); console.log(m[1])")
+          node scripts/bump-site-version.mjs
+          after=$(node -e "const t=require('fs').readFileSync('src/lib/site-version.ts','utf8'); const m=t.match(/export const SITE_VERSION = \"([^\"]+)\";/); if(!m) process.exit(1); console.log(m[1])")
+          echo "before=$before" >> "$GITHUB_OUTPUT"
+          echo "after=$after" >> "$GITHUB_OUTPUT"
+          if [ "$before" = "$after" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/site-version.ts
+          git commit -m "chore(site): bump version to ${{ steps.bump.outputs.after }}"
+          git push

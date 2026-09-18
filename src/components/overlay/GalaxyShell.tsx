@@ -11,8 +11,10 @@ import { SignStrip } from "./SignStrip";
 import { AuthSlot } from "./AuthSlot";
 import { LegalFooter } from "./LegalFooter";
 import { SignGalaxyHud } from "./SignGalaxyHud";
+import { siteVersionChrome } from "@/lib/site-version";
 
 export function GalaxyShell() {
+  const versionChrome = siteVersionChrome();
   const moved = useGalaxy((s) => s.moved);
   const signIndex = useGalaxy((s) => s.signIndex);
   const born = useGalaxy((s) => s.born);
@@ -72,9 +74,9 @@ export function GalaxyShell() {
             data-no-fly
             className="pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] max-w-[4.5rem] text-[0.6rem] leading-tight tracking-[0.18em] text-fg-subtle uppercase md:max-w-none"
             style={{ opacity: worldFade }}
-            aria-label="Closed beta version 0.1"
+            aria-label={versionChrome.ariaLabel}
           >
-            Closed beta · V.01
+            {versionChrome.text}
           </p>
           <div
             data-no-fly
