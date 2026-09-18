@@ -175,7 +175,10 @@ export function applySessionObservation(input: StickySessionObservation): Sticky
   }
 
   if (input.hasError) {
-    // Network / 429 / server hiccup — cookie may still be good.
+    // Network / 429 / server hiccup — cookie may still be good. Do not flip
+    // shouldRefetch here: pairing that with isRefetching→pending would restart
+    // the sticky timer effect in a tight loop. SessionUnavailable wakes the
+    // server and soft-retries on mount; Try Again hard-reloads.
     return {
       user: held,
       isPending: false,
