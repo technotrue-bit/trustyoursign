@@ -102,7 +102,7 @@ export function fromVisitor(input: {
     selection: null,
     hovered: null,
     tourBeat: null,
-    sheetFolded: false,
+    sheetFolded: true,
   };
 }
 
@@ -169,11 +169,11 @@ export function fromShelf(input: {
     nativity: input.nativity ?? null,
     skyNatal: input.skyNatal,
     origin: input.origin,
-    mode: safeMode("shelf", input.mode, "ask"),
+    mode: safeMode("shelf", input.mode, "sky"),
     selection: null,
     hovered: null,
     tourBeat: null,
-    sheetFolded: false,
+    sheetFolded: true,
   };
 }
 
