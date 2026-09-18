@@ -1466,6 +1466,8 @@ function TempleRig() {
             _cam.addScaledVector(_camRight, -lx * 0.72);
             _cam.addScaledVector(_camUp, ly * 0.68);
           }
+          // Mouse hover peek only — touch must not sway until a real drag
+          // (ptrOn stays false for fingers; see pointerTracksHover).
           if (!galaxyTravel.dragging && galaxyTravel.ptrOn) {
             _look.x += galaxyTravel.ptrX * 0.35;
             _look.y += -galaxyTravel.ptrY * 0.2;

@@ -78,9 +78,15 @@ const SEEK_FRAME_ZOOM = 1.12;
 /** Corridor pinch stays tighter so the hero station doesn't drift out. */
 const CORRIDOR_ZOOM_MIN = 1;
 const CORRIDOR_ZOOM_MAX = 2.7;
-/** Drag pixels → look units. Grab-the-sky: drag right moves stars right. */
-const EXPLORE_LOOK_DRAG_X = 78;
-const EXPLORE_LOOK_DRAG_Y = 92;
+/**
+ * Drag pixels → look units. Higher = calmer pan (more pixels per degree of look).
+ * Tuned so a finger swipe feels deliberate, not hypersensitive.
+ * Grab-the-sky: drag right moves stars right.
+ */
+const EXPLORE_LOOK_DRAG_X = 115;
+const EXPLORE_LOOK_DRAG_Y = 135;
+/** Touch used to run 1.7× mouse; that made phones whip. Stay near parity. */
+const EXPLORE_LOOK_TOUCH_FEEL = 1.05;
 /** Look units per second while WASD / arrows are held. */
 const EXPLORE_LOOK_KEY_RATE = 3.2;
 /** Below this a wheel impulse is trackpad momentum dribble, not a new flick. */
@@ -783,7 +789,17 @@ export function wheelFlies(target: EventTarget | null): boolean {
   return !scrollsItself(el);
 }
 
+/**
+ * Hover / pointer sway is mouse-only. Touch has no hover — tracking the finger
+ * on pointerdown made the sky ease toward the contact point before any drag,
+ * which feels like the camera starts moving on its own.
+ */
+export function pointerTracksHover(pointerType: string) {
+  return pointerType === "mouse";
+}
+
 function trackPtr(e: PointerEvent) {
+  if (!pointerTracksHover(e.pointerType)) return;
   const w = window.innerWidth || 1;
   const h = window.innerHeight || 1;
   galaxyTravel.ptrX = Math.min(0.5, Math.max(-0.5, e.clientX / w - 0.5));
@@ -821,7 +837,7 @@ export function setExploreLookHold(x: number, y: number) {
  */
 export function applyExploreLook(dy: number, dx = 0, touch = false) {
   if (!canExploreLook()) return false;
-  const feel = touch ? 1.7 : 1;
+  const feel = touch ? EXPLORE_LOOK_TOUCH_FEEL : 1;
   applyExploreLookOffset(-(dx * feel) / EXPLORE_LOOK_DRAG_X, (dy * feel) / EXPLORE_LOOK_DRAG_Y);
   galaxyTravel.handsOn = true;
   galaxyTravel.awaken = 1;
@@ -1003,7 +1019,8 @@ export function ensureFlyInput() {
     pid = e.pointerId;
     originX = lastX = e.clientX;
     originY = lastY = e.clientY;
-    trackPtr(e);
+    if (pointerTracksHover(e.pointerType)) trackPtr(e);
+    else galaxyTravel.ptrOn = false;
     galaxyTravel.handsOn = true;
     if (e.pointerType !== "mouse") e.preventDefault();
     if (e.button === 1) {
@@ -1030,7 +1047,7 @@ export function ensureFlyInput() {
       return;
     }
     if (leftoverLock || mode === "pinch") return;
-    trackPtr(e);
+    if (pointerTracksHover(e.pointerType)) trackPtr(e);
     if (e.pointerId !== pid) return;
     if (mode === "pending") {
       const dist = Math.hypot(e.clientX - originX, e.clientY - originY);
