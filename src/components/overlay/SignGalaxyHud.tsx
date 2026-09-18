@@ -28,7 +28,7 @@ export function SignGalaxyHud() {
   const sign = explore.signIndex != null ? (CONSTELLATIONS[explore.signIndex] ?? null) : null;
   const galaxy = sign ? getSignGalaxy(sign.id) : null;
   const point = galaxy ? (galaxy.points[explore.pointIndex] ?? galaxy.points[0] ?? null) : null;
-  const { unlocked, lockReason, pointUnlocked, pointLockReason, signedIn } = useSignExploreAccess(
+  const { unlocked, pointUnlocked, pointLockReason, hasChart, signedIn } = useSignExploreAccess(
     sign?.id ?? null,
     { pointIndex: explore.pointIndex, isHub: point?.isHub ?? false },
   );
@@ -45,9 +45,7 @@ export function SignGalaxyHud() {
   const inside = explore.phase === "inside";
   const phaseEntering = explore.phase === "fading" || explore.phase === "diving";
   const entering = phaseEntering || explore.skipPhase !== "idle";
-  /** Guest inside the open preview — real copy, with a sign-in nudge. */
-  const previewPoint = Boolean(point && !point.isHub && !unlocked && pointLockReason == null);
-  /** Non-hub star still behind the gate (auth or chart). */
+  /** Non-hub star still behind a gate (legacy; lore is open for everyone). */
   const lockedPoint = Boolean(point && !point.isHub && !unlocked && pointLockReason != null);
   /** Star held shut only by the Warm tone setting (horror register). */
   const toneSealed = Boolean(
@@ -60,6 +58,8 @@ export function SignGalaxyHud() {
   const hubTone = pointUnlocked ? "Home star" : "First star";
   const hubTitle = point?.purpose.title ?? "";
   const hubBody = point?.purpose.body ?? "";
+  /** Offer natal claim until they already have a timed chart for this sign. */
+  const offerBirthChart = Boolean(inside && point?.isHub && !hasChart);
 
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
@@ -157,7 +157,7 @@ export function SignGalaxyHud() {
                         : point.purpose.body}
                 </Gloss>
               </p>
-              {point.isHub && !signedIn ? (
+              {point.isHub && offerBirthChart && !signedIn ? (
                 <ul className="mt-3 space-y-1 text-xs text-fg-subtle">
                   <li>We don&apos;t sell your data.</li>
                   <li>Your charts don&apos;t train public models.</li>
@@ -165,14 +165,9 @@ export function SignGalaxyHud() {
                   <li>An account exists to save your sky and continue on another device.</li>
                 </ul>
               ) : null}
-              {point.isHub && !unlocked ? (
+              {point.isHub ? (
                 <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
                   Drag to look around. Tap a star to move.
-                </p>
-              ) : null}
-              {previewPoint ? (
-                <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
-                  Free preview star — sign in to open every star.
                 </p>
               ) : null}
               {toneSealed ? (
@@ -271,23 +266,7 @@ export function SignGalaxyHud() {
                 {`At ${point.purpose.title}. ${point.isHub ? "Home star" : lockedPoint ? "Sealed until your chart is kept" : kindLabel(point.purpose.kind)}. Star ${explore.pointIndex + 1} of ${galaxy.points.length}.`}
               </p>
             ) : null}
-            {inside && point?.isHub && lockReason === "auth" ? (
-              <a
-                href="/login"
-                className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
-              >
-                Sign in / Sign up
-              </a>
-            ) : null}
-            {inside && previewPoint ? (
-              <a
-                href="/login"
-                className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-center text-xs leading-[3rem] tracking-[0.22em] text-fg uppercase hover:text-accent"
-              >
-                Sign in / Sign up
-              </a>
-            ) : null}
-            {inside && point?.isHub && lockReason === "chart" ? (
+            {offerBirthChart ? (
               <button
                 type="button"
                 onClick={() => openClaim(sign.id)}
@@ -296,9 +275,15 @@ export function SignGalaxyHud() {
                 Begin birth chart
               </button>
             ) : null}
-            {inside && unlocked ? (
+            {inside && unlocked && hasChart ? (
               <p className="sign-galaxy-copy-body max-w-sm px-2 text-center text-[0.7rem] tracking-wide">
                 Your galaxy is open. Each star holds insight, spice, horror, and warning.
+                {viewerTone === "warm" ? " Dark stars stay shut until you switch tone to Full." : ""}
+              </p>
+            ) : null}
+            {inside && unlocked && !hasChart ? (
+              <p className="sign-galaxy-copy-body max-w-sm px-2 text-center text-[0.7rem] tracking-wide">
+                Every star is open — read the sign here, or begin a birth chart for your own sky.
                 {viewerTone === "warm" ? " Dark stars stay shut until you switch tone to Full." : ""}
               </p>
             ) : null}
