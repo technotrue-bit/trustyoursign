@@ -37,7 +37,8 @@ src/lib/               logic
   galaxy/              flight + 3D maths (travel, constellations, signGalaxy, signVolume…)
   auth/                identity + middleware + gates
   app-data/            viewer-connector data bridge
-  multiplayer/         p2p.ts (570 lines)
+  multiplayer/         p2p.ts (570 lines) — dead WebRTC scaffold; #5 invites do NOT use it
+  bond/                (planned) sun-sign bonds + invite tokens — see architecture #5
         │
         └── .server.ts  the Node-only edge (db, rls, site, owner, desk, auth/server)
 ```
@@ -297,6 +298,19 @@ Repo is **private**, so this is contained — but it becomes a disclosure the mo
 public or a fork/snapshot leaves the org. R1 turns it into a live API exposure.
 
 ---
+
+## 5b. Architecture #5 — Shared sign bonds (planned)
+
+Deferred cooperative layer. Design + phased plan (not implemented yet):
+
+- Spec: `docs/superpowers/specs/2026-09-18-shared-sign-bonds-design.md`
+- Plan: `docs/superpowers/plans/2026-09-18-shared-sign-bonds.md`
+
+| Tier | Surface |
+|---|---|
+| Free (all) | Sun-sign bond (friend / lovers / family / wise) + invite link/code |
+| Premium | Natal compare on a bond (`sky_pass` `bones` \| `vault`) |
+| Later premium | Live co-presence — separate project; do not revive `p2p.ts` for invites |
 
 ## 6. Working on it
 
