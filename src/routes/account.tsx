@@ -64,6 +64,10 @@ function Account() {
   const [charts, setCharts] = useState<SavedChart[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Right after email/OTP sign-in the first /get-session can still read as empty
+  // while the cookie settles. One short grace + refetch avoids bouncing to
+  // /login and stranding a freshly signed-in visitor on the form.
+  const [signedOutGrace, setSignedOutGrace] = useState(true);
 
   const load = () => {
     listCharts()
@@ -84,7 +88,25 @@ function Account() {
     if (owner) void claimSite().catch(() => undefined);
   }, [userId, owner]);
 
-  if (guard === "loading") {
+  useEffect(() => {
+    if (guard !== "signed_out") {
+      setSignedOutGrace(false);
+      return;
+    }
+    let cancelled = false;
+    setSignedOutGrace(true);
+    refetchSession();
+    const id = window.setTimeout(() => {
+      if (!cancelled) setSignedOutGrace(false);
+    }, 600);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+    // `refetchSession` is a new function each render — only re-run when guard flips.
+  }, [guard]);
+
+  if (guard === "loading" || (guard === "signed_out" && signedOutGrace)) {
     return (
       <main id="main-content" className="grid vault-page place-items-center bg-bg text-fg">
         <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />

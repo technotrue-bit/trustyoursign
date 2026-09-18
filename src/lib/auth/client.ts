@@ -194,7 +194,12 @@ export async function signIn(
     errorCallbackURL,
   });
   if (error) throw new Error(error.message ?? "Sign-in failed");
-  if (data?.url) window.location.href = data.url;
+  // Without a URL the broker never starts — resolving here used to leave the
+  // login form permanently busy (buttons disabled, no message). Fail loudly.
+  if (!data?.url) {
+    throw new Error("Sign-in did not start — try again, or use your email instead.");
+  }
+  window.location.href = data.url;
 }
 
 /**
