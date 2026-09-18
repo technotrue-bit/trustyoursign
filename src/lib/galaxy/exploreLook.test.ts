@@ -53,8 +53,8 @@ describe("explore look inside a locked galaxy", () => {
     assert.equal(ok, true);
     assert.equal(galaxyTravel.tTarget, t0);
     assert.ok(
-      galaxyTravel.exploreLookX < -0.5,
-      `drag right should look left (grab-the-sky), got ${galaxyTravel.exploreLookX}`,
+      galaxyTravel.exploreLookX > 0.5,
+      `drag right should look right, got ${galaxyTravel.exploreLookX}`,
     );
     assert.ok(Math.abs(galaxyTravel.exploreLookY) < 0.05);
   });
@@ -63,7 +63,7 @@ describe("explore look inside a locked galaxy", () => {
     const t0 = galaxyTravel.tTarget;
     applyFlyDelta(80, 0, true);
     assert.equal(galaxyTravel.tTarget, t0);
-    assert.ok(galaxyTravel.exploreLookY > 0.5, `drag down should look up, got ${galaxyTravel.exploreLookY}`);
+    assert.ok(galaxyTravel.exploreLookY < -0.5, `drag down should look down, got ${galaxyTravel.exploreLookY}`);
   });
 
   it("enter dive still ignores drag", () => {
@@ -94,7 +94,7 @@ describe("explore look inside a locked galaxy", () => {
       const name = CONSTELLATIONS[i]!.name;
       assert.equal(applyExploreLook(0, 80, true), true, `${name}: look`);
       assert.equal(galaxyTravel.tTarget, t0, `${name}: corridor t must not cruise`);
-      assert.ok(galaxyTravel.exploreLookX < -0.3, `${name}: look X ${galaxyTravel.exploreLookX}`);
+      assert.ok(galaxyTravel.exploreLookX > 0.3, `${name}: look X ${galaxyTravel.exploreLookX}`);
       const galaxy = getSignGalaxy(CONSTELLATIONS[i]!.id);
       assert.ok(galaxy.points.length >= 3, `${name}: travel points`);
       assert.equal(seekGalaxyPoint(1), true, `${name}: seek star 1`);
