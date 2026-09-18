@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { authClient, authEnabled } from "./client";
 import {
   STICKY_EMPTY_GRACE_MS,
+  STICKY_REFETCH_OFFSETS_MS,
   applySessionObservation,
 } from "./session-sticky";
 
@@ -92,8 +93,7 @@ export function useCurrentUserState(): CurrentUserState {
     return { user: DEV_USER, isPending: false, isReadFailed: false, refetchSession: () => {} };
   }
   const { data, isPending, error, refetch } = authClient.useSession();
-  // Tick so a sticky empty grace can expire and re-resolve without another
-  // Better Auth event.
+  // Tick so sticky empty grace can expire / re-resolve without another BA event.
   const [, setStickTick] = useState(0);
 
   const liveUser = data?.user ? mapUser(data.user) : null;
@@ -105,9 +105,22 @@ export function useCurrentUserState(): CurrentUserState {
 
   useEffect(() => {
     if (!resolved.shouldRefetch) return;
-    void refetch();
-    const id = window.setTimeout(() => setStickTick((n) => n + 1), STICKY_EMPTY_GRACE_MS);
-    return () => window.clearTimeout(id);
+    const timers: number[] = [];
+    for (const offset of STICKY_REFETCH_OFFSETS_MS) {
+      timers.push(
+        window.setTimeout(() => {
+          void refetch();
+          setStickTick((n) => n + 1);
+        }, offset),
+      );
+    }
+    // Final tick after the full grace so sticky can drop if still empty.
+    timers.push(
+      window.setTimeout(() => setStickTick((n) => n + 1), STICKY_EMPTY_GRACE_MS),
+    );
+    return () => {
+      for (const id of timers) window.clearTimeout(id);
+    };
   }, [resolved.shouldRefetch, refetch]);
 
   return {
