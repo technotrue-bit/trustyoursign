@@ -1231,3 +1231,93 @@
   color: transparent;
   animation: cookie-notice-glow 5.5s ease-in-out infinite;
 }
+
+/* Sky guide — soft float-in beside targets */
+@keyframes sky-guide-in {
+  0% {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+.sky-guide-card {
+  animation: sky-guide-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.sky-guide-glow {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent) 55%, transparent),
+    0 0 24px color-mix(in oklab, var(--color-accent) 22%, transparent);
+  border-radius: 0.75rem;
+  transition: box-shadow 0.35s ease;
+}
+
+/* Fairy / star word reveal */
+@keyframes star-reveal-word {
+  0% {
+    opacity: 0;
+    filter: blur(4px);
+    text-shadow: 0 0 12px color-mix(in oklab, #f0d4a1 0%, transparent);
+    transform: translateY(0.35em);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(0);
+    text-shadow: 0 0 10px color-mix(in oklab, #f0d4a1 55%, transparent);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    text-shadow: 0 0 0 transparent;
+    transform: translateY(0);
+  }
+}
+
+.star-reveal-word {
+  display: inline-block;
+  opacity: 0;
+  animation: star-reveal-word 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.star-reveal-word::after {
+  content: none;
+}
+
+.star-reveal-word:nth-child(3n)::after {
+  content: "✧";
+  margin-left: 0.1em;
+  font-size: 0.55em;
+  vertical-align: super;
+  opacity: 0;
+  color: color-mix(in oklab, #f0d4a1 80%, var(--color-fg));
+  animation: star-twinkle 0.9s ease-out forwards;
+  animation-delay: inherit;
+}
+
+.star-reveal-word:nth-child(6n)::after {
+  content: "✦";
+}
+
+.star-reveal-plain {
+  display: inline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sky-guide-card {
+    animation: none;
+  }
+
+  .star-reveal-word {
+    opacity: 1;
+    animation: none;
+  }
+
+  .star-reveal-word::after {
+    display: none;
+  }
+}
