@@ -1,4 +1,5 @@
-import { useEffect, useState, type ComponentType, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, type ComponentType, lazy, Suspense } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { getResearchChart } from "@/lib/chart/research";
 import {
   useClaim,
@@ -10,20 +11,32 @@ import {
   roomsFor,
 } from "@/lib/chart/session";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
+import { signIndexOf } from "@/lib/chart/sign-canon";
 import { useGalaxy } from "@/lib/galaxy/store";
 import {
   ensureAutoClock,
   ensureFlyInput,
   galaxyTravel,
   prefersReducedMotion,
+  restoreInsideSignGalaxy,
   seekSign,
   setPaused,
   skipBirth,
+  snapToSign,
   stopAutoClock,
 } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
 import { readGuestDraft } from "@/lib/ui/guestDraft";
 import { readMotionPaused } from "@/lib/ui/motionPreference";
+import {
+  placeFromLiveState,
+  placesEqual,
+  resolveBootPlace,
+  savePlaceSession,
+  searchFromPlace,
+  type SkyPlace,
+  type SkyPlaceSearch,
+} from "@/lib/ui/skyPlace";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { GalaxyShell } from "./GalaxyShell";
@@ -45,10 +58,43 @@ const FALLBACK_NOTE =
 type VaultAppProps = {
   /** From route search — keeps SSR/client mesh-review branch in sync. */
   meshParam?: string;
+  /** Validated home search — used once on boot to restore place after refresh. */
+  placeSearch?: SkyPlaceSearch;
 };
 
-export function VaultApp({ meshParam }: VaultAppProps = {}) {
+function applyBootPlace(place: SkyPlace): void {
+  if (place.kind === "home") return;
+  skipIntro();
+  skipBirth();
+  useGalaxy.getState().markBorn();
+  if (place.kind === "library") {
+    useSessionStore.getState().openLibrary();
+    return;
+  }
+  if (place.kind === "research") {
+    void getResearchChart({ data: place.id })
+      .then((nat) => {
+        useSessionStore.getState().openResearch(place.id, nat);
+      })
+      .catch(() => {
+        /* leave the sky where it is */
+      });
+    return;
+  }
+  const index = signIndexOf(place.signId);
+  if (index < 0) return;
+  if (place.kind === "belt") {
+    snapToSign(index);
+    return;
+  }
+  restoreInsideSignGalaxy(index, place.star);
+}
+
+export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   const meshReview = wantsMeshReview(meshParam ? `?mesh=${meshParam}` : "");
+  const navigate = useNavigate({ from: "/" });
+  const placeReady = useRef(false);
+  const lastWritten = useRef<SkyPlace | null>(null);
   const [Scene, setScene] = useState<ComponentType | null>(null);
   const [sceneFailed, setSceneFailed] = useState(false);
   const claim = useClaim();
@@ -62,6 +108,18 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
   // StarBack parity with pre-shell VaultApp: (entered && !shelf) || chat || (origin ?? surface) === "library"
   const showStarBack =
     (entered && !shelf) || claiming || (sessionOrigin ?? surface) === "library";
+
+  const moved = useGalaxy((s) => s.moved);
+  const signIndex = useGalaxy((s) => s.signIndex);
+  const explorePhase = useGalaxy((s) => s.explore.phase);
+  const exploreSignIndex = useGalaxy((s) => s.explore.signIndex);
+  const pointIndex = useGalaxy((s) => s.explore.pointIndex);
+  const researchId = useSessionStore((s) =>
+    s.session?.kind === "research" &&
+    (s.session.chartKey === "joey" || s.session.chartKey === "saige")
+      ? s.session.chartKey
+      : null,
+  );
 
   useEffect(() => {
     // Reduced motion: never import or mount the WebGL scene - the 2D
@@ -160,6 +218,13 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
 
   useEffect(() => {
     bootIntro();
+    // Restore sky place before guest-draft claim so a refresh inside Aries
+    // lands back in that galaxy (claim can still open on top).
+    const boot = resolveBootPlace(placeSearch ?? {});
+    applyBootPlace(boot);
+    lastWritten.current = boot;
+    placeReady.current = true;
+
     // D2/F7: an in-progress guest birth survives reloads and sign-in
     // redirects — reopen it if this tab still holds one and nothing else
     // is open. In-tab storage only (see guestDraft).
@@ -178,7 +243,29 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
     // button's label — a returning viewer lands still if that is how they left.
     if (readMotionPaused()) setPaused(true);
     return () => stopAutoClock();
+    // Boot once from the arrival URL — live sync owns later updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional cold-load restore
   }, []);
+
+  // AccountMenu (and similar) links to `/?desk=…` after the first paint —
+  // apply those without requiring a full document reload.
+  useEffect(() => {
+    if (!placeReady.current) return;
+    const desk = placeSearch?.desk;
+    if (desk === "library") {
+      const st = useSessionStore.getState();
+      if (st.surface === "library" && !st.session) return;
+      applyBootPlace({ kind: "library" });
+      lastWritten.current = { kind: "library" };
+      return;
+    }
+    if (desk === "joey" || desk === "saige") {
+      const st = useSessionStore.getState();
+      if (st.session?.kind === "research" && st.session.chartKey === desk) return;
+      applyBootPlace({ kind: "research", id: desk });
+      lastWritten.current = { kind: "research", id: desk };
+    }
+  }, [placeSearch?.desk]);
 
   useEffect(() => {
     // Dev-only QA hooks — see scripts/qa/enter-capture.mjs (no production cost).
@@ -190,34 +277,48 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
     galaxyTravel.claiming = Boolean(claiming);
   }, [claiming, entered]);
 
+  // Keep the address bar + session backup aligned with the live sky so a
+  // refresh returns to this place instead of the title screen.
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("desk");
-    if (!q) return;
-    const clean = () => {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("desk");
-      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
-    };
-    if (q === "library") {
-      skipIntro();
-      skipBirth();
-      useGalaxy.getState().markBorn();
-      useSessionStore.getState().openLibrary();
-      clean();
+    if (!placeReady.current || meshReview) return;
+    const next = placeFromLiveState({
+      surface,
+      sessionKind,
+      researchId: researchId ?? null,
+      explorePhase,
+      exploreSignIndex,
+      pointIndex,
+      moved,
+      signIndex,
+      signIdAt: (i) => CONSTELLATIONS[i]?.id ?? null,
+    });
+    if (lastWritten.current && placesEqual(lastWritten.current, next)) return;
+    // Research charts load async — don't wipe `?desk=joey` while the fetch is in flight.
+    if (
+      lastWritten.current?.kind === "research" &&
+      next.kind === "home" &&
+      sessionKind !== "research"
+    ) {
       return;
     }
-    if (q === "saige" || q === "joey") {
-      skipIntro();
-      skipBirth();
-      useGalaxy.getState().markBorn();
-      void getResearchChart({ data: q })
-        .then((nat) => {
-          useSessionStore.getState().openResearch(q, nat);
-          clean();
-        })
-        .catch(() => clean());
-    }
-  }, []);
+    lastWritten.current = next;
+    savePlaceSession(next);
+    const search = searchFromPlace(next, { mesh: placeSearch?.mesh ?? meshParam });
+    void navigate({ to: "/", search, replace: true });
+  }, [
+    surface,
+    sessionKind,
+    researchId,
+    explorePhase,
+    exploreSignIndex,
+    pointIndex,
+    moved,
+    signIndex,
+    meshReview,
+    meshParam,
+    placeSearch?.mesh,
+    navigate,
+  ]);
 
   // Isolated mesh-review stage — keeps GalaxyIntro / plate hydrate path untouched.
   if (meshReview) return <MeshReviewShell />;
