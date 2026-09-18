@@ -9,6 +9,10 @@ import {
   clearStickySession,
   resetStickySessionForTests,
 } from "./session-sticky.ts";
+import {
+  SESSION_EXPIRES_IN_SEC,
+  STICKY_REFETCH_OFFSETS_MS,
+} from "./session-lifetime.ts";
 
 const alice: AppUser = {
   id: "a1",
@@ -203,5 +207,41 @@ describe("sticky session across empty get-session reads", { concurrency: false }
     });
     assert.equal(cold.user, null);
     assert.equal(window.localStorage.getItem(STICKY_STORAGE_KEY), null);
+  });
+
+  it("sticky TTL matches the durable 30-day session cookie", () => {
+    assert.equal(STICKY_STORAGE_TTL_MS, SESSION_EXPIRES_IN_SEC * 1000);
+  });
+
+  it("holds through the full multi-retry grace before Sign in", () => {
+    applySessionObservation({
+      liveUser: alice,
+      isPending: false,
+      hasError: false,
+      now: 1_000,
+    });
+    applySessionObservation({
+      liveUser: null,
+      isPending: false,
+      hasError: false,
+      now: 1_100,
+    });
+    const lastOffset = STICKY_REFETCH_OFFSETS_MS[STICKY_REFETCH_OFFSETS_MS.length - 1]!;
+    const mid = applySessionObservation({
+      liveUser: null,
+      isPending: false,
+      hasError: false,
+      now: 1_100 + lastOffset,
+    });
+    assert.equal(mid.user?.id, "a1");
+    assert.equal(mid.shouldRefetch, true);
+
+    const gone = applySessionObservation({
+      liveUser: null,
+      isPending: false,
+      hasError: false,
+      now: 1_100 + STICKY_EMPTY_GRACE_MS + 1,
+    });
+    assert.equal(gone.user, null);
   });
 });

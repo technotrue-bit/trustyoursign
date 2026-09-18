@@ -13,23 +13,24 @@
  *
  * Cold returns: in-memory `held` dies on every full reload, so a single empty
  * `/get-session` on first paint used to look like "signed out when I came back."
- * Mirror the last known identity into localStorage (short TTL) so a return visit
- * still gets the grace + refetch before we believe Sign in.
+ * Mirror the last known identity into localStorage (TTL = durable session) so a
+ * return visit still gets multi-retry grace before we believe Sign in.
  */
 
 import type { AppUser } from "./use-current-user";
+import {
+  STICKY_EMPTY_GRACE_MS,
+  STICKY_STORAGE_TTL_MS,
+} from "./session-lifetime.ts";
 
-/** How long a warm identity survives one empty `/get-session` before we believe it. */
-export const STICKY_EMPTY_GRACE_MS = 3_000;
+export {
+  STICKY_EMPTY_GRACE_MS,
+  STICKY_REFETCH_OFFSETS_MS,
+  STICKY_STORAGE_TTL_MS,
+} from "./session-lifetime.ts";
 
 /** localStorage bridge so a full reload still has something to hold through grace. */
 export const STICKY_STORAGE_KEY = "tys.auth.sticky-user";
-
-/**
- * How long a stored identity may bridge cold loads. Kept under the durable
- * session cookie lifetime so we never outlive a real cookie by much.
- */
-export const STICKY_STORAGE_TTL_MS = 60 * 60 * 24 * 7;
 
 type StoredSticky = {
   user: AppUser;
@@ -123,7 +124,7 @@ export type StickySessionResult = {
   user: AppUser | null;
   isPending: boolean;
   isReadFailed: boolean;
-  /** True while holding through an empty success — caller should re-check once. */
+  /** True while holding through an empty success — caller should re-check. */
   shouldRefetch: boolean;
 };
 
@@ -183,8 +184,8 @@ export function applySessionObservation(input: StickySessionObservation): Sticky
     };
   }
 
-  // Successful empty read. Hold a known identity briefly so a transient miss
-  // cannot flip the chrome to "Sign in" mid-click / on cold return.
+  // Successful empty read. Hold a known identity through the retry window so a
+  // transient miss cannot flip the chrome to "Sign in" on cold return.
   if (held) {
     if (emptySince == null) emptySince = now;
     if (now - emptySince < STICKY_EMPTY_GRACE_MS) {
