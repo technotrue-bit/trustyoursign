@@ -171,6 +171,14 @@ function Account() {
           <p className="mt-2 text-sm text-fg-muted">{user.primaryEmail}</p>
         </section>
 
+        <section id="settings" className="mt-8 scroll-mt-24">
+          <h2 className="font-display text-2xl text-fg italic">Settings</h2>
+          <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+            Change email, password, natal-machine preference, or delete your data from the account
+            menu (your initial in the corner) → Settings.
+          </p>
+        </section>
+
         <section id="subscription" className="mt-8 scroll-mt-24">
           <h2 className="font-display text-2xl text-fg italic">Subscription</h2>
           <p className="mt-2 text-sm leading-relaxed text-fg-muted">

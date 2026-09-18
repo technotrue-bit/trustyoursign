@@ -317,6 +317,16 @@ export const auth = betterAuth({
     },
   },
 
+  user: {
+    changeEmail: {
+      enabled: true,
+      // Allow immediate updates when the address is not yet verified (common
+      // for email/password and some federated paths). Verified users still get
+      // a verification mail when email delivery is configured.
+      updateEmailWithoutVerification: true,
+    },
+  },
+
   // Durable sessions: visitors expect to stay signed in when they come back.
   // expiresIn is the cookie + DB lifetime; updateAge slides that window forward
   // on active use so a regular visitor is not bounced after a quiet week.
