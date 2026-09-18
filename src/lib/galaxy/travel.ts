@@ -890,13 +890,13 @@ export function setExploreLookHold(x: number, y: number) {
 }
 
 /**
- * Grab-the-sky pan inside a sign galaxy. Drag right moves the stars right
- * (look left). Does not change corridor t, and does not unseal stars.
+ * Look-around pan inside a sign galaxy. Drag right looks right; drag down
+ * looks down (same sense as a camera stick). Does not change corridor t.
  */
 export function applyExploreLook(dy: number, dx = 0, touch = false) {
   if (!canExploreLook()) return false;
   const feel = touch ? EXPLORE_LOOK_TOUCH_FEEL : 1;
-  applyExploreLookOffset(-(dx * feel) / EXPLORE_LOOK_DRAG_X, (dy * feel) / EXPLORE_LOOK_DRAG_Y);
+  applyExploreLookOffset((dx * feel) / EXPLORE_LOOK_DRAG_X, -(dy * feel) / EXPLORE_LOOK_DRAG_Y);
   galaxyTravel.handsOn = true;
   galaxyTravel.awaken = 1;
   noteControl();

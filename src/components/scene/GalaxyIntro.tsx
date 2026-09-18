@@ -1460,7 +1460,7 @@ function TempleRig() {
           if (lx !== 0 || ly !== 0) {
             _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
             _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
-            // Negative lookX is look-left / grab-right so A and a right-drag agree.
+            // Positive lookX is look-right; drag-right and D agree.
             _look.addScaledVector(_camRight, -lx);
             _look.addScaledVector(_camUp, ly);
             _cam.addScaledVector(_camRight, -lx * 0.72);
