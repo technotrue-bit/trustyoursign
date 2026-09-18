@@ -8,6 +8,7 @@ import {
   readBearerTokenForRequest,
   writeSessionBearerToken,
 } from "./bearer-storage";
+import { clearStickySession } from "./session-sticky";
 
 /**
  * Better Auth client for this React SPA (browser-side).
@@ -25,6 +26,14 @@ import {
  */
 export const authClient = createAuthClient({
   plugins: [genericOAuthClient(), emailOTPClient(), passkeyClient()],
+  // Focus/visibility refetch is how a warm session gets wiped on iPhone: Safari
+  // flaps visibility (app switcher, Face ID sheet, menu), `/get-session` briefly
+  // answers empty, and Better Auth replaces the atom with null — Profile clicks
+  // then look like a sign-out. Sticky session covers the miss; skipping the
+  // automatic focus refetch stops the miss from being invited.
+  sessionOptions: {
+    refetchOnWindowFocus: false,
+  },
   fetchOptions: {
     onRequest(ctx) {
       const token = getBearerToken();
@@ -269,6 +278,9 @@ function waitForPopupToken(popup: Window): Promise<string | null> {
  * preview the local clear is sufficient, so it always resolves.
  */
 export async function signOut(redirectTo = "/"): Promise<void> {
+  // Drop sticky identity first so a slow `/get-session` cannot resurrect the
+  // avatar after Log out.
+  clearStickySession();
   await runSignOut({
     livePreview: inLivePreview(),
     hasBearer: Boolean(getBearerToken()),
