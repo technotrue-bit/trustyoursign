@@ -52,8 +52,8 @@ export function ChartSheet({
       </button>
       <div
         className={cn(
-          "chart-sheet__body min-h-0 flex-1 overflow-y-auto px-4 pb-4 md:px-5 md:pb-5",
-          folded && "chart-sheet__body--folded",
+          "chart-sheet__body min-h-0 overflow-y-auto px-4 pb-4 md:px-5 md:pb-5",
+          folded ? "chart-sheet__body--folded flex-none" : "flex-1",
         )}
         aria-hidden={folded}
         inert={folded || undefined}
