@@ -40,6 +40,12 @@ type StoredSticky = {
 let held: AppUser | null = null;
 let emptySince: number | null = null;
 let storageHydrated = false;
+/**
+ * Set by an explicit Log out for the rest of this page's life. Sign-out hard
+ * reloads, so the latch dies with the page — but until then it stops a stale
+ * in-memory session echo from re-populating `held` (see `applySessionObservation`).
+ */
+let explicitSignOut = false;
 
 function storage(): Storage | null {
   if (typeof window === "undefined") return null;
@@ -133,6 +139,7 @@ export function clearStickySession(): void {
   held = null;
   emptySince = null;
   clearStoredSticky();
+  explicitSignOut = true;
 }
 
 /** Test helper — reset module state between cases. */
@@ -140,6 +147,7 @@ export function resetStickySessionForTests(): void {
   held = null;
   emptySince = null;
   storageHydrated = false;
+  explicitSignOut = false;
   clearStoredSticky();
 }
 
@@ -151,6 +159,17 @@ export function resetStickySessionForTests(): void {
 export function applySessionObservation(input: StickySessionObservation): StickySessionResult {
   const now = input.now ?? Date.now();
   hydrateFromStorage(now);
+
+  // After an explicit Log out, never hold or revive an identity again on this
+  // page. Better Auth's cached `data.user` outlives the sign-out call for a
+  // render or two, and without this latch it re-populated `held` straight after
+  // `clearStickySession()` — leaving the chrome signed in against a dead session
+  // while the sticky retry window restarted on every render (an avalanche of
+  // `/get-session` reads that trips the auth rate limiter, after which every
+  // session-dependent control, Log out included, looks dead).
+  if (explicitSignOut) {
+    return { user: null, isPending: false, isReadFailed: false, shouldRefetch: false };
+  }
 
   if (input.liveUser) {
     held = input.liveUser;

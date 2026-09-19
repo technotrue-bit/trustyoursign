@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authClient, authEnabled } from "./client";
 import { softRecoverSession } from "./session-recover";
 import {
@@ -98,6 +98,13 @@ export function useCurrentUserState(): CurrentUserState {
     return { user: DEV_USER, isPending: false, isReadFailed: false, refetchSession: () => {} };
   }
   const { data, isPending, isRefetching, error, refetch } = authClient.useSession();
+  // `refetch` is a fresh identity on most renders. Hold it in a ref so the sticky
+  // retry effect below cannot re-schedule itself every render — that turned the
+  // intended four probes into dozens of `/get-session` calls and tripped the auth
+  // rate limiter, after which Log out (and anything else needing a session read)
+  // silently failed.
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
   // Tick so sticky empty grace can expire / re-resolve without another BA event.
   const [, setStickTick] = useState(0);
 
@@ -118,7 +125,7 @@ export function useCurrentUserState(): CurrentUserState {
       timers.push(
         window.setTimeout(() => {
           // Soft atom retry — wake/reload is reserved for the explicit Try Again path.
-          void refetch({ query: { disableCookieCache: true } });
+          void refetchRef.current({ query: { disableCookieCache: true } });
           setStickTick((n) => n + 1);
         }, offset),
       );
@@ -130,7 +137,7 @@ export function useCurrentUserState(): CurrentUserState {
     return () => {
       for (const id of timers) window.clearTimeout(id);
     };
-  }, [resolved.shouldRefetch, refetch]);
+  }, [resolved.shouldRefetch]);
 
   return {
     user: resolved.user,

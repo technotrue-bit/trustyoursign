@@ -245,3 +245,54 @@ describe("sticky session across empty get-session reads", { concurrency: false }
     assert.equal(gone.user, null);
   });
 });
+
+describe("an explicit sign-out is final for the rest of the page", { concurrency: false }, () => {
+  beforeEach(() => {
+    installLocalStorage();
+    resetStickySessionForTests();
+  });
+
+  it("keeps the identity cleared when a stale session echo arrives", () => {
+    applySessionObservation({ liveUser: alice, isPending: false, hasError: false, now: 1_000 });
+    clearStickySession();
+    // Better Auth hands back the pre-sign-out `data.user` for a render or two; if
+    // that re-populated `held`, the chrome stayed signed in against a dead session.
+    const echo = applySessionObservation({
+      liveUser: alice,
+      isPending: false,
+      hasError: false,
+      now: 1_001,
+    });
+    assert.equal(echo.user, null);
+    assert.equal(echo.shouldRefetch, false);
+    assert.equal(echo.isReadFailed, false);
+  });
+
+  it("does not start the sticky retry window after sign-out", () => {
+    applySessionObservation({ liveUser: alice, isPending: false, hasError: false, now: 1_000 });
+    clearStickySession();
+    // The dead session answers empty — sticky must not hold it through a grace,
+    // which is what restarted the retry timers and flooded `/get-session`.
+    const empty = applySessionObservation({
+      liveUser: null,
+      isPending: false,
+      hasError: false,
+      now: 1_001,
+    });
+    assert.equal(empty.user, null);
+    assert.equal(empty.shouldRefetch, false);
+  });
+
+  it("stays signed out even when the post-sign-out read errors", () => {
+    applySessionObservation({ liveUser: alice, isPending: false, hasError: false, now: 1_000 });
+    clearStickySession();
+    const errored = applySessionObservation({
+      liveUser: null,
+      isPending: false,
+      hasError: true,
+      now: 1_002,
+    });
+    assert.equal(errored.user, null);
+    assert.equal(errored.isReadFailed, false);
+  });
+});
