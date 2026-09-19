@@ -1,13 +1,21 @@
-import { CHAKRAS } from "../chakras";
 import type { AspectDef } from "../aspects";
 import type { ChakraDef } from "../chakras";
+import { CHAKRAS } from "../chakras";
 import type { GateDef, ReadingDef, StepDef } from "../copy";
-import { JOEY_ANGLES } from "../geometry";
+import type { Angles } from "../geometry";
 import type { HouseCusp } from "../houses";
 import { PLANET_LOOK, type PlanetDef } from "../planets";
 import type { Nativity } from "../schema";
 import { SIGNS, type SignDef } from "../signs";
 import type { PlanetId } from "../types";
+
+/** Joey — Whole Sign; MC in Aquarius. Kept with the research book. */
+const JOEY_ANGLES: Angles = {
+  asc: 2 + 14 / 60 + 60,
+  ic: 13 + 6 / 60 + 120,
+  dsc: 2 + 14 / 60 + 240,
+  mc: 13 + 6 / 60 + 300,
+};
 
 const ARI = 0;
 const TAU = 30;
