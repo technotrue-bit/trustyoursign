@@ -1,15 +1,26 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { signOut } from "@/lib/auth/client";
 import { clearBearerTokens } from "@/lib/auth/bearer-storage";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { useSessionStore } from "@/lib/chart/session/store";
 import { isSiteOwner } from "@/lib/owner";
 import { cn } from "@/lib/utils";
 import { AccountSettingsPanel } from "./AccountSettingsPanel";
 
+/** Fold the sheet and park on Sky so the planet wheel is the thing you see. */
+function revealPlanetSky() {
+  const st = useSessionStore.getState();
+  if (!st.session) return false;
+  st.setMode("sky");
+  st.foldSheet(true);
+  return true;
+}
+
 export function AccountMenu() {
   const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<"main" | "settings">("main");
   const [leaving, setLeaving] = useState(false);
@@ -46,6 +57,28 @@ export function AccountMenu() {
   const label = user.displayName ?? user.primaryEmail ?? "Account";
   const owner = isSiteOwner(user);
   const initial = label.charAt(0).toUpperCase();
+
+  const close = () => setOpen(false);
+
+  const openDeskSky = (desk: "joey" | "saige") => {
+    const st = useSessionStore.getState();
+    if (st.session?.kind === "research" && st.session.chartKey === desk) {
+      revealPlanetSky();
+      close();
+      return;
+    }
+    close();
+    void navigate({ to: "/", search: { desk } });
+  };
+
+  const openVisitorSky = () => {
+    if (revealPlanetSky()) {
+      close();
+      return;
+    }
+    close();
+    void navigate({ to: "/account", hash: "charts" });
+  };
 
   return (
     <DropdownMenu.Root
@@ -91,27 +124,60 @@ export function AccountMenu() {
                 <DropdownMenu.Label className="truncate px-4 pt-3 pb-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
                   {owner ? "Owner" : label}
                 </DropdownMenu.Label>
+                {/* Planet wheel first — the natal sky is easy to lose under sheet/rooms. */}
                 {owner ? (
-                  <MenuLink to="/" search={{ desk: "joey" }} onPick={() => setOpen(false)}>
+                  <>
+                    <DropdownMenu.Item
+                      className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle"
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        openDeskSky("joey");
+                      }}
+                    >
+                      The sky
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle"
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        openDeskSky("saige");
+                      }}
+                    >
+                      Saige’s sky
+                    </DropdownMenu.Item>
+                  </>
+                ) : (
+                  <DropdownMenu.Item
+                    className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      openVisitorSky();
+                    }}
+                  >
+                    The sky
+                  </DropdownMenu.Item>
+                )}
+                {owner ? (
+                  <MenuLink to="/" search={{ desk: "joey" }} onPick={close}>
                     My Chart
                   </MenuLink>
                 ) : (
-                  <MenuLink to="/account" hash="charts" onPick={() => setOpen(false)}>
+                  <MenuLink to="/account" hash="charts" onPick={close}>
                     My Chart
                   </MenuLink>
                 )}
-                <MenuLink to="/account" hash="profile" onPick={() => setOpen(false)}>
+                <MenuLink to="/account" hash="profile" onPick={close}>
                   Profile
                 </MenuLink>
-                <MenuLink to="/account" hash="subscription" onPick={() => setOpen(false)}>
+                <MenuLink to="/account" hash="subscription" onPick={close}>
                   Subscription
                 </MenuLink>
                 {owner ? (
                   <>
-                    <MenuLink to="/admin" hash="research" onPick={() => setOpen(false)}>
+                    <MenuLink to="/admin" hash="research" onPick={close}>
                       Research desk
                     </MenuLink>
-                    <MenuLink to="/" search={{ desk: "library" }} onPick={() => setOpen(false)}>
+                    <MenuLink to="/" search={{ desk: "library" }} onPick={close}>
                       The library
                     </MenuLink>
                   </>
