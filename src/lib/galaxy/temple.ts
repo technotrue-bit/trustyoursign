@@ -1,7 +1,6 @@
-import { CatmullRomCurve3, Color, Vector3 } from "three";
+import { SIGN_CANON, SIGN_IDS } from "@/lib/chart/sign-canon";
 import type { ChakraId, Element, Modality, SignId } from "@/lib/chart/types";
-import { SIGNS } from "@/lib/chart/signs";
-import { SIGN_CANON } from "@/lib/chart/sign-canon";
+import { CatmullRomCurve3, Color, Vector3 } from "three";
 
 export const STATION_N = 12;
 export const NAVE = 44;
@@ -170,17 +169,17 @@ const COPY: Record<
   },
 };
 
-export const TEMPLE_SIGNS: TempleSign[] = SIGNS.map((s) => {
-  const c = COPY[s.id]!;
-  const canon = SIGN_CANON[s.id];
+export const TEMPLE_SIGNS: TempleSign[] = SIGN_IDS.map((id) => {
+  const c = COPY[id]!;
+  const canon = SIGN_CANON[id];
   return {
-    id: s.id,
+    id,
     name: canon.name,
     dates: canon.dates,
     month: canon.month,
     element: canon.element,
     modality: canon.modality,
-    palette: PALETTE[s.id],
+    palette: PALETTE[id],
     essence: c.essence,
     lines: c.lines,
     chakra: c.chakra,
