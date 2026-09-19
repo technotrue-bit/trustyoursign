@@ -1,6 +1,10 @@
 import { useEffect } from "react";
 import { resolveAppHeight } from "@/lib/stage-height";
-import { shouldFreezeAppHeight } from "@/lib/ui/stageLockPolicy";
+import {
+  resolveAppTop,
+  shouldApplyVisualViewportScroll,
+  shouldFreezeAppHeight,
+} from "@/lib/ui/stageLockPolicy";
 
 const PATH_FIELD_ROOT = ".birth-chat";
 /** Safari / in-app toolbars land in this band; a keyboard is much taller. */
@@ -32,7 +36,12 @@ export function StageLock() {
       const vv = window.visualViewport;
       const w = Math.round(vv?.width ?? window.innerWidth);
       const liveH = Math.round(vv?.height ?? window.innerHeight);
-      const t = Math.round(vv?.offsetTop ?? 0);
+      // Do not mirror rubber-band offsetTop into --app-top — that is what made
+      // the in-sign galaxy stage "freak out" at the bounce edge on iOS.
+      const t = resolveAppTop({
+        pathFieldFocused,
+        offsetTop: vv?.offsetTop ?? 0,
+      });
       const freeze = shouldFreezeAppHeight({ pathFieldFocused });
       const resolved = resolveAppHeight({
         vvHeight: liveH,
@@ -55,6 +64,11 @@ export function StageLock() {
       root.style.setProperty("--vv-bottom", `${vvBottom}px`);
       root.style.setProperty("--app-aspect", String(Math.round(a * 1000) / 1000));
       window.dispatchEvent(new Event("resize"));
+    };
+
+    const onVvScroll = () => {
+      if (!shouldApplyVisualViewportScroll({ pathFieldFocused })) return;
+      apply();
     };
 
     const onFocusIn = (e: FocusEvent) => {
@@ -80,14 +94,14 @@ export function StageLock() {
     apply();
     const vv = window.visualViewport;
     vv?.addEventListener("resize", apply);
-    vv?.addEventListener("scroll", apply);
+    vv?.addEventListener("scroll", onVvScroll);
     window.addEventListener("resize", apply);
     window.addEventListener("orientationchange", apply);
     document.addEventListener("focusin", onFocusIn, true);
     document.addEventListener("focusout", onFocusOut, true);
     return () => {
       vv?.removeEventListener("resize", apply);
-      vv?.removeEventListener("scroll", apply);
+      vv?.removeEventListener("scroll", onVvScroll);
       window.removeEventListener("resize", apply);
       window.removeEventListener("orientationchange", apply);
       document.removeEventListener("focusin", onFocusIn, true);

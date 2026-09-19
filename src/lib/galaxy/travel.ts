@@ -1116,6 +1116,9 @@ export function ensureFlyInput() {
       lastY = e.clientY;
     }
     if (mode !== "fly") return;
+    // Own the gesture once look/fly has started so iOS rubber-band cannot
+    // scroll the visualViewport under the fixed stage mid-pan.
+    if (e.pointerType !== "mouse") e.preventDefault();
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
     lastX = e.clientX;
