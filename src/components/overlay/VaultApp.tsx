@@ -74,7 +74,11 @@ function applyBootPlace(place: SkyPlace): void {
   if (place.kind === "research") {
     void getResearchChart({ data: place.id })
       .then((nat) => {
-        useSessionStore.getState().openResearch(place.id, nat);
+        const st = useSessionStore.getState();
+        st.openResearch(place.id, nat);
+        // Account-menu "The sky" deep links land on the planet wheel, not under the sheet.
+        st.setMode("sky");
+        st.foldSheet(true);
       })
       .catch(() => {
         /* leave the sky where it is */
