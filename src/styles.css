@@ -1321,3 +1321,41 @@
     display: none;
   }
 }
+
+/* Natal chart sheet: fold reveals the wheel instead of a hard cut. */
+.chart-sheet__body {
+  max-height: min(42dvh, 24rem);
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    max-height 0.32s ease,
+    opacity 0.28s ease,
+    transform 0.28s ease,
+    padding 0.28s ease;
+}
+
+.chart-sheet__body--folded {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(0.35rem);
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+@media (min-width: 768px) {
+  .chart-sheet__body {
+    max-height: min(70dvh, 40rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-sheet__body {
+    transition: none;
+  }
+
+  .chart-sheet__body--folded {
+    transform: none;
+  }
+}
