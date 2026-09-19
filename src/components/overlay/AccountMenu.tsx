@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { signOut } from "@/lib/auth/client";
-import { clearBearerTokens } from "@/lib/auth/bearer-storage";
+import { getResearchChart } from "@/lib/chart/research";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useSessionStore } from "@/lib/chart/session/store";
+import { skipIntro } from "@/lib/galaxy/intro";
+import { useGalaxy } from "@/lib/galaxy/store";
+import { skipBirth } from "@/lib/galaxy/travel";
+import { savePlaceSession } from "@/lib/ui/skyPlace";
 import { isSiteOwner } from "@/lib/owner";
 import { cn } from "@/lib/utils";
-import { AccountSettingsPanel } from "./AccountSettingsPanel";
 
 /** Fold the sheet and park on Sky so the planet wheel is the thing you see. */
 function revealPlanetSky() {
@@ -18,20 +20,36 @@ function revealPlanetSky() {
   return true;
 }
 
+/**
+ * Open a research natal on the planet wheel. Does not wait on `?desk=` URL sync —
+ * that race left taps feeling dead on the galaxy home.
+ */
+async function openResearchSky(desk: "joey" | "saige") {
+  const st = useSessionStore.getState();
+  if (st.session?.kind === "research" && st.session.chartKey === desk) {
+    revealPlanetSky();
+    return;
+  }
+  skipIntro();
+  skipBirth();
+  useGalaxy.getState().markBorn();
+  const nat = await getResearchChart({ data: desk });
+  st.openResearch(desk, nat);
+  st.setMode("sky");
+  st.foldSheet(true);
+  savePlaceSession({ kind: "research", id: desk });
+}
+
 export function AccountMenu() {
   const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [panel, setPanel] = useState<"main" | "settings">("main");
-  const [leaving, setLeaving] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   if (isPending) {
     return <div className="size-11 shrink-0 animate-pulse rounded-full bg-bg-subtle" aria-hidden />;
   }
   if (!user && isReadFailed) {
-    // A failed session READ is not "signed out" (see `session-guard`). Telling a
-    // signed-in visitor to sign in because one request dropped is exactly how a
-    // hiccup reads as being logged out — so offer the retry instead.
     return (
       <button
         type="button"
@@ -54,46 +72,52 @@ export function AccountMenu() {
     );
   }
 
-  const label = user.displayName ?? user.primaryEmail ?? "Account";
   const owner = isSiteOwner(user);
-  const initial = label.charAt(0).toUpperCase();
+  const initial = (user.displayName ?? user.primaryEmail ?? "A").charAt(0).toUpperCase();
 
   const close = () => setOpen(false);
 
   const openDeskSky = (desk: "joey" | "saige") => {
-    const st = useSessionStore.getState();
-    if (st.session?.kind === "research" && st.session.chartKey === desk) {
-      revealPlanetSky();
-      close();
-      return;
-    }
+    if (busy) return;
+    setBusy(true);
     close();
-    void navigate({ to: "/", search: { desk } });
+    void openResearchSky(desk)
+      .then(() => {
+        void navigate({
+          to: "/",
+          search: (prev) => ({ ...prev, desk, sign: undefined, galaxy: undefined, star: undefined }),
+          replace: true,
+        });
+      })
+      .catch(() => {
+        // Fall back to desk URL so VaultApp's boot path can retry.
+        void navigate({ to: "/", search: (prev) => ({ ...prev, desk }) });
+      })
+      .finally(() => setBusy(false));
   };
 
   const openVisitorSky = () => {
+    close();
     if (revealPlanetSky()) {
-      close();
+      void navigate({
+        to: "/",
+        search: (prev) => ({ ...prev, desk: undefined, sign: undefined, galaxy: undefined, star: undefined }),
+        replace: true,
+      });
       return;
     }
-    close();
     void navigate({ to: "/account", hash: "charts" });
   };
 
   return (
-    <DropdownMenu.Root
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setPanel("main");
-      }}
-    >
+    <DropdownMenu.Root open={open} onOpenChange={setOpen}>
       <div className="pointer-events-auto relative" data-no-fly>
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
             aria-label="Account"
-            className="grid size-11 place-items-center rounded-full border border-border bg-bg-elevated/90 text-sm tracking-wide text-fg hover:border-accent"
+            disabled={busy}
+            className="grid size-11 place-items-center rounded-full border border-border bg-bg-elevated/90 text-sm tracking-wide text-fg hover:border-accent disabled:opacity-60"
           >
             {user.profileImageUrl ? (
               <img src={user.profileImageUrl} alt="" className="size-11 rounded-full object-cover" />
@@ -110,143 +134,50 @@ export function AccountMenu() {
             collisionPadding={12}
             onCloseAutoFocus={(e) => e.preventDefault()}
             className={cn(
-              "z-[80] w-64 overflow-hidden rounded-xl border border-border bg-bg-elevated/96 shadow-[var(--shadow-border)] backdrop-blur-sm outline-none",
-              panel === "main" && "py-1",
+              "z-[80] w-56 overflow-hidden rounded-xl border border-border bg-bg-elevated/96 py-1 shadow-[var(--shadow-border)] backdrop-blur-sm outline-none",
             )}
           >
-            {panel === "settings" ? (
-              <AccountSettingsPanel
-                onBack={() => setPanel("main")}
-                onClose={() => setOpen(false)}
-              />
-            ) : (
+            <DropdownMenu.Label className="truncate px-4 pt-3 pb-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
+              The sky
+            </DropdownMenu.Label>
+            {owner ? (
               <>
-                <DropdownMenu.Label className="truncate px-4 pt-3 pb-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
-                  {owner ? "Owner" : label}
-                </DropdownMenu.Label>
-                {/* Planet wheel first — the natal sky is easy to lose under sheet/rooms. */}
-                {owner ? (
-                  <>
-                    <DropdownMenu.Item
-                      className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle"
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        openDeskSky("joey");
-                      }}
-                    >
-                      The sky
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle"
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        openDeskSky("saige");
-                      }}
-                    >
-                      Saige’s sky
-                    </DropdownMenu.Item>
-                  </>
-                ) : (
-                  <DropdownMenu.Item
-                    className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle"
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      openVisitorSky();
-                    }}
-                  >
-                    The sky
-                  </DropdownMenu.Item>
-                )}
-                {owner ? (
-                  <MenuLink to="/" search={{ desk: "joey" }} onPick={close}>
-                    My Chart
-                  </MenuLink>
-                ) : (
-                  <MenuLink to="/account" hash="charts" onPick={close}>
-                    My Chart
-                  </MenuLink>
-                )}
-                <MenuLink to="/account" hash="profile" onPick={close}>
-                  Profile
-                </MenuLink>
-                <MenuLink to="/account" hash="subscription" onPick={close}>
-                  Subscription
-                </MenuLink>
-                {owner ? (
-                  <>
-                    <MenuLink to="/admin" hash="research" onPick={close}>
-                      Research desk
-                    </MenuLink>
-                    <MenuLink to="/" search={{ desk: "library" }} onPick={close}>
-                      The library
-                    </MenuLink>
-                  </>
-                ) : null}
                 <DropdownMenu.Item
-                  className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle"
+                  disabled={busy}
+                  className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:opacity-50"
                   onSelect={(e) => {
                     e.preventDefault();
-                    setPanel("settings");
+                    openDeskSky("joey");
                   }}
                 >
-                  Settings
+                  The sky
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
-                  disabled={leaving}
-                  className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg-muted outline-none hover:bg-bg-subtle hover:text-fg focus:bg-bg-subtle disabled:opacity-50"
+                  disabled={busy}
+                  className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:opacity-50"
                   onSelect={(e) => {
                     e.preventDefault();
-                    setLeaving(true);
-                    try {
-                      sessionStorage.setItem("grok-auth.skip-owner-bind", "1");
-                      clearBearerTokens({
-                        session: sessionStorage,
-                        local: localStorage,
-                      });
-                    } catch {
-                      /* ignore */
-                    }
-                    void signOut("/").catch(() => setLeaving(false));
+                    openDeskSky("saige");
                   }}
                 >
-                  {leaving ? <span aria-live="polite">Leaving…</span> : "Log out"}
+                  Saige’s sky
                 </DropdownMenu.Item>
               </>
+            ) : (
+              <DropdownMenu.Item
+                disabled={busy}
+                className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:opacity-50"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  openVisitorSky();
+                }}
+              >
+                The sky
+              </DropdownMenu.Item>
             )}
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </div>
     </DropdownMenu.Root>
-  );
-}
-
-function MenuLink({
-  to,
-  hash,
-  search,
-  onPick,
-  children,
-}: {
-  to: "/account" | "/admin" | "/" | "/login";
-  hash?: string;
-  search?: { desk?: string };
-  onPick: () => void;
-  children: string;
-}) {
-  // Client-side navigation keeps the Better Auth session atom warm. Hard <a href>
-  // reloads remounted the app, re-ran OwnerBind bearer restore, and were the
-  // moments Joey saw intermittent /login bounces from the account menu.
-  return (
-    <DropdownMenu.Item asChild>
-      <Link
-        to={to}
-        hash={hash}
-        search={search}
-        onClick={onPick}
-        className="flex min-h-11 cursor-pointer items-center px-4 text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle"
-      >
-        {children}
-      </Link>
-    </DropdownMenu.Item>
   );
 }
