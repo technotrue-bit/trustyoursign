@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { clearBearerTokens } from "@/lib/auth/bearer-storage";
+import { signOut } from "@/lib/auth/client";
 import { getResearchChart } from "@/lib/chart/research";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useSessionStore } from "@/lib/chart/session/store";
@@ -10,6 +12,11 @@ import { skipBirth } from "@/lib/galaxy/travel";
 import { savePlaceSession } from "@/lib/ui/skyPlace";
 import { isSiteOwner } from "@/lib/owner";
 import { cn } from "@/lib/utils";
+import { AccountSettingsPanel } from "./AccountSettingsPanel";
+
+/** Row styling for a menu action: sky entries, Settings. */
+const ITEM_CLASS =
+  "flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:opacity-50";
 
 /** Fold the sheet and park on Sky so the planet wheel is the thing you see. */
 function revealPlanetSky() {
@@ -45,6 +52,8 @@ export function AccountMenu() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [panel, setPanel] = useState<"main" | "settings">("main");
+  const [leaving, setLeaving] = useState(false);
 
   if (isPending) {
     return <div className="size-11 shrink-0 animate-pulse rounded-full bg-bg-subtle" aria-hidden />;
@@ -73,7 +82,8 @@ export function AccountMenu() {
   }
 
   const owner = isSiteOwner(user);
-  const initial = (user.displayName ?? user.primaryEmail ?? "A").charAt(0).toUpperCase();
+  const label = user.displayName ?? user.primaryEmail ?? "Account";
+  const initial = label.charAt(0).toUpperCase();
 
   const close = () => setOpen(false);
 
@@ -109,8 +119,28 @@ export function AccountMenu() {
     void navigate({ to: "/account", hash: "charts" });
   };
 
+  const leave = () => {
+    setLeaving(true);
+    try {
+      // Without this flag OwnerBind re-binds the preview owner on the next load,
+      // which reads as "Log out did nothing". Purge the preview bearer too so a
+      // stale token cannot shadow the cleared session.
+      sessionStorage.setItem("grok-auth.skip-owner-bind", "1");
+      clearBearerTokens({ session: sessionStorage, local: localStorage });
+    } catch {
+      /* ignore */
+    }
+    void signOut("/").catch(() => setLeaving(false));
+  };
+
   return (
-    <DropdownMenu.Root open={open} onOpenChange={setOpen}>
+    <DropdownMenu.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setPanel("main");
+      }}
+    >
       <div className="pointer-events-auto relative" data-no-fly>
         <DropdownMenu.Trigger asChild>
           <button
@@ -134,46 +164,72 @@ export function AccountMenu() {
             collisionPadding={12}
             onCloseAutoFocus={(e) => e.preventDefault()}
             className={cn(
-              "z-[80] w-56 overflow-hidden rounded-xl border border-border bg-bg-elevated/96 py-1 shadow-[var(--shadow-border)] backdrop-blur-sm outline-none",
+              "z-[80] w-64 overflow-hidden rounded-xl border border-border bg-bg-elevated/96 shadow-[var(--shadow-border)] backdrop-blur-sm outline-none",
+              panel === "main" && "py-1",
             )}
           >
-            <DropdownMenu.Label className="truncate px-4 pt-3 pb-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
-              The sky
-            </DropdownMenu.Label>
-            {owner ? (
+            {panel === "settings" ? (
+              <AccountSettingsPanel onBack={() => setPanel("main")} onClose={close} />
+            ) : (
               <>
+                <DropdownMenu.Label className="truncate px-4 pt-3 pb-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
+                  {owner ? "Owner" : label}
+                </DropdownMenu.Label>
+                {owner ? (
+                  <>
+                    <DropdownMenu.Item
+                      disabled={busy}
+                      className={ITEM_CLASS}
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        openDeskSky("joey");
+                      }}
+                    >
+                      The sky
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      disabled={busy}
+                      className={ITEM_CLASS}
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        openDeskSky("saige");
+                      }}
+                    >
+                      Saige’s sky
+                    </DropdownMenu.Item>
+                  </>
+                ) : (
+                  <DropdownMenu.Item
+                    disabled={busy}
+                    className={ITEM_CLASS}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      openVisitorSky();
+                    }}
+                  >
+                    The sky
+                  </DropdownMenu.Item>
+                )}
                 <DropdownMenu.Item
-                  disabled={busy}
-                  className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:opacity-50"
+                  className={ITEM_CLASS}
                   onSelect={(e) => {
                     e.preventDefault();
-                    openDeskSky("joey");
+                    setPanel("settings");
                   }}
                 >
-                  The sky
+                  Settings
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
-                  disabled={busy}
-                  className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:opacity-50"
+                  disabled={leaving}
+                  className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg-muted outline-none hover:bg-bg-subtle hover:text-fg focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:opacity-50"
                   onSelect={(e) => {
                     e.preventDefault();
-                    openDeskSky("saige");
+                    leave();
                   }}
                 >
-                  Saige’s sky
+                  {leaving ? <span aria-live="polite">Leaving…</span> : "Log out"}
                 </DropdownMenu.Item>
               </>
-            ) : (
-              <DropdownMenu.Item
-                disabled={busy}
-                className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:opacity-50"
-                onSelect={(e) => {
-                  e.preventDefault();
-                  openVisitorSky();
-                }}
-              >
-                The sky
-              </DropdownMenu.Item>
             )}
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
