@@ -181,6 +181,8 @@ export function FallbackSky({ note }: { note?: string }) {
       const scale = Math.min(w, h) * 0.055;
       const inner = 4.15 * scale;
       const outer = 6.55 * scale;
+      const t = galaxyTravel.shaderTime;
+      const paused = galaxyTravel.paused;
 
       ctx.strokeStyle = "rgba(239,232,220,0.7)";
       ctx.lineWidth = 1.4;
@@ -196,6 +198,14 @@ export function FallbackSky({ note }: { note?: string }) {
       ctx.fillStyle = "rgba(20,18,16,0.55)";
       ctx.beginPath();
       ctx.arc(w * 0.5, h * 0.48, outer + 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Soft band pulse between rings (parity with 3D ecliptic fill).
+      const bandPulse = paused ? 0 : Math.sin(t * 0.55) * 0.012;
+      ctx.fillStyle = `rgba(239,232,220,${0.04 + bandPulse})`;
+      ctx.beginPath();
+      ctx.arc(w * 0.5, h * 0.48, outer, 0, Math.PI * 2);
+      ctx.arc(w * 0.5, h * 0.48, inner, 0, Math.PI * 2, true);
       ctx.fill();
 
       for (const c of nat.houses) {
@@ -220,8 +230,12 @@ export function FallbackSky({ note }: { note?: string }) {
         const [bx, bz] = lonToXZ(pb.lon, pb.radius, nat.angles);
         const a = plot(ax, az, scale);
         const b = plot(bx, bz, scale);
+        let alpha = asp.iron ? 0.42 : 0.16;
+        if (!paused && asp.iron) {
+          alpha *= 1 + Math.sin(t * 0.85 + asp.orb * 4) * 0.055;
+        }
         ctx.strokeStyle = ASPECT_COLOR[asp.type];
-        ctx.globalAlpha = asp.iron ? 0.42 : 0.16;
+        ctx.globalAlpha = alpha;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(a[0], a[1]);
@@ -243,7 +257,20 @@ export function FallbackSky({ note }: { note?: string }) {
       for (const planet of nat.planets) {
         const [x, z] = lonToXZ(planet.lon, planet.radius, nat.angles);
         const p = plot(x, z, scale);
-        const r = Math.max(3, planet.size * 14);
+        const luminous = planet.id === "sun" || planet.id === "moon" || nat.alwaysLabel.includes(planet.id);
+        const pulse = paused ? 1 : 1 + Math.sin(t * 1.6 + planet.lon) * (luminous ? 0.1 : 0.06);
+        const r = Math.max(3, planet.size * 14) * pulse;
+        const halo = r * 2.4;
+        const rg = ctx.createRadialGradient(p[0], p[1], 0, p[0], p[1], halo);
+        rg.addColorStop(0, planet.glow);
+        rg.addColorStop(0.35, `${planet.glow}55`);
+        rg.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.globalAlpha = paused ? 0.22 : 0.28 + (luminous ? 0.06 : 0);
+        ctx.fillStyle = rg;
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], halo, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
         ctx.fillStyle = planet.color;
         ctx.beginPath();
         ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
