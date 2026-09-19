@@ -11,6 +11,7 @@ import { MIN_AGE } from "@/lib/legal";
 import { useSignExploreAccess } from "@/hooks/useSignExploreAccess";
 import { Gloss } from "./Gloss";
 import { AuthSlot } from "./AuthSlot";
+import { MoonSignBriefCard } from "./MoonSignBriefCard";
 import { cn } from "@/lib/utils";
 import type { CSSProperties } from "react";
 
@@ -159,6 +160,7 @@ export function SignGalaxyHud() {
                   . {MIN_AGE}+.
                 </p>
               ) : null}
+              {point.isHub ? <MoonSignBriefCard signId={sign.id} signName={sign.name} /> : null}
             </div>
           ) : null}
 
