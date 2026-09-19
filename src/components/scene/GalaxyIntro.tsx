@@ -140,6 +140,7 @@ import { CornerGalaxies } from "./CornerGalaxies";
 import { SignShell } from "./SignShell";
 import { SignGalaxyField, pointLocalOffset } from "./SignGalaxyField";
 import { getFigureMatch, landingBiasNdc } from "@/lib/galaxy/signAlign";
+import { offsetExploreLookPose } from "@/lib/galaxy/exploreLookPose";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const STAR_PROFILE = starRenderProfile(SMALL);
@@ -1458,13 +1459,10 @@ function TempleRig() {
           const lx = galaxyTravel.exploreLookX;
           const ly = galaxyTravel.exploreLookY;
           if (lx !== 0 || ly !== 0) {
-            _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
-            _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
-            // Positive lookX is look-right; drag-right and D agree.
-            _look.addScaledVector(_camRight, -lx);
-            _look.addScaledVector(_camUp, ly);
-            _cam.addScaledVector(_camRight, -lx * 0.72);
-            _cam.addScaledVector(_camUp, ly * 0.68);
+            // Stable parked-hub screen axes — NOT camera.quaternion. The live
+            // quat already includes last frame's lookAt, so re-applying the same
+            // offsets in that basis oscillates hard at the clamp extremes.
+            offsetExploreLookPose(_cam, _look, lx, ly);
           }
           // Mouse hover peek only — touch must not sway until a real drag
           // (ptrOn stays false for fingers; see pointerTracksHover).
@@ -1484,6 +1482,12 @@ function TempleRig() {
       camera.position.copy(_cam);
       camera.lookAt(_look);
       booted.current = true;
+    } else if (galaxyTravel.explorePhase === "inside") {
+      // Inside pose is already an absolute park + look offset. Soft-lerping
+      // position while lookAt snaps left cam and aim disagreeing every frame,
+      // which amplified the old quaternion-basis jitter.
+      camera.position.copy(_cam);
+      camera.lookAt(_look);
     } else {
       const ease = exploring ? 1 - Math.exp(-d * 1.6) : k;
       camera.position.lerp(_cam, ease);
