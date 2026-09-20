@@ -2,11 +2,17 @@
  * Feedback submit core — rate-limit, validate, send (or refuse clearly).
  *
  * Injectable deps so unit tests can cover validation + "email unconfigured →
- * error" without TanStack Start or a live Resend call.
+ * error" without TanStack Start or a live Resend / Postgres call.
  */
 
 import { emailDeliveryConfigured, type EmailMessage } from "./email/send.server.ts";
 import { buildFeedbackEmail, validateFeedback, type FeedbackRawInput } from "./feedback.ts";
+import {
+  createMemoryFeedbackRateLimitStore,
+  getDefaultFeedbackRateLimitStore,
+  resetFeedbackRateLimitStores,
+  type FeedbackRateLimitStore,
+} from "./feedback-rate-limit.ts";
 
 export type FeedbackSubmitResult =
   | { ok: true }
@@ -18,30 +24,34 @@ export type FeedbackSubmitDeps = {
   clientKey: string;
   now?: number;
   sendEmail?: (message: EmailMessage) => Promise<void>;
+  /**
+   * Injectable limiter (memory in unit tests). When omitted, uses durable
+   * Postgres via `getDefaultFeedbackRateLimitStore()`.
+   */
+  rateLimitStore?: FeedbackRateLimitStore;
 };
 
 /** Soft ceiling: enough for real bugs, low enough to blunt casual spam. */
-const RATE_WINDOW_MS = 15 * 60 * 1000;
-const RATE_MAX = 5;
+export { FEEDBACK_RATE_MAX, FEEDBACK_RATE_WINDOW_MS } from "./feedback-rate-limit.ts";
 
-type Bucket = { count: number; resetAt: number };
-const buckets = new Map<string, Bucket>();
+/** Module memory store for the sync helper (not the durable Postgres path). */
+const syncMemoryStore = createMemoryFeedbackRateLimitStore();
 
-/** Test helper — wipe in-memory buckets between cases. */
+/**
+ * Test helper — wipe module rate-limit singletons (and memory fallback).
+ * Prefer injecting `createMemoryFeedbackRateLimitStore()` in new tests.
+ */
 export function resetFeedbackRateLimit(): void {
-  buckets.clear();
+  syncMemoryStore.reset?.();
+  resetFeedbackRateLimitStores();
 }
 
+/**
+ * Sync memory check for quick probes. Prefer injectable `rateLimitStore` on
+ * `submitFeedback` (Postgres in production).
+ */
 export function checkFeedbackRateLimit(clientKey: string, now = Date.now()): boolean {
-  const key = clientKey.trim().slice(0, 120) || "anon";
-  const existing = buckets.get(key);
-  if (!existing || now >= existing.resetAt) {
-    buckets.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
-    return true;
-  }
-  if (existing.count >= RATE_MAX) return false;
-  existing.count += 1;
-  return true;
+  return syncMemoryStore.consume(clientKey, now) === true;
 }
 
 /**
@@ -58,7 +68,9 @@ export async function submitFeedback(
   }
 
   const now = deps.now ?? Date.now();
-  if (!checkFeedbackRateLimit(deps.clientKey, now)) {
+  const store = deps.rateLimitStore ?? (await getDefaultFeedbackRateLimitStore());
+  const allowed = await store.consume(deps.clientKey, now);
+  if (!allowed) {
     return {
       ok: false,
       error: "Too many notes from this place — try again in a bit, or email directly.",

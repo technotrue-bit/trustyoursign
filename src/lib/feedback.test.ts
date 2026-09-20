@@ -8,10 +8,17 @@ import {
 } from "./feedback.ts";
 import { FEEDBACK_EMAIL } from "./legal.ts";
 import {
-  resetFeedbackRateLimit,
+  createMemoryFeedbackRateLimitStore,
+  createPostgresFeedbackRateLimitStore,
+  FEEDBACK_RATE_MAX,
+  FEEDBACK_RATE_WINDOW_MS,
+  hashFeedbackClientKey,
+} from "./feedback-rate-limit.ts";
+import {
   submitFeedback,
   type FeedbackSubmitResult,
 } from "./feedback-submit.ts";
+import type { Sql } from "./db.ts";
 
 describe("feedback validation", () => {
   it("requires kind and a real message", () => {
@@ -76,8 +83,10 @@ describe("feedback validation", () => {
 });
 
 describe("feedback submit", () => {
+  let rateLimitStore: ReturnType<typeof createMemoryFeedbackRateLimitStore>;
+
   beforeEach(() => {
-    resetFeedbackRateLimit();
+    rateLimitStore = createMemoryFeedbackRateLimitStore();
   });
 
   it("returns a clear 503 when email is not configured — never pretends success", async () => {
@@ -87,6 +96,7 @@ describe("feedback submit", () => {
       {
         clientKey: "test-unconfigured",
         env: {},
+        rateLimitStore,
         sendEmail: async () => {
           sent += 1;
         },
@@ -113,6 +123,7 @@ describe("feedback submit", () => {
       {
         clientKey: "test-ok",
         env: { RESEND_API_KEY: "re_x", EMAIL_FROM: "vault@trustyoursign.com" },
+        rateLimitStore,
         sendEmail: async (msg) => {
           sent.push(msg);
         },
@@ -130,6 +141,7 @@ describe("feedback submit", () => {
       {
         clientKey: "test-fail",
         env: { RESEND_API_KEY: "re_x", EMAIL_FROM: "vault@trustyoursign.com" },
+        rateLimitStore,
         sendEmail: async () => {
           throw new Error("Email provider rejected the message (429): quota");
         },
@@ -145,18 +157,134 @@ describe("feedback submit", () => {
   it("rate-limits after a handful of notes from the same client key", async () => {
     const env = { RESEND_API_KEY: "re_x", EMAIL_FROM: "vault@trustyoursign.com" };
     const sendEmail = async () => {};
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < FEEDBACK_RATE_MAX; i++) {
       const r = await submitFeedback(
         { kind: "bug", message: `Repeated note number ${i} with enough text.` },
-        { clientKey: "same-ip", env, sendEmail },
+        { clientKey: "same-ip", env, sendEmail, rateLimitStore },
       );
       assert.equal(r.ok, true);
     }
     const blocked = await submitFeedback(
       { kind: "bug", message: "One more that should be refused by the soft ceiling." },
-      { clientKey: "same-ip", env, sendEmail },
+      { clientKey: "same-ip", env, sendEmail, rateLimitStore },
     );
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.equal(blocked.status, 429);
+  });
+
+  it("does not share budget across different client keys", async () => {
+    const env = { RESEND_API_KEY: "re_x", EMAIL_FROM: "vault@trustyoursign.com" };
+    const sendEmail = async () => {};
+    for (let i = 0; i < FEEDBACK_RATE_MAX; i++) {
+      const r = await submitFeedback(
+        { kind: "bug", message: `Note A ${i} with enough text here.` },
+        { clientKey: "ip-a", env, sendEmail, rateLimitStore },
+      );
+      assert.equal(r.ok, true);
+    }
+    const other = await submitFeedback(
+      { kind: "bug", message: "Note from a different place should still send." },
+      { clientKey: "ip-b", env, sendEmail, rateLimitStore },
+    );
+    assert.equal(other.ok, true);
+  });
+});
+
+describe("feedback durable rate limit store", () => {
+  it("hashes client keys so raw IPs are not the table key", () => {
+    const a = hashFeedbackClientKey("203.0.113.9");
+    const b = hashFeedbackClientKey("203.0.113.9");
+    const c = hashFeedbackClientKey("198.51.100.1");
+    assert.equal(a, b);
+    assert.notEqual(a, c);
+    assert.equal(a.length, 64);
+    assert.equal(a.includes("203"), false);
+  });
+
+  it("memory store resets the window after FEEDBACK_RATE_WINDOW_MS", () => {
+    const store = createMemoryFeedbackRateLimitStore();
+    const t0 = 1_000_000;
+    for (let i = 0; i < FEEDBACK_RATE_MAX; i++) {
+      assert.equal(store.consume("window-ip", t0), true);
+    }
+    assert.equal(store.consume("window-ip", t0), false);
+    assert.equal(store.consume("window-ip", t0 + FEEDBACK_RATE_WINDOW_MS), true);
+  });
+
+  it("postgres store upserts and enforces the budget without a live DB", async () => {
+    type Row = { hit_count: number; window_start_ms: number; client_key_hash: string };
+    const table = new Map<string, Row>();
+
+    const run = async <T>(text: string, params: unknown[]): Promise<T[]> => {
+      if (/^\s*delete from feedback_rate_limit/i.test(text)) {
+        table.clear();
+        return [] as T[];
+      }
+      if (!/insert into feedback_rate_limit/i.test(text)) {
+        throw new Error(`unexpected sql: ${text}`);
+      }
+      const hash = String(params[0]);
+      const now = Number(params[1]);
+      // Tagged template rebuilds $1,$2,$3,$4,$5 for hash, now, window, now, window branches —
+      // createPostgresFeedbackRateLimitStore passes: hash, now, WINDOW, now, WINDOW, now
+      // Actually looking at the template:
+      // values (${hash}, ${now}, 1)
+      // on conflict ... ${FEEDBACK_RATE_WINDOW_MS} <= ${now} ... ${now}
+      // ... ${FEEDBACK_RATE_WINDOW_MS} <= ${now} then 1 else hit_count + 1
+      // So params: [hash, now, WINDOW, now, now, WINDOW, now]
+      const existing = table.get(hash);
+      if (!existing || existing.window_start_ms + FEEDBACK_RATE_WINDOW_MS <= now) {
+        const row = { client_key_hash: hash, window_start_ms: now, hit_count: 1 };
+        table.set(hash, row);
+        return [{ hit_count: 1 }] as T[];
+      }
+      existing.hit_count += 1;
+      return [{ hit_count: existing.hit_count }] as T[];
+    };
+
+    const sql = Object.assign(
+      async <T = Record<string, unknown>>(
+        strings: TemplateStringsArray,
+        ...values: unknown[]
+      ): Promise<T[]> => {
+        let text = strings[0] ?? "";
+        for (let i = 0; i < values.length; i += 1) text += `$${i + 1}${strings[i + 1] ?? ""}`;
+        return run<T>(text, values);
+      },
+      {
+        query: <T = Record<string, unknown>>(text: string, params: unknown[] = []) =>
+          run<T>(text, params),
+      },
+    ) as Sql;
+
+    const store = createPostgresFeedbackRateLimitStore(sql);
+    const t0 = 5_000_000;
+    for (let i = 0; i < FEEDBACK_RATE_MAX; i++) {
+      assert.equal(await store.consume("pg-ip", t0), true);
+    }
+    assert.equal(await store.consume("pg-ip", t0), false);
+    assert.equal(await store.consume("pg-ip", t0 + FEEDBACK_RATE_WINDOW_MS), true);
+    assert.equal(table.size, 1);
+    const only = [...table.values()][0]!;
+    assert.equal(only.client_key_hash, hashFeedbackClientKey("pg-ip"));
+  });
+
+  it("postgres store fails closed when SQL throws", async () => {
+    const sql = Object.assign(
+      async () => {
+        throw new Error("connection refused");
+      },
+      { query: async () => {
+        throw new Error("connection refused");
+      } },
+    ) as unknown as Sql;
+    let saw = 0;
+    const store = createPostgresFeedbackRateLimitStore(sql, {
+      onError: () => {
+        saw += 1;
+      },
+    });
+    assert.equal(await store.consume("x"), false);
+    assert.equal(saw, 1);
   });
 });
