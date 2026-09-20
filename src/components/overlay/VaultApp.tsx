@@ -31,6 +31,7 @@ import { readMotionPaused } from "@/lib/ui/motionPreference";
 import {
   placeFromLiveState,
   placesEqual,
+  releaseFailedResearchPlace,
   resolveBootPlace,
   savePlaceSession,
   searchFromPlace,
@@ -62,36 +63,43 @@ type VaultAppProps = {
   placeSearch?: SkyPlaceSearch;
 };
 
-function applyBootPlace(place: SkyPlace): void {
-  if (place.kind === "home") return;
+/** Copy for a `?desk=` deep link the server refused — the tap must not look dead. */
+const DESK_LOCKED_NOTE = "That desk isn’t unlocked for this sign-in — flying the open sky.";
+
+/**
+ * Apply a boot place. Resolves `false` only when a research deep link could not
+ * be opened (owner gate refused, network) so the caller can clear the URL and
+ * say so instead of pinning `?desk=` on a sky that never changed.
+ */
+function applyBootPlace(place: SkyPlace): Promise<boolean> {
+  if (place.kind === "home") return Promise.resolve(true);
   skipIntro();
   skipBirth();
   useGalaxy.getState().markBorn();
   if (place.kind === "library") {
     useSessionStore.getState().openLibrary();
-    return;
+    return Promise.resolve(true);
   }
   if (place.kind === "research") {
-    void getResearchChart({ data: place.id })
+    return getResearchChart({ data: place.id })
       .then((nat) => {
         const st = useSessionStore.getState();
         st.openResearch(place.id, nat);
         // Account-menu "The sky" deep links land on the planet wheel, not under the sheet.
         st.setMode("sky");
         st.foldSheet(true);
+        return true;
       })
-      .catch(() => {
-        /* leave the sky where it is */
-      });
-    return;
+      .catch(() => false);
   }
   const index = signIndexOf(place.signId);
-  if (index < 0) return;
+  if (index < 0) return Promise.resolve(true);
   if (place.kind === "belt") {
     snapToSign(index);
-    return;
+    return Promise.resolve(true);
   }
   restoreInsideSignGalaxy(index, place.star);
+  return Promise.resolve(true);
 }
 
 export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
@@ -101,6 +109,25 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   const lastWritten = useRef<SkyPlace | null>(null);
   const [Scene, setScene] = useState<ComponentType | null>(null);
   const [sceneFailed, setSceneFailed] = useState(false);
+  const [deskNotice, setDeskNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<number | null>(null);
+
+  // A research place that fails must let go of the URL: with `?desk=` pinned
+  // every refresh re-ran the same refused fetch and the sky never moved.
+  const bootPlace = (place: SkyPlace) => {
+    lastWritten.current = place;
+    void applyBootPlace(place).then((ok) => {
+      if (ok || place.kind !== "research") return;
+      const released = releaseFailedResearchPlace(lastWritten.current, place.id);
+      if (!released) return;
+      lastWritten.current = released;
+      savePlaceSession(released);
+      void navigate({ to: "/", search: (prev) => ({ ...prev, desk: undefined }), replace: true });
+      setDeskNotice(DESK_LOCKED_NOTE);
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+      noticeTimer.current = window.setTimeout(() => setDeskNotice(null), 7000);
+    });
+  };
   const claim = useClaim();
   const surface = useSurface();
   const entered = useIsEntered();
@@ -225,8 +252,7 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
     // Restore sky place before guest-draft claim so a refresh inside Aries
     // lands back in that galaxy (claim can still open on top).
     const boot = resolveBootPlace(placeSearch ?? {});
-    applyBootPlace(boot);
-    lastWritten.current = boot;
+    bootPlace(boot);
     placeReady.current = true;
 
     // D2/F7: an in-progress guest birth survives reloads and sign-in
@@ -246,7 +272,10 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
     // I5: the stored motion preference applies to the sky itself, not just the
     // button's label — a returning viewer lands still if that is how they left.
     if (readMotionPaused()) setPaused(true);
-    return () => stopAutoClock();
+    return () => {
+      stopAutoClock();
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+    };
     // Boot once from the arrival URL — live sync owns later updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional cold-load restore
   }, []);
@@ -259,16 +288,15 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
     if (desk === "library") {
       const st = useSessionStore.getState();
       if (st.surface === "library" && !st.session) return;
-      applyBootPlace({ kind: "library" });
-      lastWritten.current = { kind: "library" };
+      bootPlace({ kind: "library" });
       return;
     }
     if (desk === "joey" || desk === "saige") {
       const st = useSessionStore.getState();
       if (st.session?.kind === "research" && st.session.chartKey === desk) return;
-      applyBootPlace({ kind: "research", id: desk });
-      lastWritten.current = { kind: "research", id: desk };
+      bootPlace({ kind: "research", id: desk });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootPlace only closes over refs + stable setters
   }, [placeSearch?.desk]);
 
   useEffect(() => {
@@ -351,6 +379,14 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
           <FallbackSky note={prefersReducedMotion() ? undefined : FALLBACK_NOTE} />
         </Suspense>
       )}
+      {deskNotice ? (
+        <p
+          role="status"
+          className="pointer-events-none absolute inset-x-0 top-[calc(var(--chrome-top)+3.5rem)] z-40 px-6 text-center text-[0.6rem] leading-snug tracking-[0.18em] text-fg-subtle uppercase"
+        >
+          {deskNotice}
+        </p>
+      ) : null}
       {showStarBack ? <StarBack /> : null}
       {gate === "galaxy" ? <GalaxyShell /> : null}
       {gate === "claim" ? <ClaimShell /> : null}

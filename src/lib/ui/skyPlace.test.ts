@@ -5,6 +5,7 @@ import {
   placeFromLiveState,
   placeFromSearch,
   placesEqual,
+  releaseFailedResearchPlace,
   resolveBootPlace,
   searchFromPlace,
   type SkyPlace,
@@ -133,5 +134,20 @@ describe("placesEqual / resolveBootPlace", () => {
 
   it("falls back to home when search is empty", () => {
     assert.deepEqual(resolveBootPlace({}), { kind: "home" });
+  });
+});
+
+describe("releaseFailedResearchPlace", () => {
+  it("lets go of the desk that failed so ?desk= is not pinned", () => {
+    assert.deepEqual(releaseFailedResearchPlace({ kind: "research", id: "joey" }, "joey"), {
+      kind: "home",
+    });
+  });
+
+  it("leaves a different desk or place alone", () => {
+    assert.equal(releaseFailedResearchPlace({ kind: "research", id: "saige" }, "joey"), null);
+    assert.equal(releaseFailedResearchPlace({ kind: "belt", signId: "aries" }, "joey"), null);
+    assert.equal(releaseFailedResearchPlace({ kind: "home" }, "joey"), null);
+    assert.equal(releaseFailedResearchPlace(null, "joey"), null);
   });
 });

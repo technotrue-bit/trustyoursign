@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { claimSite } from "@/lib/site";
 
 /**
  * Server-truth owner verdict, cached per signed-in user id.
@@ -18,7 +17,9 @@ const verdicts = new Map<string, OwnerVerdict>();
 const inflight = new Map<string, Promise<OwnerVerdict>>();
 const listeners = new Set<() => void>();
 
-let probe: Probe = () => claimSite();
+// Lazy so this cache stays importable without the server-fn runtime (tests).
+const serverProbe: Probe = () => import("@/lib/site").then((m) => m.claimSite());
+let probe: Probe = serverProbe;
 
 function notify() {
   for (const l of listeners) l();
@@ -65,7 +66,7 @@ export function forgetOwnerVerdict(userId?: string | null) {
 /** Test seam: swap the server probe. Returns a restore function. */
 export function setOwnerProbeForTests(next: Probe | null): () => void {
   const prev = probe;
-  probe = next ?? (() => claimSite());
+  probe = next ?? serverProbe;
   verdicts.clear();
   inflight.clear();
   return () => {
