@@ -12,7 +12,14 @@ import { skipIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { skipBirth } from "@/lib/galaxy/travel";
 import { savePlaceSession } from "@/lib/ui/skyPlace";
-import { forgetOwnerVerdict, resolveOwnerVerdict, useOwnerVerdict } from "@/lib/owner-state";
+import {
+  classifyOwnerFetchError,
+  forgetOwnerVerdict,
+  refreshOwnerVerdict,
+  resolveOwnerVerdict,
+  useOwnerVerdict,
+  type OwnerFetchFailure,
+} from "@/lib/owner-state";
 import { cn } from "@/lib/utils";
 import { AccountSettingsPanel } from "./AccountSettingsPanel";
 
@@ -75,7 +82,7 @@ export function AccountMenu() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<SkyTarget | null>(null);
-  const [error, setError] = useState<{ target: SkyTarget; message: string } | null>(null);
+  const [error, setError] = useState<{ kind: OwnerFetchFailure; retry: () => void } | null>(null);
   const [panel, setPanel] = useState<"main" | "settings">("main");
   const [leaving, setLeaving] = useState(false);
   const owner = useOwnerVerdict(user?.id) === true;
@@ -119,6 +126,21 @@ export function AccountMenu() {
       replace: true,
     });
 
+  /**
+   * A refused owner call means the cached verdict is stale: the cookie lapsed
+   * (embedded/partitioned browsers drop it between reloads) or this identity
+   * was never the owner. Drop the cache so the rows tell the truth, and wake
+   * the session read so a lapsed cookie shows as signed out instead of a
+   * sticky avatar over a dead menu.
+   */
+  const fail = (err: unknown, retry: () => void) => {
+    const kind = classifyOwnerFetchError(err);
+    console.error("[account-menu] owner call failed", kind, err);
+    if (kind !== "unreachable") forgetOwnerVerdict(user.id);
+    if (kind === "signed_out") refetchSession();
+    setError({ kind, retry });
+  };
+
   const openDeskSky = (desk: Desk) => {
     if (locked) return;
     setBusy(desk);
@@ -130,10 +152,7 @@ export function AccountMenu() {
         // retry the same failing fetch and pin the URL with nothing to show.
         void goHome(desk);
       })
-      .catch((err) => {
-        console.error("[account-menu] openResearchSky failed", err);
-        setError({ target: desk, message: "The desk isn’t unlocked for this sign-in." });
-      })
+      .catch((err) => fail(err, () => openDeskSky(desk)))
       .finally(() => setBusy(null));
   };
 
@@ -157,10 +176,7 @@ export function AccountMenu() {
         void navigate({ to: "/account", hash: "charts" });
       }
     })()
-      .catch((err) => {
-        console.error("[account-menu] openOwnSky failed", err);
-        setError({ target: "mine", message: "Your sky couldn’t open. Try again." });
-      })
+      .catch((err) => fail(err, openVisitorSky))
       .finally(() => setBusy((b) => (b === "mine" ? null : b)));
   };
 
@@ -181,35 +197,49 @@ export function AccountMenu() {
 
   const skyRow = (target: SkyTarget, text: string, onClick: () => void) => {
     const isBusy = busy === target;
-    const failed = error?.target === target;
     return (
-      <>
-        <DropdownMenu.Item asChild disabled={locked} onSelect={(e) => e.preventDefault()}>
-          <button
-            type="button"
-            className={ITEM_CLASS}
-            disabled={locked}
-            aria-busy={isBusy || undefined}
-            onClick={onClick}
-          >
-            {isBusy ? <span aria-live="polite">Opening…</span> : text}
-          </button>
-        </DropdownMenu.Item>
-        {failed ? (
-          <div role="alert" className="flex items-center justify-between gap-3 px-4 pt-1 pb-2">
-            <p className="text-xs leading-snug text-wine">{error.message}</p>
-            <button
-              type="button"
-              className="shrink-0 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
-              onClick={onClick}
-            >
-              Retry
-            </button>
-          </div>
-        ) : null}
-      </>
+      <DropdownMenu.Item asChild disabled={locked} onSelect={(e) => e.preventDefault()}>
+        <button
+          type="button"
+          className={ITEM_CLASS}
+          disabled={locked}
+          aria-busy={isBusy || undefined}
+          onClick={onClick}
+        >
+          {isBusy ? <span aria-live="polite">Opening…</span> : text}
+        </button>
+      </DropdownMenu.Item>
     );
   };
+
+  const errorRow = error ? (
+    <div role="alert" className="flex items-center justify-between gap-3 px-4 pt-1 pb-2">
+      <p className="text-xs leading-snug text-wine">
+        {error.kind === "signed_out"
+          ? "Your sign-in lapsed. Sign in again to open the sky."
+          : error.kind === "not_owner"
+            ? "The desk isn’t unlocked for this sign-in."
+            : "The sky didn’t answer. Try again."}
+      </p>
+      {error.kind === "signed_out" ? (
+        <Link
+          to="/login"
+          onClick={close}
+          className="shrink-0 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+        >
+          Sign in
+        </Link>
+      ) : (
+        <button
+          type="button"
+          className="shrink-0 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+          onClick={error.retry}
+        >
+          Retry
+        </button>
+      )}
+    </div>
+  ) : null;
 
   return (
     <DropdownMenu.Root
@@ -217,6 +247,9 @@ export function AccountMenu() {
       onOpenChange={(next) => {
         // A tap outside while a sky is opening must not hide the busy row.
         if (!next && busy !== null) return;
+        // The verdict was asked once at mount; the cookie behind it can lapse
+        // between then and now. Re-ask on every open, keeping rows steady.
+        if (next) void refreshOwnerVerdict(user.id);
         setOpen(next);
         if (!next) {
           setPanel("main");
@@ -267,6 +300,16 @@ export function AccountMenu() {
                 ) : (
                   skyRow("mine", "The sky", openVisitorSky)
                 )}
+                {errorRow}
+                <DropdownMenu.Item asChild disabled={locked}>
+                  <Link
+                    to="/account"
+                    className={cn(ITEM_CLASS, locked && "pointer-events-none opacity-50")}
+                    onClick={close}
+                  >
+                    Profile
+                  </Link>
+                </DropdownMenu.Item>
                 <DropdownMenu.Item
                   className={cn(ITEM_CLASS, locked && "pointer-events-none opacity-50")}
                   disabled={locked}

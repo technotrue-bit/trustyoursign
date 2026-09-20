@@ -6,7 +6,7 @@ import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
 import { openSavedChart, useSessionStore } from "@/lib/chart/session";
 import { isResearchChartId, type ChartId } from "@/lib/chart/types";
 import { SITE_OWNER } from "@/lib/owner";
-import { useOwnerVerdict } from "@/lib/owner-state";
+import { classifyOwnerFetchError, forgetOwnerVerdict, useOwnerVerdict } from "@/lib/owner-state";
 import { Gloss, GlossRoot } from "./Gloss";
 
 export function LibraryShell() {
@@ -42,8 +42,16 @@ function Intro() {
       const nat = await getResearchChart({ data: id });
       useSessionStore.getState().openResearch(id, nat);
     } catch (err) {
-      console.error("[library] openResearch failed", err);
-      setError("That chart wouldn’t open. Try again in a moment.");
+      const kind = classifyOwnerFetchError(err);
+      console.error("[library] openResearch failed", kind, err);
+      if (kind !== "unreachable") forgetOwnerVerdict(user?.id);
+      setError(
+        kind === "signed_out"
+          ? "Your sign-in lapsed. Sign in again to open the desk."
+          : kind === "not_owner"
+            ? "The desk isn’t unlocked for this sign-in."
+            : "That chart wouldn’t open. Try again in a moment.",
+      );
     } finally {
       setBusyId(null);
     }
