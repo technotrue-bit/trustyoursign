@@ -9,7 +9,7 @@ import {
 
 describe("galaxy layers", () => {
   it("covers the three corridor/ambient passes", () => {
-    assert.deepEqual([...GALAXY_LAYER_IDS], ["station-cloud", "sign-disk", "dust-field"]);
+    assert.deepEqual([...GALAXY_LAYER_IDS], ["station-cloud", "dust-field"]);
   });
 
   it("every id has a stable object name", () => {
