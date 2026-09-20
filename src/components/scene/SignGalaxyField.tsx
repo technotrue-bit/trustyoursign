@@ -129,7 +129,8 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
       dust.visible = op > 0.005;
       const du = dustShader.uniforms;
       du.uOpacity!.value = Math.min(1, op);
-      du.uTime!.value = state.clock.elapsedTime;
+      // Shared sky clock so Pause freezes dust with the rest of the field.
+      du.uTime!.value = galaxyTravel.shaderTime;
       // The blast throws the ring outward — debris the galaxy then forms from.
       du.uImpulse!.value = impulse;
       du.uImpulseAmp!.value = burst.debrisPush;
