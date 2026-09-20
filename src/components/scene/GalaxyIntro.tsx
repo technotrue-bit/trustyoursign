@@ -133,6 +133,7 @@ import {
 import { useShelfSession } from "@/lib/chart/session/hooks";
 import { useSessionStore } from "@/lib/chart/session/store";
 import { CelestialSky } from "./CelestialSky";
+import { NebulaBackdrop } from "./NebulaBackdrop";
 import { CornerGalaxies } from "./CornerGalaxies";
 import { SignShell } from "./SignShell";
 import { SignGalaxyField, pointLocalOffset } from "./SignGalaxyField";
@@ -274,10 +275,15 @@ export function GalaxyIntro() {
   }, [gl, scene]);
   return (
     <>
-      <color attach="background" args={["#000000"]} />
+      <color attach="background" args={["#0c0b0a"]} />
       <ambientLight intensity={0.08} color="#c8b8a0" />
       <hemisphereLight args={["#1a1820", "#080706", 0.18]} />
       <StationLight />
+      {sky ? (
+        <Suspense fallback={null}>
+          <NebulaBackdrop />
+        </Suspense>
+      ) : null}
       {sky ? <CelestialSky /> : null}
       {sky ? <CornerGalaxies /> : null}
       {sky ? <Dust /> : null}

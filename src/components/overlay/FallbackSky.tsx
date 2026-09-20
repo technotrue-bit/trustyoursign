@@ -9,6 +9,11 @@ import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temp
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { useSessionStore } from "@/lib/chart/session/store";
+import {
+  loadNebulaImages,
+  paintNebulaWallpaper,
+  type NebulaImageMap,
+} from "@/lib/galaxy/nebulaBackdrop";
 
 type Star = {
   x: number;
@@ -150,6 +155,10 @@ export function FallbackSky({ note }: { note?: string }) {
     let gx = 0.5;
     let gy = 0.48;
     let glow = 0;
+    let nebulae: NebulaImageMap = new Map();
+    void loadNebulaImages(modest).then((map) => {
+      nebulae = map;
+    });
 
     const resize = () => {
       w = canvas.clientWidth;
@@ -573,6 +582,11 @@ export function FallbackSky({ note }: { note?: string }) {
       if (w < 2 || h < 2) return;
       ctx.fillStyle = "#0c0b0a";
       ctx.fillRect(0, 0, w, h);
+      // Fill the void first — vibrant nebula wallpaper behind everything else.
+      // Uses skyTime so Pause freezes drift with the rest of the 2D sky.
+      const earlyLookX = exploring ? galaxyTravel.exploreLookX : 0;
+      const earlyLookY = exploring ? galaxyTravel.exploreLookY : 0;
+      paintNebulaWallpaper(ctx, nebulae, w, h, skyTime, earlyLookX, earlyLookY);
       const sought = stepSeek(galaxyTravel.t, dt);
       galaxyTravel.t = clamp01(sought.t);
       if (sought.active) {
@@ -645,13 +659,14 @@ export function FallbackSky({ note }: { note?: string }) {
       if (birthing) {
         drawBirth(galaxyTravel.birth, cx, cy, depth);
       } else {
+        // Soft parchment lift only — do not gray out the nebula wallpaper.
         const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.72);
-        core.addColorStop(0, "rgba(46, 38, 30, 0.55)");
-        core.addColorStop(0.28, "rgba(22, 18, 16, 0.22)");
+        core.addColorStop(0, "rgba(46, 38, 30, 0.1)");
+        core.addColorStop(0.35, "rgba(22, 18, 16, 0.04)");
         core.addColorStop(1, "rgba(12, 11, 10, 0)");
         ctx.fillStyle = core;
         ctx.fillRect(0, 0, w, h);
-        if (!entered) {
+        if (!entered && !exploring) {
           for (const c of clouds) {
             if (flying) {
               c.z -= vel * dt * 0.08;
@@ -665,7 +680,7 @@ export function FallbackSky({ note }: { note?: string }) {
             const rad = (c.r * depth) / Math.max(0.2, c.z);
             if (!Number.isFinite(px) || rad < 1) continue;
             const g = ctx.createRadialGradient(px, py, 0, px, py, rad);
-            g.addColorStop(0, `rgba(${c.rgb[0]},${c.rgb[1]},${c.rgb[2]},${c.a})`);
+            g.addColorStop(0, `rgba(${c.rgb[0]},${c.rgb[1]},${c.rgb[2]},${c.a * 0.55})`);
             g.addColorStop(1, `rgba(${c.rgb[0]},${c.rgb[1]},${c.rgb[2]},0)`);
             ctx.fillStyle = g;
             ctx.beginPath();
@@ -675,7 +690,7 @@ export function FallbackSky({ note }: { note?: string }) {
         }
         ctx.lineCap = "round";
         for (const s of stars) flyStar(s, dt, vel, depth, flying);
-        if (!entered) {
+        if (!entered && !exploring) {
           for (const s of dust) flyStar(s, dt, vel * 1.08, depth, flying);
         }
         if (!entered) drawPointerGlow();
