@@ -83,11 +83,9 @@ import {
   lerpToward,
   computePlateOpacity,
 } from "@/lib/galaxy/birthchat-slide";
-import { createDiskSim, disposeDisk, kickDiskBurst, stepDisk } from "@/lib/galaxy/disk";
 import { galaxyLayerName } from "@/lib/galaxy/layers";
 import {
   CLOUD_GAIN_IDLE,
-  burstEnvelope,
   cloudBurstGain,
   fieldFade,
   fieldGather,
@@ -112,7 +110,6 @@ import {
   hasVolumeSign,
   interiorCloud,
   primeSignVolumes,
-  volumeChest,
   type SignVolume,
 } from "@/lib/galaxy/signVolume";
 import { buildBirthNebula, makeNebulaMaterial } from "@/lib/galaxy/nebula";
@@ -288,7 +285,7 @@ export function GalaxyIntro() {
       {TEMPLE_SIGNS.map((sign, i) => (
         <Station key={sign.id} index={i} sign={sign} eager={i <= 2} />
       ))}
-      {sky ? <SignDisk /> : null}
+      {sky ? <ArriveBurstTicker /> : null}
       <ChartRing />
       <TempleRig />
     </>
@@ -310,117 +307,24 @@ function StationLight() {
   return <pointLight ref={light} intensity={2.4} distance={48} decay={2} color="#e8c49a" />;
 }
 
-function SignDisk() {
-  const group = useRef<Group>(null);
-  const slideX = useRef(0);
-  const slideY = useRef(0);
-  const scaleBoost = useRef(1);
-  const sim = useMemo(() => createDiskSim(), []);
-  useEffect(() => () => disposeDisk(sim), [sim]);
-  useFrame(({ clock, gl, camera }, dt) => {
-    const g = group.current;
-    if (!g) return;
+/**
+ * Headless: ticks the shared land-burst state once per frame so the station
+ * cloud still gets its arrival swirl/glow kick. This used to live inside the
+ * sign disk's frame loop; the disk itself is gone.
+ */
+function ArriveBurstTicker() {
+  useFrame((_, dt) => {
     const idx = aimedIndex();
-    const sign = TEMPLE_SIGNS[idx];
-    if (!sign) {
-      g.visible = false;
-      return;
-    }
-    const sit = TEMPLE_STATIONS[idx]!;
-    const chest = volumeChest(sign.id);
-    const aspect = getSignVolume(sign.id)?.aspect ?? 16 / 9;
-    const dist = Math.abs(galaxyTravel.t - stationT(idx));
-    const gather = fieldGather(dist);
-    const intro = introPlaying() ? introAries() : 1;
-    const veil = useGalaxy.getState().introVeil;
-    const state = useSessionStore.getState();
-    const chatting = state.claim !== null && state.session === null;
-    const picked = chatting && state.claim?.signId === sign.id;
-    const world = exploringSign() ? galaxyTravel.worldFade : 1;
-    const reduced = prefersReducedMotion();
-    const { burst, fired } = stepArriveBurst(signArrive, {
+    if (!TEMPLE_SIGNS[idx]) return;
+    stepArriveBurst(signArrive, {
       aimed: idx,
-      dist,
+      dist: Math.abs(galaxyTravel.t - stationT(idx)),
       dt,
-      reduced,
+      reduced: prefersReducedMotion(),
       paused: exploringSign() || introPlaying() || enterAnimating(),
     });
-    const show =
-      fieldVisible(gather) &&
-      intro > 0.4 &&
-      veil < 0.45 &&
-      world > 0.08 &&
-      !insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
-    g.visible = show;
-    if (!show) {
-      sim.mat.uniforms.uFade.value = 0;
-      return;
-    }
-    const cam = camera as PerspectiveCamera;
-    _sitCam.copy(sit);
-    cam.worldToLocal(_sitCam);
-    const slide = computeBirthChatSlide({
-      picked,
-      travelT: galaxyTravel.t,
-      stationT: stationT(idx),
-      fov: cam.fov,
-      sitCameraZ: _sitCam.z,
-      aspect: cam.aspect,
-      cssWidth: cssViewWidth(),
-      plateWide: PLATE_WIDE,
-      plateAspect: aspect,
-      currentScale: scaleBoost.current,
-    });
-    slideX.current = lerpToward({ current: slideX.current, target: slide.offsetX, dt, rate: 2.2 });
-    slideY.current = lerpToward({ current: slideY.current, target: slide.offsetY, dt, rate: 2.2 });
-    scaleBoost.current = lerpToward({
-      current: scaleBoost.current,
-      target: slide.targetScale,
-      dt,
-      rate: 2.2,
-    });
-    g.position.set(
-      sit.x + chest.x * PLATE_WIDE * 0.55,
-      sit.y + chest.y * (PLATE_WIDE / aspect) * 0.45,
-      sit.z + 0.22,
-    );
-    _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
-    _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
-    g.position.addScaledVector(_camRight, slideX.current);
-    g.position.addScaledVector(_camUp, slideY.current);
-    g.scale.setScalar(3.2 * scaleBoost.current);
-    if (fired) kickDiskBurst(sim, 1);
-    stepDisk(
-      sim,
-      dt,
-      sign.id,
-      null,
-      galaxyTravel.ptrX,
-      galaxyTravel.ptrY,
-      galaxyTravel.ptrOn && !galaxyTravel.dragging,
-      reduced,
-    );
-    sim.mat.uniforms.uTime.value = galaxyTravel.shaderTime;
-    sim.mat.uniforms.uFade.value =
-      fieldFade(gather) *
-      Math.min(1, (intro - 0.38) / 0.4) *
-      (1 - veil) *
-      (1 + burstEnvelope(burst) * 0.55);
-    sim.mat.uniforms.uPixelRatio.value = Math.min(2, gl.getPixelRatio());
   });
-  return (
-    <group ref={group} visible={false} frustumCulled={false} name={galaxyLayerName("sign-disk")}>
-      <points
-        key={galaxyLayerName("sign-disk")}
-        name={galaxyLayerName("sign-disk")}
-        geometry={sim.geo}
-        material={sim.mat}
-        frustumCulled={false}
-        renderOrder={16}
-        raycast={noopRaycast}
-      />
-    </group>
-  );
+  return null;
 }
 
 function Dust() {
