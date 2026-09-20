@@ -45,7 +45,8 @@ describe("security headers (P1-18)", () => {
     assert.match(csp, /frame-src[^;]*https:\/\/challenges\.cloudflare\.com/);
     assert.match(csp, /frame-ancestors[^;]*https:\/\/grok\.com/);
     assert.match(csp, /frame-ancestors[^;]*https:\/\/\*\.grok\.com/);
-    assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/);
+    // TanStack $tsr stream-barrier + auth popup completion need inline scripts.
+    assert.match(csp, /script-src[^;]*'unsafe-inline'/);
     assert.equal(csp.includes("X-Frame-Options"), false);
   });
 
