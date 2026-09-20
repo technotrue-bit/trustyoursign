@@ -56,6 +56,45 @@ export function resolveOwnerVerdict(userId: string | null | undefined): Promise<
   return p;
 }
 
+/**
+ * Re-ask the server without dropping the current answer first, so the menu
+ * does not flash between owner and visitor rows while the probe is in flight.
+ * A failed probe leaves the old verdict alone.
+ */
+export function refreshOwnerVerdict(userId: string | null | undefined): Promise<OwnerVerdict> {
+  if (!userId) return Promise.resolve(false);
+  const pending = inflight.get(userId);
+  if (pending) return pending;
+  const p = probe()
+    .then((r) => {
+      const v = r.owner === true;
+      verdicts.set(userId, v);
+      return v as OwnerVerdict;
+    })
+    .catch(() => verdicts.get(userId) ?? null)
+    .finally(() => {
+      inflight.delete(userId);
+      notify();
+    });
+  inflight.set(userId, p);
+  return p;
+}
+
+/**
+ * Why an owner-only server call failed. The middleware throws "Unauthorized"
+ * when the session cookie is gone (embedded/partitioned browsers drop it
+ * between reloads); the owner gate throws "Not found" when the identity is
+ * signed in but not the owner. Everything else is a network / cold-start miss.
+ */
+export type OwnerFetchFailure = "signed_out" | "not_owner" | "unreachable";
+
+export function classifyOwnerFetchError(err: unknown): OwnerFetchFailure {
+  const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  if (/unauthori[sz]ed/i.test(msg) || /\b401\b/.test(msg)) return "signed_out";
+  if (/not found/i.test(msg) || /\b404\b/.test(msg)) return "not_owner";
+  return "unreachable";
+}
+
 /** Forget a verdict (sign-out, or after a server call proved it stale). */
 export function forgetOwnerVerdict(userId?: string | null) {
   if (userId) verdicts.delete(userId);
