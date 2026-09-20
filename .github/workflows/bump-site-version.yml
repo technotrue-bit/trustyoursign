@@ -1,17 +1,22 @@
 # After every merge to main, climb the product version one step toward 1.0.
-# Never sets 1.0 — that is a manual edit of src/lib/site-version.json only.
+# Never sets 1.0 — that is a manual edit of src/lib/site-version.ts only.
 name: Bump site version
 
 on:
   push:
     branches: [main]
+  # Also runnable on demand, so a workflow change can be verified before a merge.
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   bump:
-    if: ${{ !contains(github.event.head_commit.message, 'chore(site): bump version') }}
+    # The whole expression must be ONE YAML string: the `: ` inside the quoted
+    # commit-message fragment below is a YAML mapping separator otherwise, which
+    # made this file unparseable — GitHub failed every run at startup with zero jobs.
+    if: "${{ !contains(github.event.head_commit.message, 'chore(site): bump version') }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
