@@ -6,7 +6,8 @@ import { signOut } from "@/lib/auth/client";
 import { getResearchChart } from "@/lib/chart/research";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { openSavedChart, useSessionStore } from "@/lib/chart/session";
-import { listCharts, type SavedChart } from "@/lib/charts";
+import { listCharts } from "@/lib/charts";
+import { pickSkyChart } from "@/lib/charts-saved";
 import { skipIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { skipBirth } from "@/lib/galaxy/travel";
@@ -53,12 +54,6 @@ async function openResearchSky(desk: Desk) {
   st.setMode("sky");
   st.foldSheet(true);
   savePlaceSession({ kind: "research", id: desk });
-}
-
-/** The chart "The sky" should open when nothing is open yet: yours, else the newest. */
-export function pickSkyChart(charts: readonly SavedChart[]): SavedChart | null {
-  if (charts.length === 0) return null;
-  return charts.find((c) => c.relation === "self") ?? charts[0]!;
 }
 
 /**
