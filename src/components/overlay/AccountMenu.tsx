@@ -99,7 +99,8 @@ export function AccountMenu() {
           replace: true,
         });
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[account-menu] openResearchSky failed", err);
         // Fall back to desk URL so VaultApp's boot path can retry.
         void navigate({ to: "/", search: (prev) => ({ ...prev, desk }) });
       })
@@ -162,7 +163,9 @@ export function AccountMenu() {
             align="end"
             sideOffset={6}
             collisionPadding={12}
+            data-no-fly
             onCloseAutoFocus={(e) => e.preventDefault()}
+            onPointerDown={(e) => e.stopPropagation()}
             className={cn(
               "z-[80] w-64 overflow-hidden rounded-xl border border-border bg-bg-elevated/96 shadow-[var(--shadow-border)] backdrop-blur-sm outline-none",
               panel === "main" && "py-1",
@@ -177,57 +180,58 @@ export function AccountMenu() {
                 </DropdownMenu.Label>
                 {owner ? (
                   <>
-                    <DropdownMenu.Item
-                      disabled={busy}
-                      className={ITEM_CLASS}
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        openDeskSky("joey");
-                      }}
-                    >
-                      The sky
+                    <DropdownMenu.Item asChild disabled={busy}>
+                      <button
+                        type="button"
+                        className={ITEM_CLASS}
+                        disabled={busy}
+                        onClick={() => openDeskSky("joey")}
+                      >
+                        The sky
+                      </button>
                     </DropdownMenu.Item>
-                    <DropdownMenu.Item
-                      disabled={busy}
-                      className={ITEM_CLASS}
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        openDeskSky("saige");
-                      }}
-                    >
-                      Saige’s sky
+                    <DropdownMenu.Item asChild disabled={busy}>
+                      <button
+                        type="button"
+                        className={ITEM_CLASS}
+                        disabled={busy}
+                        onClick={() => openDeskSky("saige")}
+                      >
+                        Saige’s sky
+                      </button>
                     </DropdownMenu.Item>
                   </>
                 ) : (
-                  <DropdownMenu.Item
-                    disabled={busy}
-                    className={ITEM_CLASS}
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      openVisitorSky();
-                    }}
-                  >
-                    The sky
+                  <DropdownMenu.Item asChild disabled={busy}>
+                    <button
+                      type="button"
+                      className={ITEM_CLASS}
+                      disabled={busy}
+                      onClick={openVisitorSky}
+                    >
+                      The sky
+                    </button>
                   </DropdownMenu.Item>
                 )}
                 <DropdownMenu.Item
                   className={ITEM_CLASS}
                   onSelect={(e) => {
+                    // Keep the menu open so the settings panel can replace the list.
                     e.preventDefault();
                     setPanel("settings");
                   }}
                 >
                   Settings
                 </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  disabled={leaving}
-                  className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg-muted outline-none hover:bg-bg-subtle hover:text-fg focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:opacity-50"
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    leave();
-                  }}
-                >
-                  {leaving ? <span aria-live="polite">Leaving…</span> : "Log out"}
+                <DropdownMenu.Item asChild disabled={leaving}>
+                  <button
+                    type="button"
+                    disabled={leaving}
+                    className="flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg-muted outline-none hover:bg-bg-subtle hover:text-fg focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:opacity-50"
+                    onClick={leave}
+                  >
+                    {leaving ? <span aria-live="polite">Leaving…</span> : "Log out"}
+                  </button>
                 </DropdownMenu.Item>
               </>
             )}
