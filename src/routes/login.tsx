@@ -368,6 +368,9 @@ function Login() {
       await signIn(id, { callbackURL: "/account" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign-in failed");
+    } finally {
+      // A popup closed by the visitor resolves without throwing — the buttons
+      // must come back either way.
       setBusy(false);
     }
   };
