@@ -30,6 +30,15 @@ export function hasTimedNatal(
   );
 }
 
+/**
+ * The chart the account menu's "The sky" opens when nothing is open yet: the
+ * viewer's own chart, else the newest one (rows arrive newest first).
+ */
+export function pickSkyChart<T extends Pick<SavedChart, "relation">>(charts: readonly T[]): T | null {
+  if (charts.length === 0) return null;
+  return charts.find((c) => c.relation === "self") ?? charts[0]!;
+}
+
 export function isUuidChartId(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim());
 }

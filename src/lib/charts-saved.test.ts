@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { SavedChart } from "./charts.ts";
-import { asChartKey, GUEST_ASK_KEY, hasTimedNatal, isUuidChartId } from "./charts-saved.ts";
+import {
+  asChartKey,
+  GUEST_ASK_KEY,
+  hasTimedNatal,
+  isUuidChartId,
+  pickSkyChart,
+} from "./charts-saved.ts";
 
 const base: SavedChart = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -48,5 +54,13 @@ describe("charts-saved helpers", () => {
   it("asChartKey rejects bare visitor for server ask", () => {
     assert.throws(() => asChartKey("visitor"), /Unknown chart/);
     assert.throws(() => asChartKey("  VISITOR  "), /Unknown chart/);
+  });
+
+  it("pickSkyChart prefers your own chart, else the newest, else nothing", () => {
+    const other = { ...base, id: "other", relation: "other" as const };
+    const older = { ...base, id: "older", relation: "other" as const };
+    assert.equal(pickSkyChart([other, base, older])?.id, base.id);
+    assert.equal(pickSkyChart([other, older])?.id, "other");
+    assert.equal(pickSkyChart([]), null);
   });
 });

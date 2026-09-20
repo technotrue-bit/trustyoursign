@@ -30,6 +30,19 @@ export type SkyPlaceSearch = {
   star?: number;
 };
 
+/**
+ * Where to write the place after a research deep link fails to open. Only the
+ * failed desk lets go (to home); anything else the viewer reached meanwhile
+ * — a later desk, a sign — is left alone. `null` means no change.
+ */
+export function releaseFailedResearchPlace(
+  current: SkyPlace | null,
+  failedId: "joey" | "saige",
+): SkyPlace | null {
+  if (current?.kind !== "research" || current.id !== failedId) return null;
+  return { kind: "home" };
+}
+
 export function parseSkyPlaceSearch(search: Record<string, unknown>): SkyPlaceSearch {
   const desk = typeof search.desk === "string" ? search.desk : undefined;
   const signRaw = typeof search.sign === "string" ? search.sign : undefined;

@@ -69,10 +69,19 @@ function Account() {
   // /login and stranding a freshly signed-in visitor on the form.
   const [signedOutGrace, setSignedOutGrace] = useState(true);
 
+  const [chartsFailed, setChartsFailed] = useState(false);
+
   const load = () => {
+    setChartsFailed(false);
     listCharts()
-      .then(setCharts)
-      .catch(() => setCharts([]));
+      .then((rows) => {
+        setCharts(rows);
+      })
+      .catch(() => {
+        // An empty vault and a failed read must not look the same.
+        setCharts((prev) => prev ?? []);
+        setChartsFailed(true);
+      });
   };
 
   const userId = user?.id ?? null;
@@ -208,6 +217,19 @@ function Account() {
           <h2 className="font-display text-2xl text-fg italic">Your chart</h2>
           {charts === null ? (
             <div className="mt-3 h-16 animate-pulse rounded-md bg-bg-subtle" />
+          ) : chartsFailed && mine.length === 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <p role="alert" className="text-sm text-wine">
+                Your charts couldn’t load.
+              </p>
+              <button
+                type="button"
+                onClick={load}
+                className="min-h-11 text-xs tracking-[0.16em] text-fg uppercase hover:text-accent"
+              >
+                Try again
+              </button>
+            </div>
           ) : mine.length === 0 ? (
             <div className="mt-3 space-y-4">
               <p className="text-sm text-fg-muted">
@@ -244,7 +266,7 @@ function Account() {
           ) : (
             <ul className="mt-3 space-y-2">
               {mine.map((c) => (
-                <ChartRow key={c.id} chart={c} onGone={load} />
+                <ChartRow key={c.id} chart={c} onGone={load} onError={setError} />
               ))}
             </ul>
           )}
@@ -253,12 +275,12 @@ function Account() {
         <section className="mt-10">
           <h2 className="font-display text-2xl text-fg italic">Other people</h2>
           <p className="mt-1 text-sm text-fg-subtle">Only with their permission.</p>
-          {charts === null ? null : others.length === 0 ? (
+          {charts === null || (chartsFailed && others.length === 0) ? null : others.length === 0 ? (
             <p className="mt-3 text-sm text-fg-muted">No one else is in this vault.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {others.map((c) => (
-                <ChartRow key={c.id} chart={c} onGone={load} />
+                <ChartRow key={c.id} chart={c} onGone={load} onError={setError} />
               ))}
             </ul>
           )}
@@ -535,8 +557,46 @@ function PasskeySection({
   );
 }
 
-function ChartRow({ chart, onGone }: { chart: SavedChart; onGone: () => void }) {
+function ChartRow({
+  chart,
+  onGone,
+  onError,
+}: {
+  chart: SavedChart;
+  onGone: () => void;
+  onError: (message: string | null) => void;
+}) {
   const navigate = useNavigate();
+  const [busy, setBusy] = useState<"open" | "remove" | null>(null);
+
+  const open = async () => {
+    if (busy) return;
+    setBusy("open");
+    onError(null);
+    try {
+      await openSavedChart(chart, "library");
+      void navigate({ to: "/" });
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not open that chart");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const remove = async () => {
+    if (busy) return;
+    setBusy("remove");
+    onError(null);
+    try {
+      await deleteChart({ data: chart.id });
+      onGone();
+    } catch (e) {
+      // Without this a failed delete looked like nothing happened.
+      onError(e instanceof Error ? e.message : "Could not remove that chart");
+    } finally {
+      setBusy(null);
+    }
+  };
   const sign = CONSTELLATIONS.find((s) => s.id === chart.signId);
   return (
     <li className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated/70 px-4 py-3">
@@ -550,23 +610,21 @@ function ChartRow({ chart, onGone }: { chart: SavedChart; onGone: () => void }) 
       <div className="flex shrink-0 items-center gap-3">
         <button
           type="button"
-          className="min-h-11 text-xs tracking-[0.16em] text-fg uppercase hover:text-accent"
-          onClick={async () => {
-            await openSavedChart(chart, "library");
-            void navigate({ to: "/" });
-          }}
+          disabled={busy !== null}
+          aria-busy={busy === "open" || undefined}
+          className="min-h-11 text-xs tracking-[0.16em] text-fg uppercase hover:text-accent disabled:opacity-50"
+          onClick={() => void open()}
         >
-          Open
+          {busy === "open" ? <span aria-live="polite">Opening…</span> : "Open"}
         </button>
         <button
           type="button"
-          className="min-h-11 text-xs tracking-[0.16em] text-fg-subtle uppercase hover:text-wine"
-          onClick={async () => {
-            await deleteChart({ data: chart.id });
-            onGone();
-          }}
+          disabled={busy !== null}
+          aria-busy={busy === "remove" || undefined}
+          className="min-h-11 text-xs tracking-[0.16em] text-fg-subtle uppercase hover:text-wine disabled:opacity-50"
+          onClick={() => void remove()}
         >
-          Remove
+          {busy === "remove" ? <span aria-live="polite">Removing…</span> : "Remove"}
         </button>
       </div>
     </li>
