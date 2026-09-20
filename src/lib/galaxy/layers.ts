@@ -40,3 +40,13 @@ export function isGalaxyLayerId(id: string): id is GalaxyLayerId {
 export function galaxyLayerName(id: GalaxyLayerId): string {
   return GALAXY_LAYERS[id].name;
 }
+
+/**
+ * Quiet residual when landed inside a sign galaxy — distant sky / corner
+ * blobs stay faintly alive without competing with lesson stars or HUD type.
+ * Atmosphere only; never interactive.
+ */
+export const INSIDE_SKY_FIELD_RESIDUAL = 0.1;
+export const INSIDE_SKY_HAZE_RESIDUAL = 0.09;
+export const INSIDE_SKY_ARMS_RESIDUAL = 0.08;
+export const INSIDE_CORNER_RESIDUAL = 0.12;

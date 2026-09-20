@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DUST_INSIDE_OPACITY,
   DUST_R_MAX,
   DUST_R_MIN,
   DUST_Z_FAR,
@@ -55,7 +56,9 @@ describe("flightDust", () => {
       prev = v;
     }
     assert.ok(dustOpacity(1, false) > 0.85);
+    assert.equal(dustOpacity(1, true), DUST_INSIDE_OPACITY);
     assert.ok(dustOpacity(1, true) < dustOpacity(1, false));
-    assert.ok(dustOpacity(1, true) > 0);
+    // Quiet band: alive, but below dive peak so HUD type stays readable.
+    assert.ok(DUST_INSIDE_OPACITY >= 0.48 && DUST_INSIDE_OPACITY <= 0.58);
   });
 });

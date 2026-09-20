@@ -144,12 +144,19 @@ export function makeDustMaterial(tint: string, pxScale = 1) {
 }
 
 /**
+ * Parked-at-hub dust: quiet enough that Gemini HUD type stays readable, strong
+ * enough that the volume still feels occupied. Below dive peak so the corridor
+ * rush remains the brighter beat.
+ */
+export const DUST_INSIDE_OPACITY = 0.52;
+
+/**
  * Dust opacity through the dive: invisible while the painted plate is the hero,
  * rising as the figure takes over, easing back once you are parked at the core
  * (close dust would otherwise read as noise around the hub).
  */
 export function dustOpacity(form: number, inside: boolean) {
-  if (inside) return 0.34;
+  if (inside) return DUST_INSIDE_OPACITY;
   const f = Math.min(1, Math.max(0, form));
   return 0.9 * Math.pow(f, 0.8);
 }

@@ -5,6 +5,7 @@ import { exploringSign, galaxyTravel } from "@/lib/galaxy/travel";
 import { introPlaying, introChrome } from "@/lib/galaxy/intro";
 import { stationFromT } from "@/lib/galaxy/temple";
 import { buildCornerGalaxies, makeCornerMaterial, paletteForSign } from "@/lib/galaxy/corners";
+import { INSIDE_CORNER_RESIDUAL } from "@/lib/galaxy/layers";
 import { insideHardGateHidesLeftovers } from "@/lib/galaxy/signGalaxy";
 
 function noopRaycast() {
@@ -38,7 +39,7 @@ export function CornerGalaxies() {
     };
   }, [geo, mat, fromA, fromB]);
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     const mesh = ref.current;
     if (!mesh) return;
     mesh.position.copy(camera.position);
@@ -69,11 +70,14 @@ export function CornerGalaxies() {
     mat.uniforms.uMix.value = e;
     mat.uniforms.uTime.value = galaxyTravel.shaderTime;
     mat.uniforms.uPixelRatio.value = gl.getPixelRatio();
-    const gateOff = insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
-    const vis =
+    const base =
       (introPlaying() ? introChrome() : 1) *
-      (exploringSign() ? galaxyTravel.worldFade : 1) *
-      (gateOff ? 0 : 1);
+      (exploringSign() ? galaxyTravel.worldFade : 1);
+    // Hard-off used to kill corners after land; keep a faint residual so the
+    // backdrop still reads as distant galaxies (still noopRaycast).
+    const vis = insideHardGateHidesLeftovers(galaxyTravel.explorePhase)
+      ? Math.max(base, INSIDE_CORNER_RESIDUAL)
+      : base;
     const fade = mat.uniforms.uFade.value as number[];
     fade[0] = vis;
     fade[1] = vis;
