@@ -25,11 +25,11 @@ export type NebulaLayerSpec = {
  * opacities can sit low without graying the sky out.
  */
 export const NEBULA_LAYERS: readonly NebulaLayerSpec[] = [
-  { id: "nebula-amber", ox: -0.18, oy: -0.12, scale: 1.42, opacity: 0.55, drift: 0.012 },
-  { id: "nebula-butterfly", ox: 0.22, oy: -0.18, scale: 1.28, opacity: 0.52, drift: -0.01 },
-  { id: "nebula-ring", ox: 0.05, oy: 0.2, scale: 1.18, opacity: 0.42, drift: 0.008 },
-  { id: "nebula-hourglass", ox: -0.28, oy: 0.16, scale: 1.22, opacity: 0.46, drift: -0.014 },
-  { id: "nebula-pillar", ox: 0.3, oy: 0.1, scale: 1.3, opacity: 0.5, drift: 0.009 },
+  { id: "nebula-amber", ox: -0.18, oy: -0.12, scale: 1.42, opacity: 0.72, drift: 0.012 },
+  { id: "nebula-butterfly", ox: 0.22, oy: -0.18, scale: 1.28, opacity: 0.68, drift: -0.01 },
+  { id: "nebula-ring", ox: 0.05, oy: 0.2, scale: 1.18, opacity: 0.58, drift: 0.008 },
+  { id: "nebula-hourglass", ox: -0.28, oy: 0.16, scale: 1.22, opacity: 0.62, drift: -0.014 },
+  { id: "nebula-pillar", ox: 0.3, oy: 0.1, scale: 1.3, opacity: 0.66, drift: 0.009 },
 ] as const;
 
 /** Mild tone-map multiplier on the WebGL planes: pulls mids down, keeps warmth. */

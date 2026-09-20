@@ -37,7 +37,7 @@ describe("nebulaBackdrop", () => {
   it("ships five compressed wallpaper layers at exposure-safe opacities", () => {
     assert.equal(NEBULA_LAYERS.length, 5);
     for (const layer of NEBULA_LAYERS) {
-      assert.ok(layer.opacity >= 0.4 && layer.opacity <= 0.6, layer.id);
+      assert.ok(layer.opacity >= 0.55 && layer.opacity <= 0.75, layer.id);
       assert.ok(layer.scale >= 1);
       assert.match(nebulaUrl(layer.id, false), /\/sky\/nebula-.+\.jpg$/);
       assert.match(nebulaUrl(layer.id, true), /-sm\.jpg$/);
