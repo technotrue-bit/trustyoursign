@@ -9,7 +9,8 @@ lines, and the recovery levers.
 
 ## Where to sign in
 
-**`https://trustyoursigns.grok.me`** — not the `vercel.app` URL.
+**`https://trustyoursign.com`** — Production custom domain; not the `vercel.app` URL.
+(Legacy/stale host: `trustyoursigns.grok.me` — do not use it for probes or sign-in.)
 
 Better Auth validates the request `Origin` against `trustedOrigins`, which is
 derived from `BETTER_AUTH_URL`. When that is set, the list is only
@@ -20,7 +21,7 @@ You can tell the two apart without an account:
 
 | Response | Meaning |
 |---|---|
-| `INVALID_ORIGIN` | wrong host — use `grok.me` |
+| `INVALID_ORIGIN` | wrong host — use `trustyoursign.com` |
 | `INVALID_EMAIL_OR_PASSWORD` | origin fine; the credentials were actually checked |
 
 To make the `vercel.app` host usable as well, add its origins to
@@ -65,7 +66,7 @@ let someone register your address first.
 
 3. **Deploy**, then read the function logs (§ below).
 
-4. **Sign in** at the `grok.me` URL with the owner address (or `ADMIN`) and that
+4. **Sign in** at `https://trustyoursign.com` with the owner address (or `ADMIN`) and that
    password.
 
 ## Log lines, and what they mean

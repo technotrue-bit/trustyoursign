@@ -2,7 +2,7 @@
 
 The Vault — a natal fly-through.
 
-Live: https://trustyoursigns.grok.me/
+Live: https://trustyoursign.com/
 
 ## Security env (required for auth)
 
@@ -115,6 +115,6 @@ Set in the host environment (Vercel Production + Preview). **Never commit secret
 
 Both vars are required together (Better Auth captcha plugin + login widget).
 
-Allowed hostnames on the Cloudflare widget: `trustyoursigns.grok.me`, Vercel preview hosts, `localhost`.
+Allowed hostnames on the Cloudflare widget: `trustyoursign.com` (Production custom domain), Vercel preview hosts, `localhost`. Legacy/stale: `trustyoursigns.grok.me`.
 
 See `docs/security/turnstile.md`.

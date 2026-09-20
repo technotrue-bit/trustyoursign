@@ -2,7 +2,7 @@
 
 **Repo:** `C:\Users\Devin\Projects\trustyoursign` · GitHub `technotrue-bit/trustyoursign` (private)
 **Branch at time of audit:** `main` @ `05ac661` (PR #36 merged)
-**App:** "The Vault" — a natal fly-through. Live: https://trustyoursigns.grok.me/
+**App:** "The Vault" — a natal fly-through. Live: https://trustyoursign.com/
 **Scale:** 260 tracked files · ~33,756 LOC (ts/tsx/mjs/js/sql/css) · 166 modules in `src/`
 
 ---

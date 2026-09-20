@@ -16,7 +16,7 @@ Wires **Joey’s existing** Cloudflare Turnstile widget on `/login`. Do not crea
 | `VITE_TURNSTILE_SITE_KEY` | `0x4AAAAAAErVvyAn66cRPEas` (public) — set on **Production + Preview**, then **redeploy** (Vite inlines at build) |
 | `TURNSTILE_SECRET_KEY` | Set in Vercel yourself — **never** commit or paste in chat/repo |
 
-Cloudflare widget hostnames: `trustyoursigns.grok.me`, Vercel preview hosts, `localhost`.
+Cloudflare widget hostnames: `trustyoursign.com` (Production custom domain), Vercel preview hosts, `localhost`. Legacy/stale: `trustyoursigns.grok.me`.
 
 ## Verify
 
