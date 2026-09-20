@@ -8,8 +8,11 @@
  * CSP notes:
  * - `style-src 'unsafe-inline'`: required for the FOUC blocker in `__root.tsx`
  *   (`dangerouslySetInnerHTML` style) and React `style={{…}}` attributes.
- * - `script-src` stays without `'unsafe-inline'`: Grok PWA injector, Turnstile,
- *   and app bundles are external/`'self'` module scripts.
+ * - `script-src 'unsafe-inline'`: required for TanStack Start's inline
+ *   `$tsr-stream-barrier` hydration bootstrap (chunk hashes change per build,
+ *   so static script hashes are not viable) and the auth popup completion
+ *   HTML. External modules remain `'self'` / grok / Turnstile / vercel.live.
+ *   Prefer per-request nonces when the Start shell can stamp them.
  * - `frame-ancestors` (not `X-Frame-Options`): allow Grok / sandbox preview
  *   embeds while blocking arbitrary clickjacking.
  */
@@ -17,8 +20,8 @@
 /** @type {string} */
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  // App modules + Grok branding injector + Turnstile + Vercel live toolbar.
-  "script-src 'self' https://grok.com https://challenges.cloudflare.com https://vercel.live",
+  // App modules + TanStack $tsr inline bootstrap + Grok / Turnstile / Vercel live.
+  "script-src 'self' 'unsafe-inline' https://grok.com https://challenges.cloudflare.com https://vercel.live",
   // FOUC inline style + React style props + Google Fonts CSS.
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
