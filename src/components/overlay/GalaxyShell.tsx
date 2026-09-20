@@ -2,7 +2,13 @@ import { useState } from "react";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { SIGN_INSIGHTS, insightToneLabel } from "@/lib/galaxy/signInsights";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
-import { enterSignGalaxy, noteControl, setPaused } from "@/lib/galaxy/travel";
+import {
+  enterSignGalaxy,
+  exploringSign,
+  noteControl,
+  setPaused,
+  skipBirth,
+} from "@/lib/galaxy/travel";
 import { readMotionPaused, writeMotionPaused } from "@/lib/ui/motionPreference";
 import { skipIntro } from "@/lib/galaxy/intro";
 import { cn } from "@/lib/utils";
@@ -178,6 +184,12 @@ export function GalaxyShell() {
             type="button"
             onClick={() => {
               if (!sign) return;
+              if (enterSignGalaxy(signIndex) || exploringSign()) return;
+              // Refused only while the intro/birth is still playing — the tap
+              // is the viewer's answer to that, so finish it and go.
+              skipIntro();
+              skipBirth();
+              useGalaxy.getState().markBorn();
               enterSignGalaxy(signIndex);
             }}
             className="sign-claim pointer-events-auto inline-flex min-h-11 w-auto items-center px-5 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent active:text-accent md:min-h-12 md:px-6"
