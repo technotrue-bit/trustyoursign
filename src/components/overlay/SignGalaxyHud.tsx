@@ -6,6 +6,7 @@ import type { PointPurposeKind } from "@/lib/galaxy/signGalaxy";
 import { guestPreviewUnlocked } from "@/lib/galaxy/exploreAccess";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { exitSignGalaxy, seekGalaxyPoint, skipEnterGalaxy } from "@/lib/galaxy/travel";
+import { hasInsideHistoryEntry } from "@/lib/ui/skyPlace";
 import { useSessionStore } from "@/lib/chart/session";
 import { MIN_AGE } from "@/lib/legal";
 import { useSignExploreAccess } from "@/hooks/useSignExploreAccess";
@@ -94,7 +95,15 @@ export function SignGalaxyHud() {
           <div className="justify-self-start">
             <button
               type="button"
-              onClick={() => exitSignGalaxy()}
+              onClick={() => {
+                // Pop the entry enter pushed, so Back and this button leave the
+                // same way. With no prior entry, unwind in place.
+                if (hasInsideHistoryEntry()) {
+                  window.history.back();
+                  return;
+                }
+                exitSignGalaxy();
+              }}
               className="chrome-glow back-to-sky pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] uppercase"
             >
               Back

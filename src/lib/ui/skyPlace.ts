@@ -1,5 +1,6 @@
 import { isSignId } from "@/lib/chart/sign-canon";
 import type { SignId } from "@/lib/chart/types";
+import { PREVIEW_HISTORY_ROOT_KEY } from "@/lib/preview-host-bridge";
 
 /**
  * Where the visitor is in the sky UI — mirrored into the home-route search
@@ -113,6 +114,51 @@ export function searchFromPlace(
     case "research":
       return { ...next, desk: place.id };
   }
+}
+
+/**
+ * Entering a sign galaxy must push. Replacing the current entry leaves the
+ * inside URL (`?sign=…&galaxy=true`) on the preview history root, and Back
+ * no-ops there — the visitor stays on the inside canvas.
+ * Belt moves, star-to-star travel, and leaving the galaxy replace.
+ */
+export function historyModeForPlace(
+  prev: SkyPlace | null,
+  next: SkyPlace,
+): "push" | "replace" {
+  if (next.kind === "inside" && prev?.kind !== "inside") return "push";
+  return "replace";
+}
+
+/** True when this entry is the preview Back floor, or the only entry in the stack. */
+export function historyStateIsRoot(state: unknown, historyLength: number): boolean {
+  if (
+    state !== null &&
+    typeof state === "object" &&
+    (state as Record<string, unknown>)[PREVIEW_HISTORY_ROOT_KEY] === true
+  ) {
+    return true;
+  }
+  return historyLength <= 1;
+}
+
+export function historyEntryIsRoot(): boolean {
+  if (typeof window === "undefined") return true;
+  return historyStateIsRoot(window.history.state, window.history.length);
+}
+
+/**
+ * The inside view pushed its own history entry, so in-app Back can pop it
+ * instead of only swapping the phase under the same URL.
+ */
+let insideHistoryEntry = false;
+
+export function markInsideHistoryEntry(active: boolean): void {
+  insideHistoryEntry = active;
+}
+
+export function hasInsideHistoryEntry(): boolean {
+  return insideHistoryEntry;
 }
 
 export function placesEqual(a: SkyPlace, b: SkyPlace): boolean {
