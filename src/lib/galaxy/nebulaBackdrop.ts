@@ -334,26 +334,39 @@ export function composeNebulaWallpaper(
     [-1, 0],
     [0, 1],
     [0, -1],
-    [1, 1],
-    [-1, 1],
-    [1, -1],
-    [-1, -1],
   ];
 
   let painted = 0;
-  // Full-canvas wash first — one oversized soft plate so the sky has base color everywhere.
-  const wash = NEBULA_LAYERS[0];
-  const washImg = wash ? images.get(wash.id) : undefined;
-  if (wash && washImg) {
+
+  // Full-canvas washes — left- and right-biased so wide desktops are not one-sided.
+  const washLeft = NEBULA_LAYERS[0];
+  const washRight = NEBULA_LAYERS[1];
+  const washLeftImg = washLeft ? images.get(washLeft.id) : undefined;
+  const washRightImg = washRight ? images.get(washRight.id) : undefined;
+  if (washLeft && washLeftImg) {
     drawSoftPlate(
       ctx,
-      washImg,
-      size * 0.5,
+      washLeftImg,
+      size * 0.38,
       size * 0.48,
       size,
       size,
-      2.35,
-      wash.opacity * gain * 0.55,
+      2.45,
+      washLeft.opacity * gain * 0.5,
+      plateMaskCanvas,
+    );
+    painted++;
+  }
+  if (washRight && washRightImg) {
+    drawSoftPlate(
+      ctx,
+      washRightImg,
+      size * 0.62,
+      size * 0.5,
+      size,
+      size,
+      2.45,
+      washRight.opacity * gain * 0.5,
       plateMaskCanvas,
     );
     painted++;
@@ -404,6 +417,34 @@ export function composeNebulaWallpaper(
     cctx.putImageData(imgData, 0, 0);
     ctx.globalCompositeOperation = "multiply";
     ctx.drawImage(centre, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  // Soft rim on the final canvas — alpha dies before the square border so a
+  // plate edge can never read as a picture frame if it grazes the frustum.
+  const rim = document.createElement("canvas");
+  rim.width = size;
+  rim.height = size;
+  const rctx = rim.getContext("2d");
+  if (rctx) {
+    const imgData = rctx.createImageData(size, size);
+    const half = size / 2;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const nx = Math.abs((x + 0.5 - half) / half);
+        const ny = Math.abs((y + 0.5 - half) / half);
+        const m = Math.max(nx, ny);
+        const a = Math.round((1 - smoothstep01((m - 0.78) / 0.22)) * 255);
+        const i = (y * size + x) * 4;
+        imgData.data[i] = 255;
+        imgData.data[i + 1] = 255;
+        imgData.data[i + 2] = 255;
+        imgData.data[i + 3] = a;
+      }
+    }
+    rctx.putImageData(imgData, 0, 0);
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.drawImage(rim, 0, 0);
     ctx.globalCompositeOperation = "source-over";
   }
   return canvas;
