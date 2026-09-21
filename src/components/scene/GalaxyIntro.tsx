@@ -10,7 +10,6 @@ import {
   DoubleSide,
   FogExp2,
   Group,
-  LineSegments,
   LinearFilter,
   Mesh,
   MeshBasicMaterial,
@@ -69,8 +68,6 @@ import {
   introField,
   introPlaying,
   introAries,
-  ariesConstellationReveal,
-  ariesConstellationLineCount,
   skipIntro,
   stepIntro,
   uAssemble,
@@ -914,74 +911,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         raycast={noopRaycast}
       />
       <SignGalaxyField sign={sign} index={index} />
-      {index === 0 ? <AriesConstellationReveal /> : null}
       {index === 0 ? <AriesAtmosphere /> : null}
       <BigThreeLights signId={sign.id} />
     </group>
-  );
-}
-
-function AriesConstellationReveal() {
-  const line = useRef<LineSegments>(null);
-  const figure = CONSTELLATIONS[0]?.animal;
-  const geometry = useMemo(() => {
-    const g = new BufferGeometry();
-    if (!figure) return g;
-    const pos = new Float32Array(figure.lines.length * 6);
-    let w = 0;
-    for (const [a, b] of figure.lines) {
-      const sa = figure.stars[a];
-      const sb = figure.stars[b];
-      if (!sa || !sb) continue;
-      pos[w++] = sa.x;
-      pos[w++] = sa.y;
-      pos[w++] = 0.02;
-      pos[w++] = sb.x;
-      pos[w++] = sb.y;
-      pos[w++] = 0.02;
-    }
-    g.setAttribute("position", new BufferAttribute(pos.subarray(0, w), 3));
-    g.setDrawRange(0, 0);
-    return g;
-  }, [figure]);
-
-  useEffect(() => () => geometry.dispose(), [geometry]);
-
-  useFrame(({ clock }) => {
-    const mesh = line.current;
-    if (!mesh) return;
-    const reduced = prefersReducedMotion();
-    const reveal = ariesConstellationReveal(introAries(), reduced);
-    const count = geometry.getAttribute("position")?.count ?? 0;
-    const segmentCount = Math.floor(count / 2);
-    const lineCount = ariesConstellationLineCount(introAries(), segmentCount, reduced);
-    geometry.setDrawRange(0, lineCount * 2);
-    mesh.visible = lineCount > 0;
-    const material = mesh.material as MeshBasicMaterial;
-    const shimmer = reduced ? 0 : (Math.sin(galaxyTravel.shaderTime * 1.1) + 1) * 0.025;
-    material.opacity = (reduced ? 0.2 : 0.13 + shimmer) * (0.35 + reveal * 0.65);
-  });
-
-  return (
-    <lineSegments
-      ref={line}
-      geometry={geometry}
-      position={[0, 0.05, 0.08]}
-      scale={[PLATE_WIDE, PLATE_WIDE / (16 / 9), 1]}
-      renderOrder={19}
-      frustumCulled={false}
-      raycast={noopRaycast}
-    >
-      <lineBasicMaterial
-        color="#f0d4a1"
-        transparent
-        opacity={0}
-        depthWrite={false}
-        depthTest={false}
-        toneMapped={false}
-        blending={AdditiveBlending}
-      />
-    </lineSegments>
   );
 }
 
