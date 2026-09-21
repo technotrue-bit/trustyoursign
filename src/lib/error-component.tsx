@@ -1,7 +1,13 @@
+import { useEffect } from "react";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { TriangleAlert } from "lucide-react";
+import { reloadOnceForStaleChunk } from "@/lib/chunk-reload";
 
 export function AppErrorComponent({ error }: ErrorComponentProps) {
+  useEffect(() => {
+    reloadOnceForStaleChunk(error);
+  }, [error]);
+
   return (
     <main
       className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center"
