@@ -75,9 +75,9 @@ export const EXPLORE_LOOK_MAX_Y = 5.5;
  * of the hub star. Corridor flight does not use this.
  *
  * 2.6 put the lens inside the core's glare (a blown disc over the card).
- * 6.4 holds the home star as a jewel in the room, with sky around it.
+ * 8.0 holds the home star as a jewel in the room, with sky around it.
  */
-export const INSIDE_LANDING_DISTANCE = 6.4;
+export const INSIDE_LANDING_DISTANCE = 8.0;
 /** Inside-sign wheel/pinch zoom — pull-back below 1 keeps multiple nodes readable. */
 export const EXPLORE_ZOOM_MIN = 0.72;
 export const EXPLORE_ZOOM_MAX = 3.2;

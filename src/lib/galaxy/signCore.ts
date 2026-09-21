@@ -17,9 +17,10 @@ export const CORE_PX = 512;
 
 /**
  * Local units for the sprite at rest (the field group scales it into world units).
- * 2.4 filled the threshold frame. 1.2 is a compact point-of-light with a halo.
+ * 2.4 filled the threshold frame. 1.2 sank into the dust.
+ * 2.2 is a compact point-of-light with a halo, held at the farther landing.
  */
-export const CORE_LOCAL_SIZE = 1.2;
+export const CORE_LOCAL_SIZE = 2.2;
 
 function clamp01(n: number) {
   return Math.min(1, Math.max(0, n));
