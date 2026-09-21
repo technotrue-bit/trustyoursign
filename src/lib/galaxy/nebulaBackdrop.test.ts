@@ -5,13 +5,18 @@ import {
   CENTER_WELL,
   EDGE_MASK_CENTER_ALPHA,
   NEBULA_2D_LAYER_GAIN,
+  NEBULA_COMPOSITE_DRIFT,
+  NEBULA_COMPOSITE_SIZE,
+  NEBULA_COMPOSITE_SIZE_MODEST,
   NEBULA_GL_LAYER_GAIN,
   NEBULA_GL_LAYER_GAIN_MODEST,
   NEBULA_LAYERS,
   centerWellAlphaAt,
+  composeNebulaWallpaper,
   edgeMaskAlphaAt,
   makeCenterWellData,
   makeEdgeAlphaMaskData,
+  nebulaCompositeSize,
   nebulaUrl,
   paintCenterVignette,
 } from "./nebulaBackdrop.ts";
@@ -86,12 +91,12 @@ describe("nebulaBackdrop", () => {
     assert.ok(data[centerIdx]! < 20 && data[centerIdx + 1]! < 20 && data[centerIdx + 2]! < 20);
   });
 
-  it("paints a stronger center vignette by default without touching edges", () => {
-    assert.equal(CENTER_VIGNETTE_STRENGTH, 1);
-    const fills = vignetteStops();
-    assert.ok(fills.some((c) => c.includes("0)")));
-    assert.ok(fills.some((c) => c.includes("0.84")));
-    const softer = vignetteStops(0.5);
-    assert.ok(softer.some((c) => c.includes("0.42")));
+  it("bakes five layers into one composite canvas", () => {
+    assert.ok(NEBULA_COMPOSITE_SIZE_MODEST < NEBULA_COMPOSITE_SIZE);
+    assert.ok(Number.isFinite(NEBULA_COMPOSITE_DRIFT));
+    // jsdom-free: compose returns null without a document; size helper still works.
+    assert.equal(nebulaCompositeSize(true), NEBULA_COMPOSITE_SIZE_MODEST);
+    assert.equal(nebulaCompositeSize(false), NEBULA_COMPOSITE_SIZE);
+    assert.equal(composeNebulaWallpaper(new Map(), 64), null);
   });
 });

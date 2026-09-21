@@ -161,15 +161,55 @@ const _hubNdc = new Vector3();
 /** Enter flythrough: where the camera comes to rest relative to the hub star. */
 export const HUB_STANDOFF = 2.6;
 
+let cachedViewW = 1280;
+let cachedViewH = 900;
+let viewCacheBound = false;
+
+function bindViewCache() {
+  if (viewCacheBound || typeof window === "undefined") return;
+  viewCacheBound = true;
+  const sync = () => {
+    cachedViewW = window.visualViewport?.width ?? window.innerWidth;
+    cachedViewH = window.visualViewport?.height ?? window.innerHeight;
+  };
+  sync();
+  window.addEventListener("resize", sync);
+  window.visualViewport?.addEventListener("resize", sync);
+  window.visualViewport?.addEventListener("scroll", sync);
+}
+
 function cssViewWidth() {
+  bindViewCache();
   if (typeof window === "undefined") return 1280;
-  return window.visualViewport?.width ?? window.innerWidth;
+  return cachedViewW;
 }
 
 /** CSS viewport height — short frames need the core framed higher (see landingBiasNdc). */
 function cssViewHeight() {
+  bindViewCache();
   if (typeof window === "undefined") return 900;
-  return window.visualViewport?.height ?? window.innerHeight;
+  return cachedViewH;
+}
+
+/** One session read per frame for all 12 Stations — filled by TempleRig. */
+type FrameSessionSnap = {
+  chatting: boolean;
+  claimSignId: string | null;
+  shelfSignId: string | null;
+};
+let frameSession: FrameSessionSnap = {
+  chatting: false,
+  claimSignId: null,
+  shelfSignId: null,
+};
+
+function syncFrameSession() {
+  const state = useSessionStore.getState();
+  frameSession = {
+    chatting: state.claim !== null && state.session === null,
+    claimSignId: state.claim?.signId ?? null,
+    shelfSignId: state.session?.kind === "shelf" ? state.session.signId : null,
+  };
 }
 
 function noopRaycast() {
@@ -581,11 +621,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       volReady.current = true;
       bumpVolReady((n) => n + 1);
     }
-    const state = useSessionStore.getState();
-    const chatting = state.claim !== null && state.session === null;
-    const shelf = state.session?.kind === "shelf" ? state.session : null;
-    const picked = chatting && state.claim?.signId === sign.id;
-    const held = picked || shelf?.signId === sign.id;
+    const state = frameSession;
+    const chatting = state.chatting;
+    const shelfSignId = state.shelfSignId;
+    const picked = chatting && state.claimSignId === sign.id;
+    const held = picked || shelfSignId === sign.id;
     const t = galaxyTravel.t;
     const direct = galaxyTravel.seekDirect && galaxyTravel.seek != null;
     const dest = stationT(index);
@@ -1184,6 +1224,7 @@ function TempleRig() {
   }, []);
 
   useFrame((_, delta) => {
+    syncFrameSession();
     const d = Math.min(0.05, Math.max(0.001, delta));
     if (epoch.current !== galaxyTravel.epoch) {
       epoch.current = galaxyTravel.epoch;

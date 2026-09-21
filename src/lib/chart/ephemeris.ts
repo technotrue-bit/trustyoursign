@@ -1,4 +1,3 @@
-import { Body, Ecliptic, GeoVector, SiderealTime } from "astronomy-engine";
 import type { SignId } from "./types";
 import { SIGN_IDS, signName } from "./sign-canon";
 
@@ -38,19 +37,18 @@ function partsInZone(utcMs: number, timeZone: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
-  const bits = Object.fromEntries(fmt.formatToParts(new Date(utcMs)).map((p) => [p.type, p.value]));
-  let hour = Number(bits.hour);
-  if (hour === 24) hour = 0;
+  const parts = fmt.formatToParts(new Date(utcMs));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
   return {
-    y: Number(bits.year),
-    m: Number(bits.month),
-    d: Number(bits.day),
-    h: hour,
-    min: Number(bits.minute),
+    y: Number(get("year")),
+    m: Number(get("month")),
+    d: Number(get("day")),
+    h: Number(get("hour")) % 24,
+    min: Number(get("minute")),
   };
 }
 
-/** Civil clock in an IANA zone → UTC Date (DST-aware, historical). */
+/** Convert a civil local wall time in `timeZone` to a UTC Date. */
 export function localToUtc(
   year: number,
   month: number,
@@ -69,18 +67,10 @@ export function localToUtc(
   return new Date(utc);
 }
 
-function eclipticLon(body: Body, date: Date) {
-  return wrap360(Ecliptic(GeoVector(body, date, true)).elon);
-}
-
 function obliquity(date: Date) {
   const jd = date.getTime() / 86400000 + 2440587.5;
   const T = (jd - 2451545) / 36525;
   return (23.439291111 - 0.013004166 * T) * (Math.PI / 180);
-}
-
-function ramcDeg(date: Date, lonEast: number) {
-  return wrap360(SiderealTime(date) * 15 + lonEast);
 }
 
 function ascendant(ramc: number, latDeg: number, date: Date) {
@@ -171,30 +161,22 @@ export type NatalCast = {
   points: CastPoint[];
 };
 
-const MOVING: { id: Exclude<CastPlanetId, "asc" | "mc">; body: Body; name: string }[] = [
-  { id: "sun", body: Body.Sun, name: "Sun" },
-  { id: "moon", body: Body.Moon, name: "Moon" },
-  { id: "mercury", body: Body.Mercury, name: "Mercury" },
-  { id: "venus", body: Body.Venus, name: "Venus" },
-  { id: "mars", body: Body.Mars, name: "Mars" },
-  { id: "jupiter", body: Body.Jupiter, name: "Jupiter" },
-  { id: "saturn", body: Body.Saturn, name: "Saturn" },
-  { id: "uranus", body: Body.Uranus, name: "Uranus" },
-  { id: "neptune", body: Body.Neptune, name: "Neptune" },
-  { id: "pluto", body: Body.Pluto, name: "Pluto" },
-];
+type Astro = typeof import("astronomy-engine");
+let astronomyPromise: Promise<Astro> | null = null;
 
-function isRetrograde(body: Body, date: Date, lonNow: number) {
-  if (body === Body.Sun || body === Body.Moon) return false;
-  const earlier = new Date(date.getTime() - 24 * 60 * 60 * 1000);
-  const lonThen = eclipticLon(body, earlier);
-  let delta = lonNow - lonThen;
-  if (delta > 180) delta -= 360;
-  if (delta < -180) delta += 360;
-  return delta < 0;
+/** Lazy-load the ephemeris engine — keeps it off the first-paint client graph. */
+export function loadAstronomy(): Promise<Astro> {
+  if (!astronomyPromise) astronomyPromise = import("astronomy-engine");
+  return astronomyPromise;
 }
 
-function pointFromLon(id: CastPlanetId, name: string, lon: number, ascL: number, retrograde: boolean): CastPoint {
+function pointFromLon(
+  id: CastPlanetId,
+  name: string,
+  lon: number,
+  ascL: number,
+  retrograde: boolean,
+): CastPoint {
   const s = signFromLon(lon);
   const house = id === "asc" ? 1 : id === "mc" ? wholeSignHouse(lon, ascL) : wholeSignHouse(lon, ascL);
   const note =
@@ -217,11 +199,40 @@ function pointFromLon(id: CastPlanetId, name: string, lon: number, ascL: number,
 }
 
 /** Full tropical cast: classical planets, ASC/MC, whole-sign houses from the rising. */
-export function computeNatalCast(date: Date, place: GeoPlace): NatalCast {
+export async function computeNatalCast(date: Date, place: GeoPlace): Promise<NatalCast> {
+  const { Body, Ecliptic, GeoVector, SiderealTime } = await loadAstronomy();
+  const eclipticLon = (body: (typeof Body)[keyof typeof Body], d: Date) =>
+    wrap360(Ecliptic(GeoVector(body, d, true)).elon);
+  const ramcDeg = (d: Date, lonEast: number) => wrap360(SiderealTime(d) * 15 + lonEast);
+  const isRetrograde = (body: (typeof Body)[keyof typeof Body], d: Date, lonNow: number) => {
+    if (body === Body.Sun || body === Body.Moon) return false;
+    const earlier = new Date(d.getTime() - 24 * 60 * 60 * 1000);
+    const lonThen = eclipticLon(body, earlier);
+    let delta = lonNow - lonThen;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    return delta < 0;
+  };
+  const moving: {
+    id: Exclude<CastPlanetId, "asc" | "mc">;
+    body: (typeof Body)[keyof typeof Body];
+    name: string;
+  }[] = [
+    { id: "sun", body: Body.Sun, name: "Sun" },
+    { id: "moon", body: Body.Moon, name: "Moon" },
+    { id: "mercury", body: Body.Mercury, name: "Mercury" },
+    { id: "venus", body: Body.Venus, name: "Venus" },
+    { id: "mars", body: Body.Mars, name: "Mars" },
+    { id: "jupiter", body: Body.Jupiter, name: "Jupiter" },
+    { id: "saturn", body: Body.Saturn, name: "Saturn" },
+    { id: "uranus", body: Body.Uranus, name: "Uranus" },
+    { id: "neptune", body: Body.Neptune, name: "Neptune" },
+    { id: "pluto", body: Body.Pluto, name: "Pluto" },
+  ];
   const ramc = ramcDeg(date, place.lon);
   const ascL = ascendant(ramc, place.lat, date);
   const mcL = midheaven(ramc, date);
-  const points: CastPoint[] = MOVING.map(({ id, body, name }) => {
+  const points: CastPoint[] = moving.map(({ id, body, name }) => {
     const lon = eclipticLon(body, date);
     return pointFromLon(id, name, lon, ascL, isRetrograde(body, date, lon));
   });
@@ -267,8 +278,11 @@ export function bigThreeFromCast(cast: NatalCast): Omit<SkyNatal, "tone" | "dept
   };
 }
 
-export function computeBigThree(date: Date, place: GeoPlace): Omit<SkyNatal, "tone" | "depth" | "when" | "writtenAt"> {
-  return bigThreeFromCast(computeNatalCast(date, place));
+export async function computeBigThree(
+  date: Date,
+  place: GeoPlace,
+): Promise<Omit<SkyNatal, "tone" | "depth" | "when" | "writtenAt">> {
+  return bigThreeFromCast(await computeNatalCast(date, place));
 }
 
 const GEOCODE_TTL_MS = 60 * 60 * 1000;

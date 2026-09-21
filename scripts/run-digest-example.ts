@@ -10,7 +10,7 @@ const PLACE = {
   timeZone: "America/Detroit",
 };
 const utc = localToUtc(2004, 7, 26, 18, 21, PLACE.timeZone);
-const cast = computeNatalCast(utc, PLACE);
+const cast = await computeNatalCast(utc, PLACE);
 const nat = buildVisitorNativity(cast, {
   label: "Visitor natal",
   when: "26 Jul 2004 · 6:21 pm",
