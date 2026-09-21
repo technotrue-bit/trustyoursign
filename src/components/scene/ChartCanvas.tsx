@@ -17,6 +17,7 @@ import { useGalaxy } from "@/lib/galaxy/store";
 import type { AppMode, ChakraId, PlanetId } from "@/lib/chart/types";
 import { ChakraBody, DecisionMachine, GatePortals } from "./Figures";
 import { GalaxyIntro } from "./GalaxyIntro";
+import { FrameGovernor } from "./FrameGovernor";
 import { SkyWheel } from "./SkyWheel";
 
 type Pose = { position: [number, number, number]; target: [number, number, number] };
@@ -244,6 +245,7 @@ function SceneGate({ charted }: { charted: boolean }) {
 
   return (
     <>
+      <FrameGovernor />
       <color attach="background" args={["#0c0b0a"]} />
       {view === "chart" ? <ChartWorld /> : view === "galaxy" ? <GalaxyIntro /> : null}
     </>

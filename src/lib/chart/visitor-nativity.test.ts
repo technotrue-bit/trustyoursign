@@ -12,9 +12,9 @@ const PLACE: GeoPlace = {
 };
 
 describe("visitor natal cast", () => {
-  it("casts planets, angles, and builds a room-ready Nativity", () => {
+  it("casts planets, angles, and builds a room-ready Nativity", async () => {
     const utc = localToUtc(2004, 7, 26, 18, 21, PLACE.timeZone);
-    const cast = computeNatalCast(utc, PLACE);
+    const cast = await computeNatalCast(utc, PLACE);
     assert.ok(cast.points.length >= 12);
     assert.ok(cast.angles.asc >= 0 && cast.angles.asc < 360);
     assert.ok(cast.angles.mc >= 0 && cast.angles.mc < 360);

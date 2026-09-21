@@ -21,10 +21,10 @@ describe("phaseNameFromAngle", () => {
 });
 
 describe("moonDayBrief", () => {
-  it("returns tropical moon sign and phase for a fixed UTC instant", () => {
+  it("returns tropical moon sign and phase for a fixed UTC instant", async () => {
     // 2024-08-19 near full moon
     const when = new Date("2024-08-19T18:00:00Z");
-    const brief = moonDayBrief(when);
+    const brief = await moonDayBrief(when);
     assert.equal(brief.dateKey, localDateKey(when));
     assert.ok(brief.illumination > 0.9, `expected near-full, got ${brief.illumination}`);
     assert.equal(brief.phaseName, "Full Moon");
@@ -47,8 +47,8 @@ describe("moonDayBrief", () => {
     );
   });
 
-  it("keeps illumination in 0..1", () => {
-    const brief = moonDayBrief(new Date("2026-09-19T16:00:00Z"));
+  it("keeps illumination in 0..1", async () => {
+    const brief = await moonDayBrief(new Date("2026-09-19T16:00:00Z"));
     assert.ok(brief.illumination >= 0 && brief.illumination <= 1);
   });
 });

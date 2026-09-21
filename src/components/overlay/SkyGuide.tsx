@@ -60,8 +60,14 @@ function useGuideTarget(selector: string | null) {
     }
     const find = () => document.querySelector(selector);
     setEl(find());
-    const id = window.setInterval(() => setEl(find()), 400);
-    return () => window.clearInterval(id);
+    // Targets are injected by shell mounts — observe the stage instead of polling.
+    const root = document.querySelector(".vault-stage") ?? document.body;
+    const mo = new MutationObserver(() => {
+      const next = find();
+      setEl((prev) => (prev === next ? prev : next));
+    });
+    mo.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-sky-guide"] });
+    return () => mo.disconnect();
   }, [selector]);
   return el;
 }

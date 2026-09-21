@@ -10,10 +10,14 @@ import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { useSessionStore } from "@/lib/chart/session/store";
 import {
+  NEBULA_2D_LAYER_GAIN,
+  composeNebulaWallpaper,
   loadNebulaImages,
+  nebulaCompositeSize,
   paintNebulaWallpaper,
   type NebulaImageMap,
 } from "@/lib/galaxy/nebulaBackdrop";
+import { isSmallGpu } from "@/lib/gpu";
 
 type Star = {
   x: number;
@@ -156,8 +160,15 @@ export function FallbackSky({ note }: { note?: string }) {
     let gy = 0.48;
     let glow = 0;
     let nebulae: NebulaImageMap = new Map();
+    let nebulaComposite: HTMLCanvasElement | null = null;
+    const modestGpu = typeof window !== "undefined" && isSmallGpu();
     void loadNebulaImages(modest).then((map) => {
       nebulae = map;
+      nebulaComposite = composeNebulaWallpaper(
+        map,
+        nebulaCompositeSize(modestGpu),
+        NEBULA_2D_LAYER_GAIN,
+      );
     });
 
     const resize = () => {
@@ -586,7 +597,16 @@ export function FallbackSky({ note }: { note?: string }) {
       // Uses skyTime so Pause freezes drift with the rest of the 2D sky.
       const earlyLookX = exploring ? galaxyTravel.exploreLookX : 0;
       const earlyLookY = exploring ? galaxyTravel.exploreLookY : 0;
-      paintNebulaWallpaper(ctx, nebulae, w, h, skyTime, earlyLookX, earlyLookY);
+      paintNebulaWallpaper(
+        ctx,
+        nebulae,
+        w,
+        h,
+        skyTime,
+        earlyLookX,
+        earlyLookY,
+        nebulaComposite,
+      );
       const sought = stepSeek(galaxyTravel.t, dt);
       galaxyTravel.t = clamp01(sought.t);
       if (sought.active) {
@@ -729,6 +749,24 @@ export function FallbackSky({ note }: { note?: string }) {
 
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
+      // Hidden tab / Pause-while-idle: keep the clock scheduled so resume is
+      // instant, but skip the full 2D repaint until something moves again.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        last = now;
+        return;
+      }
+      const idlePaused =
+        galaxyTravel.paused &&
+        !galaxyTravel.dragging &&
+        !galaxyTravel.handsOn &&
+        galaxyTravel.seek == null &&
+        galaxyTravel.playUntil == null &&
+        !introPlaying() &&
+        !exploringSign();
+      if (idlePaused) {
+        last = now;
+        return;
+      }
       try {
         tickSky(now);
       } catch {

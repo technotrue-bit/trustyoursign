@@ -1,6 +1,5 @@
-import { Body, Ecliptic, GeoVector, Illumination, MoonPhase } from "astronomy-engine";
 import type { SignId } from "./types";
-import { signFromLon, wrap360 } from "./ephemeris";
+import { signFromLon, wrap360, loadAstronomy } from "./ephemeris";
 
 export type MoonDayBrief = {
   /** Local civil date YYYY-MM-DD */
@@ -36,13 +35,10 @@ export function phaseNameFromAngle(deg: number): string {
   return "Waning Crescent";
 }
 
-function moonEclipticLon(when: Date): number {
-  return wrap360(Ecliptic(GeoVector(Body.Moon, when, true)).elon);
-}
-
-/** Honest sky facts for a civil moment — no network. */
-export function moonDayBrief(when: Date = new Date()): MoonDayBrief {
-  const lon = moonEclipticLon(when);
+/** Honest sky facts for a civil moment — no network. Lazy-loads astronomy-engine. */
+export async function moonDayBrief(when: Date = new Date()): Promise<MoonDayBrief> {
+  const { Body, Ecliptic, GeoVector, Illumination, MoonPhase } = await loadAstronomy();
+  const lon = wrap360(Ecliptic(GeoVector(Body.Moon, when, true)).elon);
   const sign = signFromLon(lon);
   const ill = Illumination(Body.Moon, when);
   const phaseAngle = MoonPhase(when);

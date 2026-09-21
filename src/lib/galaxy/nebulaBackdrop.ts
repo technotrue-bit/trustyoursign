@@ -52,6 +52,21 @@ export const CENTER_WELL = { rx: 0.42, ry: 0.55, alpha: 0.82, color: "#0a0908" }
 /** Default 2D vignette strength — lands on the same charcoal as the WebGL well. */
 export const CENTER_VIGNETTE_STRENGTH = 1.0;
 
+/** Baked wallpaper side length — one texture replaces five live planes. */
+export const NEBULA_COMPOSITE_SIZE = 1536;
+export const NEBULA_COMPOSITE_SIZE_MODEST = 1024;
+
+/**
+ * Whole-sky drift after baking (mean of the five layer drifts). Per-layer
+ * parallax is intentionally collapsed so we pay one draw instead of five.
+ */
+export const NEBULA_COMPOSITE_DRIFT =
+  NEBULA_LAYERS.reduce((acc, l) => acc + l.drift, 0) / NEBULA_LAYERS.length;
+
+export function nebulaCompositeSize(modest: boolean): number {
+  return modest ? NEBULA_COMPOSITE_SIZE_MODEST : NEBULA_COMPOSITE_SIZE;
+}
+
 export function nebulaUrl(id: string, modest: boolean): string {
   return modest ? `/sky/${id}-sm.jpg` : `/sky/${id}.jpg`;
 }
@@ -149,6 +164,20 @@ export function paintCenterVignette(
  * Draw cover-fit image centered on (cx, cy) with uniform scale so the shorter
  * canvas edge is filled at `scale === 1`.
  */
+function imageSize(img: CanvasImageSource): [number, number] {
+  if ("naturalWidth" in img) {
+    const w = Number(img.naturalWidth) || 0;
+    const h = Number(img.naturalHeight) || 0;
+    if (w > 0 && h > 0) return [w, h];
+  }
+  if ("width" in img && "height" in img) {
+    const w = Number(img.width) || 1;
+    const h = Number(img.height) || 1;
+    return [w, h];
+  }
+  return [1, 1];
+}
+
 export function drawCoverImage(
   ctx: CanvasRenderingContext2D,
   img: CanvasImageSource,
@@ -159,8 +188,7 @@ export function drawCoverImage(
   scale: number,
   opacity: number,
 ) {
-  const iw = "naturalWidth" in img ? Number(img.naturalWidth) || 1 : 1;
-  const ih = "naturalHeight" in img ? Number(img.naturalHeight) || 1 : 1;
+  const [iw, ih] = imageSize(img);
   const cover = Math.max(canvasW / iw, canvasH / ih) * scale;
   const dw = iw * cover;
   const dh = ih * cover;
@@ -191,9 +219,73 @@ export function loadNebulaImages(modest: boolean): Promise<NebulaImageMap> {
 }
 
 /**
- * Paint vibrant nebula wallpaper with slow drift. Uses `skyTime` so Pause freezes
- * motion with the rest of the sky. `lookX` / `lookY` add a tiny parallax while
- * the visitor drags to look around.
+ * Bake the five layer JPGs + warm tint + edge mask into one square canvas.
+ * Called once after images load (and again only if the size budget changes).
+ * Returns null when nothing is ready yet.
+ */
+export function composeNebulaWallpaper(
+  images: NebulaImageMap,
+  size: number,
+  gain = NEBULA_2D_LAYER_GAIN,
+): HTMLCanvasElement | null {
+  if (typeof document === "undefined" || images.size === 0 || size < 2) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d", { alpha: true });
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, size, size);
+  let painted = 0;
+  for (const layer of NEBULA_LAYERS) {
+    const img = images.get(layer.id);
+    if (!img) continue;
+    drawCoverImage(
+      ctx,
+      img,
+      size * (0.5 + layer.ox),
+      size * (0.5 + layer.oy),
+      size,
+      size,
+      layer.scale,
+      layer.opacity * gain,
+    );
+    painted++;
+  }
+  if (painted === 0) return null;
+
+  // Warm mid tone-map (matches MeshBasicMaterial `color={NEBULA_TINT}`).
+  ctx.globalCompositeOperation = "multiply";
+  ctx.fillStyle = NEBULA_TINT;
+  ctx.fillRect(0, 0, size, size);
+  ctx.globalCompositeOperation = "source-over";
+
+  // Punch the centre down so the figure / type stay on charcoal.
+  const maskCanvas = document.createElement("canvas");
+  maskCanvas.width = size;
+  maskCanvas.height = size;
+  const mctx = maskCanvas.getContext("2d");
+  if (mctx) {
+    const mask = makeEdgeAlphaMaskData(size);
+    const imgData = mctx.createImageData(size, size);
+    for (let i = 0; i < mask.length; i += 4) {
+      imgData.data[i] = 255;
+      imgData.data[i + 1] = 255;
+      imgData.data[i + 2] = 255;
+      imgData.data[i + 3] = mask[i]!;
+    }
+    mctx.putImageData(imgData, 0, 0);
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.drawImage(maskCanvas, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+  }
+  return canvas;
+}
+
+/**
+ * Paint the baked wallpaper with whole-sky drift. Uses `skyTime` so Pause
+ * freezes motion. `lookX` / `lookY` add a tiny parallax while looking around.
+ * Pass a prebuilt `composite` when available; otherwise falls back to a
+ * one-shot bake from `images`.
  */
 export function paintNebulaWallpaper(
   ctx: CanvasRenderingContext2D,
@@ -203,19 +295,18 @@ export function paintNebulaWallpaper(
   skyTime: number,
   lookX = 0,
   lookY = 0,
+  composite: HTMLCanvasElement | null = null,
 ) {
-  if (images.size === 0 || w < 2 || h < 2) return;
+  if (w < 2 || h < 2) return;
+  const baked =
+    composite ??
+    composeNebulaWallpaper(images, Math.min(1024, Math.max(w, h)), NEBULA_2D_LAYER_GAIN);
+  if (!baked) return;
+  const drift = skyTime * NEBULA_COMPOSITE_DRIFT;
+  const cx = w * 0.5 + Math.sin(drift) * w * 0.035 + lookX * w * 0.04;
+  const cy = h * 0.5 + Math.cos(drift * 0.85) * h * 0.028 - lookY * h * 0.035;
   ctx.save();
-  for (const layer of NEBULA_LAYERS) {
-    const img = images.get(layer.id);
-    if (!img) continue;
-    const drift = skyTime * layer.drift;
-    const cx =
-      w * (0.5 + layer.ox) + Math.sin(drift) * w * 0.035 + lookX * w * 0.04;
-    const cy =
-      h * (0.5 + layer.oy) + Math.cos(drift * 0.85) * h * 0.028 - lookY * h * 0.035;
-    drawCoverImage(ctx, img, cx, cy, w, h, layer.scale, layer.opacity * NEBULA_2D_LAYER_GAIN);
-  }
+  drawCoverImage(ctx, baked, cx, cy, w, h, 1.15, 1);
   ctx.restore();
   paintCenterVignette(ctx, w, h, CENTER_VIGNETTE_STRENGTH);
 }

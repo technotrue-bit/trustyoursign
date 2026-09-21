@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import {
+  CanvasTexture,
   DataTexture,
   DoubleSide,
   Group,
@@ -16,13 +17,15 @@ import {
 } from "three";
 import { isSmallGpu } from "@/lib/gpu";
 import {
+  NEBULA_COMPOSITE_DRIFT,
   NEBULA_GL_LAYER_GAIN,
   NEBULA_GL_LAYER_GAIN_MODEST,
   NEBULA_LAYERS,
-  NEBULA_TINT,
+  composeNebulaWallpaper,
   makeCenterWellData,
-  makeEdgeAlphaMaskData,
+  nebulaCompositeSize,
   nebulaUrl,
+  type NebulaImageMap,
 } from "@/lib/galaxy/nebulaBackdrop";
 import { exploringSign, galaxyTravel } from "@/lib/galaxy/travel";
 
@@ -32,6 +35,7 @@ function noopRaycast() {
 
 const MASK_SIZE = 256;
 const WELL_DISTANCE = 40;
+const PLANE_DISTANCE = 48;
 
 function makeDataTexture(data: Uint8ClampedArray, srgb: boolean) {
   const tex = new DataTexture(data, MASK_SIZE, MASK_SIZE, RGBAFormat, UnsignedByteType);
@@ -44,14 +48,13 @@ function makeDataTexture(data: Uint8ClampedArray, srgb: boolean) {
 }
 
 /**
- * Camera-locked distant nebula planes — fills the `#0c0b0a` clear behind the
- * HTML Gemini card. Normal-blended with an edge alpha mask so the five layers
- * never stack to white mid-frame; a static centre well sits in front of them
- * so the figure and parchment type read as ink on dark. Pause freezes drift via
- * `galaxyTravel.shaderTime`.
+ * Camera-locked nebula wallpaper — one baked composite plane + a static centre
+ * well. Replaces five live additive/normal planes so mid-frame fill cost drops
+ * from six draws to two. Pause freezes drift via `galaxyTravel.shaderTime`.
  */
 export function NebulaBackdrop() {
   const group = useRef<Group>(null);
+  const plane = useRef<Mesh>(null);
   const well = useRef<Mesh>(null);
   const { camera } = useThree();
   const modest = typeof window !== "undefined" && isSmallGpu();
@@ -61,28 +64,43 @@ export function NebulaBackdrop() {
     [modest],
   );
   const textures = useLoader(TextureLoader, urls);
-  const texList = useMemo(() => {
+  const [compositeMap, setCompositeMap] = useState<CanvasTexture | null>(null);
+
+  useEffect(() => {
     const list = Array.isArray(textures) ? textures : [textures];
-    for (const tex of list) {
-      tex.colorSpace = SRGBColorSpace;
-      tex.anisotropy = modest ? 1 : 4;
+    const images: NebulaImageMap = new Map();
+    for (let i = 0; i < NEBULA_LAYERS.length; i++) {
+      const layer = NEBULA_LAYERS[i]!;
+      const img = list[i]?.image as CanvasImageSource | undefined;
+      if (img) images.set(layer.id, img as HTMLImageElement);
     }
-    return list;
-  }, [textures, modest]);
-  const edgeMask = useMemo(
-    () => makeDataTexture(makeEdgeAlphaMaskData(MASK_SIZE), false),
-    [],
-  );
+    const baked = composeNebulaWallpaper(images, nebulaCompositeSize(modest), gain);
+    if (!baked) {
+      setCompositeMap(null);
+      return;
+    }
+    const tex = new CanvasTexture(baked);
+    tex.colorSpace = SRGBColorSpace;
+    tex.minFilter = LinearFilter;
+    tex.magFilter = LinearFilter;
+    tex.generateMipmaps = false;
+    tex.anisotropy = modest ? 1 : 4;
+    tex.needsUpdate = true;
+    setCompositeMap(tex);
+    return () => {
+      tex.dispose();
+    };
+  }, [textures, modest, gain]);
+
   const wellMap = useMemo(
     () => makeDataTexture(makeCenterWellData(MASK_SIZE), true),
     [],
   );
   useEffect(
     () => () => {
-      edgeMask.dispose();
       wellMap.dispose();
     },
-    [edgeMask, wellMap],
+    [wellMap],
   );
 
   useFrame(() => {
@@ -93,24 +111,22 @@ export function NebulaBackdrop() {
     const t = galaxyTravel.shaderTime;
     const lookX = exploringSign() ? galaxyTravel.exploreLookX : 0;
     const lookY = exploringSign() ? galaxyTravel.exploreLookY : 0;
-    for (let i = 0; i < NEBULA_LAYERS.length; i++) {
-      const child = g.children[i];
-      const spec = NEBULA_LAYERS[i];
-      if (!child || !spec) continue;
-      const drift = t * spec.drift;
-      child.rotation.z = drift * 0.4;
-      child.position.set(
-        spec.ox * 14 + Math.sin(drift) * 1.4 + lookX * 2.2,
-        -spec.oy * 10 + Math.cos(drift * 0.9) * 1.1 + lookY * 1.6,
-        -42 - i * 5,
+    const drift = t * NEBULA_COMPOSITE_DRIFT;
+
+    const p = plane.current;
+    if (p) {
+      p.rotation.z = drift * 0.4;
+      p.position.set(
+        Math.sin(drift) * 1.4 + lookX * 2.2,
+        Math.cos(drift * 0.9) * 1.1 + lookY * 1.6,
+        -PLANE_DISTANCE,
       );
-      const mat = (child as { material?: MeshBasicMaterial }).material;
-      if (mat && "opacity" in mat) {
-        mat.opacity = spec.opacity * gain;
-      }
+      const mat = p.material as MeshBasicMaterial;
+      const ready = Boolean(compositeMap);
+      mat.opacity = ready ? 1 : 0;
+      p.visible = ready;
     }
-    // Static well: sized to the visible frustum at its depth so the ellipse
-    // always covers the figure + text column and leaves the corners alive.
+
     const w = well.current;
     if (w) {
       const fov = camera instanceof PerspectiveCamera ? camera.fov : 50;
@@ -120,35 +136,27 @@ export function NebulaBackdrop() {
       const portrait = aspect < 1;
       w.scale.set(visW, visH * (portrait ? 1.12 : 1), 1);
       w.position.set(0, visH * 0.06, -WELL_DISTANCE);
+      w.visible = true;
     }
   });
 
   return (
     <group ref={group} renderOrder={-24}>
-      {NEBULA_LAYERS.map((spec, i) => (
-        <mesh
-          key={spec.id}
-          renderOrder={-24 - i}
-          frustumCulled={false}
-          raycast={noopRaycast}
-        >
-          <planeGeometry args={[64, 64]} />
-          <meshBasicMaterial
-            map={texList[i]}
-            alphaMap={edgeMask}
-            color={NEBULA_TINT}
-            transparent
-            opacity={spec.opacity * gain}
-            premultipliedAlpha={false}
-            depthWrite={false}
-            depthTest={false}
-            toneMapped={false}
-            fog={false}
-            side={DoubleSide}
-            blending={NormalBlending}
-          />
-        </mesh>
-      ))}
+      <mesh ref={plane} renderOrder={-24} frustumCulled={false} raycast={noopRaycast} visible={false}>
+        <planeGeometry args={[64, 64]} />
+        <meshBasicMaterial
+          map={compositeMap}
+          transparent
+          opacity={0}
+          premultipliedAlpha={false}
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+          fog={false}
+          side={DoubleSide}
+          blending={NormalBlending}
+        />
+      </mesh>
       <mesh ref={well} renderOrder={-12} frustumCulled={false} raycast={noopRaycast}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial

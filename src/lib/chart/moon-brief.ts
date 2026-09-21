@@ -88,7 +88,7 @@ export const getMoonSignBrief = createServerFn({ method: "POST" })
     return { signId: raw as SignId, enrich: input?.enrich === true };
   })
   .handler(async ({ data }): Promise<MoonSignBriefResult> => {
-    const moon = moonDayBrief(new Date());
+    const moon = await moonDayBrief(new Date());
     const bones = deterministicMoonEffect(moon, data.signId);
     if (!data.enrich) return { moon, effect: bones, from: "bones" };
     const spoken = await enrichWithXai(moon, data.signId, bones);

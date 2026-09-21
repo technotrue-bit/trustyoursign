@@ -467,6 +467,18 @@
   animation: sign-galaxy-dot-sweep 10s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
 }
 
+html.sky-paused .sign-galaxy-dot-sweep,
+html.sky-paused .stagger-in > * {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sign-galaxy-dot-sweep {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+}
+
 .sign-galaxy-dot {
   --i: 0;
   position: relative;

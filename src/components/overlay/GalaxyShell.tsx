@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { SIGN_INSIGHTS, insightToneLabel } from "@/lib/galaxy/signInsights";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
@@ -45,6 +45,12 @@ export function GalaxyShell() {
     writeMotionPaused(next);
     setPaused(next);
   };
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("sky-paused", paused);
+    return () => document.documentElement.classList.remove("sky-paused");
+  }, [paused]);
+
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
   const exploring = explorePhase !== "idle";
   const worldFade = exploring ? exploreWorldFade : 1;
