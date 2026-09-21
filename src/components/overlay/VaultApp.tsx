@@ -39,6 +39,7 @@ import {
   type SkyPlaceSearch,
 } from "@/lib/ui/skyPlace";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
+import { ChunkRecovered } from "@/components/chunk-recovered";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { GalaxyShell } from "./GalaxyShell";
 import { ClaimShell } from "./ClaimShell";
@@ -366,17 +367,23 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
         <SceneErrorBoundary
           fallback={
             <Suspense fallback={null}>
-              <FallbackSky note={FALLBACK_NOTE} />
+              <ChunkRecovered>
+                <FallbackSky note={FALLBACK_NOTE} />
+              </ChunkRecovered>
             </Suspense>
           }
         >
-          <Scene />
+          <ChunkRecovered>
+            <Scene />
+          </ChunkRecovered>
         </SceneErrorBoundary>
       ) : (
         <Suspense fallback={null}>
           {/* Reduced motion chose the 2D sky on purpose — only a real
               WebGL failure gets the "could not load" note. */}
-          <FallbackSky note={prefersReducedMotion() ? undefined : FALLBACK_NOTE} />
+          <ChunkRecovered>
+            <FallbackSky note={prefersReducedMotion() ? undefined : FALLBACK_NOTE} />
+          </ChunkRecovered>
         </Suspense>
       )}
       {deskNotice ? (
