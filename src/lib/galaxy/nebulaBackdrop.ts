@@ -67,9 +67,9 @@ export const NEBULA_COMPOSITE_DRIFT =
   NEBULA_LAYERS.reduce((acc, l) => acc + l.drift, 0) / NEBULA_LAYERS.length;
 
 /** How far from the plate centre soft falloff begins (0–1 half-extent). */
-export const PLATE_FADE_START = 0.38;
+export const PLATE_FADE_START = 0.52;
 /** Half-extent where plate alpha hits 0 — before the JPG rectangle rim. */
-export const PLATE_FADE_END = 0.96;
+export const PLATE_FADE_END = 0.98;
 
 export function nebulaCompositeSize(modest: boolean): number {
   return modest ? NEBULA_COMPOSITE_SIZE_MODEST : NEBULA_COMPOSITE_SIZE;
@@ -327,21 +327,55 @@ export function composeNebulaWallpaper(
   plateImg.data.set(plateMask);
   mctx.putImageData(plateImg, 0, 0);
 
+  // Wrap-around copies so sphere UVs never land on an empty strip (no black gutter).
+  const wrapOffsets: readonly [number, number][] = [
+    [0, 0],
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [1, 1],
+    [-1, 1],
+    [1, -1],
+    [-1, -1],
+  ];
+
   let painted = 0;
+  // Full-canvas wash first — one oversized soft plate so the sky has base color everywhere.
+  const wash = NEBULA_LAYERS[0];
+  const washImg = wash ? images.get(wash.id) : undefined;
+  if (wash && washImg) {
+    drawSoftPlate(
+      ctx,
+      washImg,
+      size * 0.5,
+      size * 0.48,
+      size,
+      size,
+      2.35,
+      wash.opacity * gain * 0.55,
+      plateMaskCanvas,
+    );
+    painted++;
+  }
   for (const layer of NEBULA_LAYERS) {
     const img = images.get(layer.id);
     if (!img) continue;
-    drawSoftPlate(
-      ctx,
-      img,
-      size * (0.5 + layer.ox),
-      size * (0.5 + layer.oy),
-      size,
-      size,
-      layer.scale,
-      layer.opacity * gain,
-      plateMaskCanvas,
-    );
+    for (const [wx, wy] of wrapOffsets) {
+      const fade =
+        wx === 0 && wy === 0 ? 1 : wx === 0 || wy === 0 ? 0.55 : 0.32;
+      drawSoftPlate(
+        ctx,
+        img,
+        size * (0.5 + layer.ox + wx),
+        size * (0.5 + layer.oy + wy),
+        size,
+        size,
+        layer.scale,
+        layer.opacity * gain * fade,
+        plateMaskCanvas,
+      );
+    }
     painted++;
   }
   if (painted === 0) return null;
