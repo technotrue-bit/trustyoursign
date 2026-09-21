@@ -35,6 +35,7 @@ import {
   EXPLORE_ZOOM_MAX,
   EXPLORE_ZOOM_MIN,
   HOLD_FLY,
+  INSIDE_LANDING_DISTANCE,
   aimedIndex,
   ensureAutoClock,
   stopAutoClock,
@@ -158,8 +159,8 @@ const _camUp = new Vector3();
 const _hub = new Vector3();
 const _hubNdc = new Vector3();
 
-/** Enter flythrough: where the camera comes to rest relative to the hub star. */
-export const HUB_STANDOFF = 2.6;
+/** Enter flythrough: where the inside camera comes to rest relative to the hub star. */
+export const HUB_STANDOFF = INSIDE_LANDING_DISTANCE;
 
 let cachedViewW = 1280;
 let cachedViewH = 900;
