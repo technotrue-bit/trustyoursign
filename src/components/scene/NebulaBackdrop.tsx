@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import {
+  BackSide,
   CanvasTexture,
   DataTexture,
   DoubleSide,
@@ -35,7 +36,8 @@ function noopRaycast() {
 
 const MASK_SIZE = 256;
 const WELL_DISTANCE = 40;
-const PLANE_DISTANCE = 48;
+/** Far sky shell — wraps the camera so no mid-ground billboard remains. */
+const SKY_RADIUS = 110;
 
 function makeDataTexture(data: Uint8ClampedArray, srgb: boolean) {
   const tex = new DataTexture(data, MASK_SIZE, MASK_SIZE, RGBAFormat, UnsignedByteType);
@@ -48,13 +50,14 @@ function makeDataTexture(data: Uint8ClampedArray, srgb: boolean) {
 }
 
 /**
- * Camera-locked nebula wallpaper — one baked composite plane + a static centre
- * well. Replaces five live additive/normal planes so mid-frame fill cost drops
- * from six draws to two. Pause freezes drift via `galaxyTravel.shaderTime`.
+ * Camera-locked nebula sky — one soft-edged composite on an inward sphere plus
+ * a static centre well. Soft plate falloff in the bake kills JPG rectangles;
+ * the sphere fills left/right/above/behind so no black gutters or picture
+ * frames remain. Pause freezes drift via `galaxyTravel.shaderTime`.
  */
 export function NebulaBackdrop() {
   const group = useRef<Group>(null);
-  const plane = useRef<Mesh>(null);
+  const sky = useRef<Mesh>(null);
   const well = useRef<Mesh>(null);
   const { camera } = useThree();
   const modest = typeof window !== "undefined" && isSmallGpu();
@@ -65,6 +68,10 @@ export function NebulaBackdrop() {
   );
   const textures = useLoader(TextureLoader, urls);
   const [compositeMap, setCompositeMap] = useState<CanvasTexture | null>(null);
+  const sphereArgs = useMemo(
+    () => [SKY_RADIUS, modest ? 32 : 48, modest ? 24 : 32] as [number, number, number],
+    [modest],
+  );
 
   useEffect(() => {
     const list = Array.isArray(textures) ? textures : [textures];
@@ -113,18 +120,18 @@ export function NebulaBackdrop() {
     const lookY = exploringSign() ? galaxyTravel.exploreLookY : 0;
     const drift = t * NEBULA_COMPOSITE_DRIFT;
 
-    const p = plane.current;
-    if (p) {
-      p.rotation.z = drift * 0.4;
-      p.position.set(
-        Math.sin(drift) * 1.4 + lookX * 2.2,
-        Math.cos(drift * 0.9) * 1.1 + lookY * 1.6,
-        -PLANE_DISTANCE,
+    const s = sky.current;
+    if (s) {
+      // Slow whole-sky drift + tiny look parallax — sphere stays around the camera.
+      s.rotation.set(
+        lookY * 0.05 + Math.sin(drift * 0.35) * 0.02,
+        drift * 0.55 + lookX * 0.06,
+        drift * 0.22,
       );
-      const mat = p.material as MeshBasicMaterial;
+      const mat = s.material as MeshBasicMaterial;
       const ready = Boolean(compositeMap);
       mat.opacity = ready ? 1 : 0;
-      p.visible = ready;
+      s.visible = ready;
     }
 
     const w = well.current;
@@ -142,8 +149,8 @@ export function NebulaBackdrop() {
 
   return (
     <group ref={group} renderOrder={-24}>
-      <mesh ref={plane} renderOrder={-24} frustumCulled={false} raycast={noopRaycast} visible={false}>
-        <planeGeometry args={[64, 64]} />
+      <mesh ref={sky} renderOrder={-24} frustumCulled={false} raycast={noopRaycast} visible={false}>
+        <sphereGeometry args={sphereArgs} />
         <meshBasicMaterial
           map={compositeMap}
           transparent
@@ -153,7 +160,7 @@ export function NebulaBackdrop() {
           depthTest={false}
           toneMapped={false}
           fog={false}
-          side={DoubleSide}
+          side={BackSide}
           blending={NormalBlending}
         />
       </mesh>

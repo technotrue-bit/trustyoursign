@@ -1,7 +1,7 @@
 /**
  * Distant nebula wallpaper for the empty sky behind the Gemini card.
  * Decoration only — never interactive. Used by FallbackSky (2D) and
- * NebulaBackdrop (WebGL planes).
+ * NebulaBackdrop (WebGL sky sphere).
  */
 
 export type NebulaLayerSpec = {
@@ -13,26 +13,26 @@ export type NebulaLayerSpec = {
   oy: number;
   /** Cover scale (>1 zooms in). */
   scale: number;
-  /** Peak opacity (edges stay vivid; center is vignetted separately). */
+  /** Peak opacity (soft plate edges die to black before the JPG rectangle). */
   opacity: number;
   /** Slow drift radians-per-second coefficient on shaderTime. */
   drift: number;
 };
 
 /**
- * Five compressed refs — corners/edges glow; center stays quieter via the edge
- * alpha mask (WebGL) / vignette (2D). Colour comes from the texture, so these
- * opacities can sit low without graying the sky out.
+ * Five compressed refs — corners/edges glow; centre stays quieter via the
+ * centre well (WebGL) / vignette (2D). Soft plate falloff kills photo rims.
+ * Scales and offsets are large/overlapping so the bake reads as one sky.
  */
 export const NEBULA_LAYERS: readonly NebulaLayerSpec[] = [
-  { id: "nebula-amber", ox: -0.18, oy: -0.12, scale: 1.42, opacity: 0.72, drift: 0.012 },
-  { id: "nebula-butterfly", ox: 0.22, oy: -0.18, scale: 1.28, opacity: 0.68, drift: -0.01 },
-  { id: "nebula-ring", ox: 0.05, oy: 0.2, scale: 1.18, opacity: 0.58, drift: 0.008 },
-  { id: "nebula-hourglass", ox: -0.28, oy: 0.16, scale: 1.22, opacity: 0.62, drift: -0.014 },
-  { id: "nebula-pillar", ox: 0.3, oy: 0.1, scale: 1.3, opacity: 0.66, drift: 0.009 },
+  { id: "nebula-amber", ox: -0.26, oy: -0.18, scale: 1.72, opacity: 0.72, drift: 0.012 },
+  { id: "nebula-butterfly", ox: 0.28, oy: -0.22, scale: 1.64, opacity: 0.68, drift: -0.01 },
+  { id: "nebula-ring", ox: 0.02, oy: 0.24, scale: 1.58, opacity: 0.58, drift: 0.008 },
+  { id: "nebula-hourglass", ox: -0.34, oy: 0.2, scale: 1.66, opacity: 0.62, drift: -0.014 },
+  { id: "nebula-pillar", ox: 0.36, oy: 0.12, scale: 1.7, opacity: 0.66, drift: 0.009 },
 ] as const;
 
-/** Mild tone-map multiplier on the WebGL planes: pulls mids down, keeps warmth. */
+/** Mild tone-map multiplier on the wallpaper: pulls mids down, keeps warmth. */
 export const NEBULA_TINT = "#b8ab98";
 
 /** Per-path gain on `NEBULA_LAYERS[*].opacity`. */
@@ -40,7 +40,10 @@ export const NEBULA_GL_LAYER_GAIN = 0.8;
 export const NEBULA_GL_LAYER_GAIN_MODEST = 0.68;
 export const NEBULA_2D_LAYER_GAIN = 0.6;
 
-/** Edge alpha mask: how much of each plane survives at dead centre. */
+/**
+ * Soft centre punch on the baked sky (multiplied into RGB, not a hard alpha
+ * frame). Keeps mid-screen budget low when the well is thin.
+ */
 export const EDGE_MASK_CENTER_ALPHA = 0.12;
 
 /**
@@ -52,7 +55,7 @@ export const CENTER_WELL = { rx: 0.42, ry: 0.55, alpha: 0.82, color: "#0a0908" }
 /** Default 2D vignette strength — lands on the same charcoal as the WebGL well. */
 export const CENTER_VIGNETTE_STRENGTH = 1.0;
 
-/** Baked wallpaper side length — one texture replaces five live planes. */
+/** Baked wallpaper side length — one texture wraps the sky sphere. */
 export const NEBULA_COMPOSITE_SIZE = 1536;
 export const NEBULA_COMPOSITE_SIZE_MODEST = 1024;
 
@@ -62,6 +65,11 @@ export const NEBULA_COMPOSITE_SIZE_MODEST = 1024;
  */
 export const NEBULA_COMPOSITE_DRIFT =
   NEBULA_LAYERS.reduce((acc, l) => acc + l.drift, 0) / NEBULA_LAYERS.length;
+
+/** How far from the plate centre soft falloff begins (0–1 half-extent). */
+export const PLATE_FADE_START = 0.38;
+/** Half-extent where plate alpha hits 0 — before the JPG rectangle rim. */
+export const PLATE_FADE_END = 0.96;
 
 export function nebulaCompositeSize(modest: boolean): number {
   return modest ? NEBULA_COMPOSITE_SIZE_MODEST : NEBULA_COMPOSITE_SIZE;
@@ -81,8 +89,23 @@ function smoothstep01(t: number) {
 }
 
 /**
- * Alpha of the edge mask at normalised radius `r` (0 = centre, 1 = edge
- * midpoint, ~1.41 = corner). Low in the middle, opaque past the edges.
+ * Soft plate edge at normalised half-extents `nx`/`ny` in [-1, 1] (0 = centre
+ * of the drawn JPG, ±1 = rectangle rim). Returns 1 in the core and 0 before
+ * the rim so no photo cutout can read as a frame.
+ */
+export function plateEdgeAlphaAt(nx: number, ny: number): number {
+  const ax = Math.abs(nx);
+  const ay = Math.abs(ny);
+  const span = Math.max(1e-6, PLATE_FADE_END - PLATE_FADE_START);
+  const fx = 1 - smoothstep01((ax - PLATE_FADE_START) / span);
+  const fy = 1 - smoothstep01((ay - PLATE_FADE_START) / span);
+  return fx * fy;
+}
+
+/**
+ * Soft centre weight for exposure (0 = centre, 1 = edge midpoint). Low in the
+ * middle so stacked plates do not white-out under the card; used as a multiply
+ * factor, never as an opaque square frame.
  */
 export function edgeMaskAlphaAt(r: number): number {
   const t = smoothstep01((clamp01(r) - 0.18) / 0.82);
@@ -99,7 +122,7 @@ export function centerWellAlphaAt(x: number, y: number): number {
   return CENTER_WELL.alpha * smoothstep01(1 - d);
 }
 
-/** Grayscale RGBA pixels for a square edge-alpha mask (three reads the green channel). */
+/** Grayscale RGBA pixels for a square soft-centre multiply mask. */
 export function makeEdgeAlphaMaskData(size: number): Uint8ClampedArray {
   const data = new Uint8ClampedArray(size * size * 4);
   const half = size / 2;
@@ -113,6 +136,24 @@ export function makeEdgeAlphaMaskData(size: number): Uint8ClampedArray {
       data[i + 1] = a;
       data[i + 2] = a;
       data[i + 3] = 255;
+    }
+  }
+  return data;
+}
+
+/** Soft plate alpha mask sized to a drawn JPG rect (u/v in plate space). */
+export function makePlateEdgeMaskData(size: number): Uint8ClampedArray {
+  const data = new Uint8ClampedArray(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const nx = ((x + 0.5) / size) * 2 - 1;
+      const ny = ((y + 0.5) / size) * 2 - 1;
+      const a = Math.round(plateEdgeAlphaAt(nx, ny) * 255);
+      const i = (y * size + x) * 4;
+      data[i] = 255;
+      data[i + 1] = 255;
+      data[i + 2] = 255;
+      data[i + 3] = a;
     }
   }
   return data;
@@ -197,6 +238,41 @@ export function drawCoverImage(
   ctx.globalAlpha = 1;
 }
 
+/**
+ * Draw one JPG as a soft plate: cover-fit, then multiply by a plate-edge mask
+ * so alpha dies to 0 before the rectangle rim. Overlapped plates blend; no
+ * photo frames remain.
+ */
+export function drawSoftPlate(
+  ctx: CanvasRenderingContext2D,
+  img: CanvasImageSource,
+  cx: number,
+  cy: number,
+  canvasW: number,
+  canvasH: number,
+  scale: number,
+  opacity: number,
+  plateMask: CanvasImageSource,
+) {
+  const [iw, ih] = imageSize(img);
+  const cover = Math.max(canvasW / iw, canvasH / ih) * scale;
+  const dw = Math.max(2, Math.ceil(iw * cover));
+  const dh = Math.max(2, Math.ceil(ih * cover));
+  const plate = document.createElement("canvas");
+  plate.width = dw;
+  plate.height = dh;
+  const pctx = plate.getContext("2d", { alpha: true });
+  if (!pctx) return;
+  pctx.clearRect(0, 0, dw, dh);
+  pctx.drawImage(img, 0, 0, dw, dh);
+  pctx.globalCompositeOperation = "destination-in";
+  pctx.drawImage(plateMask, 0, 0, dw, dh);
+  pctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = Math.min(1, Math.max(0, opacity));
+  ctx.drawImage(plate, cx - dw / 2, cy - dh / 2);
+  ctx.globalAlpha = 1;
+}
+
 export type NebulaImageMap = Map<string, HTMLImageElement>;
 
 /** Prefetch wallpaper images; resolves when at least one layer is ready. */
@@ -219,8 +295,9 @@ export function loadNebulaImages(modest: boolean): Promise<NebulaImageMap> {
 }
 
 /**
- * Bake the five layer JPGs + warm tint + edge mask into one square canvas.
- * Called once after images load (and again only if the size budget changes).
+ * Bake the five layer JPGs into one soft-edged sky canvas: each plate dies to
+ * transparent before its rectangle, layers overlap heavily, then a warm tint
+ * and a soft centre multiply (not an opaque square frame) keep exposure tame.
  * Returns null when nothing is ready yet.
  */
 export function composeNebulaWallpaper(
@@ -235,11 +312,26 @@ export function composeNebulaWallpaper(
   const ctx = canvas.getContext("2d", { alpha: true });
   if (!ctx) return null;
   ctx.clearRect(0, 0, size, size);
+  // Opaque charcoal underlay so soft plate rims blend into sky, not empty UV holes.
+  ctx.fillStyle = "#0c0a09";
+  ctx.fillRect(0, 0, size, size);
+
+  const maskSize = 256;
+  const plateMaskCanvas = document.createElement("canvas");
+  plateMaskCanvas.width = maskSize;
+  plateMaskCanvas.height = maskSize;
+  const mctx = plateMaskCanvas.getContext("2d");
+  if (!mctx) return null;
+  const plateMask = makePlateEdgeMaskData(maskSize);
+  const plateImg = mctx.createImageData(maskSize, maskSize);
+  plateImg.data.set(plateMask);
+  mctx.putImageData(plateImg, 0, 0);
+
   let painted = 0;
   for (const layer of NEBULA_LAYERS) {
     const img = images.get(layer.id);
     if (!img) continue;
-    drawCoverImage(
+    drawSoftPlate(
       ctx,
       img,
       size * (0.5 + layer.ox),
@@ -248,34 +340,36 @@ export function composeNebulaWallpaper(
       size,
       layer.scale,
       layer.opacity * gain,
+      plateMaskCanvas,
     );
     painted++;
   }
   if (painted === 0) return null;
 
-  // Warm mid tone-map (matches MeshBasicMaterial `color={NEBULA_TINT}`).
+  // Warm mid tone-map (matches former MeshBasicMaterial `color={NEBULA_TINT}`).
   ctx.globalCompositeOperation = "multiply";
   ctx.fillStyle = NEBULA_TINT;
   ctx.fillRect(0, 0, size, size);
   ctx.globalCompositeOperation = "source-over";
 
-  // Punch the centre down so the figure / type stay on charcoal.
-  const maskCanvas = document.createElement("canvas");
-  maskCanvas.width = size;
-  maskCanvas.height = size;
-  const mctx = maskCanvas.getContext("2d");
-  if (mctx) {
+  // Soft centre darken via multiply — edges stay vivid, no opaque square frame.
+  const centre = document.createElement("canvas");
+  centre.width = size;
+  centre.height = size;
+  const cctx = centre.getContext("2d");
+  if (cctx) {
     const mask = makeEdgeAlphaMaskData(size);
-    const imgData = mctx.createImageData(size, size);
+    const imgData = cctx.createImageData(size, size);
     for (let i = 0; i < mask.length; i += 4) {
-      imgData.data[i] = 255;
-      imgData.data[i + 1] = 255;
-      imgData.data[i + 2] = 255;
-      imgData.data[i + 3] = mask[i]!;
+      const v = mask[i]!;
+      imgData.data[i] = v;
+      imgData.data[i + 1] = v;
+      imgData.data[i + 2] = v;
+      imgData.data[i + 3] = 255;
     }
-    mctx.putImageData(imgData, 0, 0);
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.drawImage(maskCanvas, 0, 0);
+    cctx.putImageData(imgData, 0, 0);
+    ctx.globalCompositeOperation = "multiply";
+    ctx.drawImage(centre, 0, 0);
     ctx.globalCompositeOperation = "source-over";
   }
   return canvas;
@@ -284,8 +378,7 @@ export function composeNebulaWallpaper(
 /**
  * Paint the baked wallpaper with whole-sky drift. Uses `skyTime` so Pause
  * freezes motion. `lookX` / `lookY` add a tiny parallax while looking around.
- * Pass a prebuilt `composite` when available; otherwise falls back to a
- * one-shot bake from `images`.
+ * Cover scale is oversized so the 2D path never shows a billboard rim.
  */
 export function paintNebulaWallpaper(
   ctx: CanvasRenderingContext2D,
@@ -306,7 +399,7 @@ export function paintNebulaWallpaper(
   const cx = w * 0.5 + Math.sin(drift) * w * 0.035 + lookX * w * 0.04;
   const cy = h * 0.5 + Math.cos(drift * 0.85) * h * 0.028 - lookY * h * 0.035;
   ctx.save();
-  drawCoverImage(ctx, baked, cx, cy, w, h, 1.15, 1);
+  drawCoverImage(ctx, baked, cx, cy, w, h, 1.55, 1);
   ctx.restore();
   paintCenterVignette(ctx, w, h, CENTER_VIGNETTE_STRENGTH);
 }
