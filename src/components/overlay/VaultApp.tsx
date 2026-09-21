@@ -39,7 +39,6 @@ import {
   type SkyPlaceSearch,
 } from "@/lib/ui/skyPlace";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
-import { ChunkRecovered } from "@/components/chunk-recovered";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { GalaxyShell } from "./GalaxyShell";
 import { ClaimShell } from "./ClaimShell";
@@ -109,7 +108,10 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   const placeReady = useRef(false);
   const lastWritten = useRef<SkyPlace | null>(null);
   const [Scene, setScene] = useState<ComponentType | null>(null);
-  const [sceneFailed, setSceneFailed] = useState(false);
+  // Stay pending until the effect chooses. Mounting FallbackSky on the first
+  // paint imported it on every visit; a 404 there took down the 3D sky and the
+  // one-shot reload cleared its latch when the scene committed, so it looped.
+  const [skyMode, setSkyMode] = useState<"pending" | "webgl" | "flat">("pending");
   const [deskNotice, setDeskNotice] = useState<string | null>(null);
   const noticeTimer = useRef<number | null>(null);
 
@@ -157,19 +159,22 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
     // Reduced motion: never import or mount the WebGL scene - the 2D
     // FallbackSky is the whole canvas for these users.
     if (prefersReducedMotion() || !shouldUse3D()) {
-      setSceneFailed(true);
+      setSkyMode("flat");
       return;
     }
     let cancelled = false;
     void import("@/components/scene/ChartCanvas")
       .then((m) => {
-        if (!cancelled && canWebGL()) setScene(() => m.ChartCanvas);
-        else if (!cancelled) setSceneFailed(true);
+        if (cancelled) return;
+        if (canWebGL()) {
+          setScene(() => m.ChartCanvas);
+          setSkyMode("webgl");
+        } else setSkyMode("flat");
       })
       .catch(() => {
-        if (!cancelled) setSceneFailed(true);
+        if (!cancelled) setSkyMode("flat");
       });
-    const onLost = () => setSceneFailed(true);
+    const onLost = () => setSkyMode("flat");
     const hideLost = (e: Event) => {
       const t = e.target;
       if (t instanceof HTMLCanvasElement && t.closest(".canvas-root")) buryWebGLCanvas(t);
@@ -363,28 +368,24 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
       style={{ background: "#0c0b0a", color: "#efe8dc" }}
       tabIndex={-1}
     >
-      {Scene && !sceneFailed ? (
+      {skyMode === "webgl" && Scene ? (
         <SceneErrorBoundary
           fallback={
             <Suspense fallback={null}>
-              <ChunkRecovered>
-                <FallbackSky note={FALLBACK_NOTE} />
-              </ChunkRecovered>
+              <FallbackSky note={FALLBACK_NOTE} />
             </Suspense>
           }
         >
-          <ChunkRecovered>
-            <Scene />
-          </ChunkRecovered>
+          <Scene />
         </SceneErrorBoundary>
-      ) : (
+      ) : skyMode === "flat" ? (
         <Suspense fallback={null}>
           {/* Reduced motion chose the 2D sky on purpose — only a real
               WebGL failure gets the "could not load" note. */}
-          <ChunkRecovered>
-            <FallbackSky note={prefersReducedMotion() ? undefined : FALLBACK_NOTE} />
-          </ChunkRecovered>
+          <FallbackSky note={prefersReducedMotion() ? undefined : FALLBACK_NOTE} />
         </Suspense>
+      ) : (
+        <div className="canvas-root" style={{ background: "#0c0b0a" }} aria-hidden />
       )}
       {deskNotice ? (
         <p

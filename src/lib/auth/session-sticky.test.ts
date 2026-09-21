@@ -7,6 +7,7 @@ import {
   STICKY_STORAGE_TTL_MS,
   applySessionObservation,
   clearStickySession,
+  createStickyRefetchGate,
   resetStickySessionForTests,
 } from "./session-sticky.ts";
 import {
@@ -294,5 +295,22 @@ describe("an explicit sign-out is final for the rest of the page", { concurrency
     });
     assert.equal(errored.user, null);
     assert.equal(errored.isReadFailed, false);
+  });
+});
+
+describe("sticky refetch gate", () => {
+  it("schedules one window for many subscribers and remounts", () => {
+    const gate = createStickyRefetchGate();
+    assert.equal(gate.claim(true, false), true);
+    assert.equal(gate.claim(true, false), false);
+    assert.equal(gate.claim(false, false), false);
+    assert.equal(gate.claim(true, false), false);
+  });
+
+  it("arms again after a settled user", () => {
+    const gate = createStickyRefetchGate();
+    assert.equal(gate.claim(true, false), true);
+    assert.equal(gate.claim(false, true), false);
+    assert.equal(gate.claim(true, false), true);
   });
 });
