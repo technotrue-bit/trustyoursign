@@ -41,16 +41,18 @@ export const NEBULA_GL_LAYER_GAIN_MODEST = 0.68;
 export const NEBULA_2D_LAYER_GAIN = 0.6;
 
 /**
- * Soft centre punch on the baked sky (multiplied into RGB, not a hard alpha
- * frame). Keeps mid-screen budget low when the well is thin.
+ * Soft centre darkening on the baked sky (multiplied into RGB, not a hard
+ * alpha frame). High enough that the middle stays nebula; the radial well
+ * does the extra dimming for type.
  */
-export const EDGE_MASK_CENTER_ALPHA = 0.12;
+export const EDGE_MASK_CENTER_ALPHA = 0.78;
 
 /**
- * Dark elliptical well behind the figure + text column. `rx` / `ry` are
+ * Soft elliptical well behind the figure + text column. `rx` / `ry` are
  * half-axes as a fraction of the well plane (taller than wide for phones).
+ * Alpha is a veil — a hard near-black disc read as a vertical crack.
  */
-export const CENTER_WELL = { rx: 0.42, ry: 0.55, alpha: 0.82, color: "#0a0908" } as const;
+export const CENTER_WELL = { rx: 0.34, ry: 0.44, alpha: 0.34, color: "#0a0908" } as const;
 
 /** Default 2D vignette strength — lands on the same charcoal as the WebGL well. */
 export const CENTER_VIGNETTE_STRENGTH = 1.0;
@@ -193,9 +195,9 @@ export function paintCenterVignette(
   const cy = h * 0.42;
   const r = Math.max(w, h) * 0.62;
   const g = ctx.createRadialGradient(cx, cy, Math.min(w, h) * 0.18, cx, cy, r);
-  g.addColorStop(0, `rgba(8, 7, 6, ${0.84 * strength})`);
-  g.addColorStop(0.45, `rgba(8, 7, 6, ${0.4 * strength})`);
-  g.addColorStop(0.78, `rgba(8, 7, 6, ${0.1 * strength})`);
+  g.addColorStop(0, `rgba(8, 7, 6, ${0.4 * strength})`);
+  g.addColorStop(0.45, `rgba(8, 7, 6, ${0.18 * strength})`);
+  g.addColorStop(0.78, `rgba(8, 7, 6, ${0.05 * strength})`);
   g.addColorStop(1, "rgba(8, 7, 6, 0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
@@ -338,7 +340,8 @@ export function composeNebulaWallpaper(
 
   let painted = 0;
 
-  // Full-canvas washes — left- and right-biased so wide desktops are not one-sided.
+  // Left and right washes cross the canvas centre so the one sky plate
+  // has nebula behind the figure, not a dark gap between two side cards.
   const washLeft = NEBULA_LAYERS[0];
   const washRight = NEBULA_LAYERS[1];
   const washLeftImg = washLeft ? images.get(washLeft.id) : undefined;
@@ -347,12 +350,12 @@ export function composeNebulaWallpaper(
     drawSoftPlate(
       ctx,
       washLeftImg,
-      size * 0.38,
+      size * 0.46,
       size * 0.48,
       size,
       size,
-      2.45,
-      washLeft.opacity * gain * 0.5,
+      2.75,
+      washLeft.opacity * gain * 0.58,
       plateMaskCanvas,
     );
     painted++;
@@ -361,12 +364,12 @@ export function composeNebulaWallpaper(
     drawSoftPlate(
       ctx,
       washRightImg,
-      size * 0.62,
+      size * 0.54,
       size * 0.5,
       size,
       size,
-      2.45,
-      washRight.opacity * gain * 0.5,
+      2.75,
+      washRight.opacity * gain * 0.58,
       plateMaskCanvas,
     );
     painted++;
@@ -434,7 +437,7 @@ export function composeNebulaWallpaper(
         const nx = Math.abs((x + 0.5 - half) / half);
         const ny = Math.abs((y + 0.5 - half) / half);
         const m = Math.max(nx, ny);
-        const a = Math.round((1 - smoothstep01((m - 0.78) / 0.22)) * 255);
+        const a = Math.round((1 - smoothstep01((m - 0.9) / 0.1)) * 255);
         const i = (y * size + x) * 4;
         imgData.data[i] = 255;
         imgData.data[i + 1] = 255;

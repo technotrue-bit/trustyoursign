@@ -55,15 +55,17 @@ describe("nebulaBackdrop", () => {
     assert.ok(NEBULA_2D_LAYER_GAIN <= 0.65);
   });
 
-  it("keeps the combined mid-screen budget under the white-stack line", () => {
+  it("keeps the centre nebula-bright without a white stack", () => {
     const sum = NEBULA_LAYERS.reduce((acc, l) => acc + l.opacity, 0);
     const midBudget = sum * NEBULA_GL_LAYER_GAIN * edgeMaskAlphaAt(0);
-    assert.ok(midBudget < 0.45, `mid budget ${midBudget.toFixed(3)}`);
+    assert.ok(midBudget > 1.2, `centre was punched black: ${midBudget.toFixed(3)}`);
+    assert.ok(midBudget < 2.5, `mid budget ${midBudget.toFixed(3)}`);
   });
 
-  it("centre multiply is faint at centre and open at edges (no opaque frame)", () => {
+  it("centre multiply is a soft well, open at the edges (no opaque frame)", () => {
     assert.equal(edgeMaskAlphaAt(0), EDGE_MASK_CENTER_ALPHA);
-    assert.ok(EDGE_MASK_CENTER_ALPHA <= 0.15);
+    assert.ok(EDGE_MASK_CENTER_ALPHA >= 0.65, "centre stays nebula, not a black punch");
+    assert.ok(EDGE_MASK_CENTER_ALPHA < 0.95, "centre is still a little darker");
     assert.ok(edgeMaskAlphaAt(1) >= 0.95, "edge midpoint");
     assert.ok(edgeMaskAlphaAt(Math.SQRT2) >= 0.95, "corner");
     assert.ok(edgeMaskAlphaAt(0.5) > edgeMaskAlphaAt(0.25));
@@ -73,7 +75,8 @@ describe("nebulaBackdrop", () => {
     assert.equal(data.length, size * size * 4);
     const center = data[((size / 2) * size + size / 2) * 4 + 1]!;
     const corner = data[1]!;
-    assert.ok(center <= Math.round(0.2 * 255), `center ${center}`);
+    assert.ok(center >= Math.round(0.6 * 255), `center ${center}`);
+    assert.ok(center < corner, "centre darker than the rim");
     assert.ok(corner >= Math.round(0.95 * 255), `corner ${corner}`);
   });
 
@@ -96,8 +99,8 @@ describe("nebulaBackdrop", () => {
     assert.ok(rim <= 2, `plate rim ${rim}`);
   });
 
-  it("centre well is dark enough behind the type and clear at the corners", () => {
-    assert.ok(CENTER_WELL.alpha >= 0.75);
+  it("centre well is a soft radial veil and clear at the corners", () => {
+    assert.ok(CENTER_WELL.alpha >= 0.22 && CENTER_WELL.alpha <= 0.5, "veil, not a black stripe");
     assert.ok(CENTER_WELL.ry > CENTER_WELL.rx, "taller than wide for phones");
     assert.equal(centerWellAlphaAt(0, 0), CENTER_WELL.alpha);
     assert.equal(centerWellAlphaAt(0.5, 0.5), 0);
@@ -109,7 +112,8 @@ describe("nebulaBackdrop", () => {
     const data = makeCenterWellData(size);
     assert.equal(data.length, size * size * 4);
     const centerIdx = ((size / 2) * size + size / 2) * 4;
-    assert.ok(data[centerIdx + 3]! >= Math.round(0.7 * 255));
+    assert.ok(data[centerIdx + 3]! >= Math.round(0.2 * 255));
+    assert.ok(data[centerIdx + 3]! <= Math.round(0.55 * 255));
     assert.equal(data[3], 0, "corner alpha");
     assert.ok(data[centerIdx]! < 20 && data[centerIdx + 1]! < 20 && data[centerIdx + 2]! < 20);
   });
