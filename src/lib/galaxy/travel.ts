@@ -1,5 +1,12 @@
 /** Shared mutable travel. Written every frame by the camera. Not React state. */
 import { CONSTELLATIONS, nearestSign, signStation, signedDelta, wrap12 } from "./constellations";
+import {
+  DWELL_STILL_SEC,
+  dwellClipFor,
+  pauseDwellClip,
+  settledOnSign,
+  stopDwellClip,
+} from "./dwellClip";
 import { primeSignArt } from "./signArt";
 import {
   enterBurst,
@@ -209,6 +216,12 @@ export const galaxyTravel = {
   /** Held look: −1 left / +1 right, −1 down / +1 up. Integrated in stepExplore. */
   lookHoldX: 0,
   lookHoldY: 0,
+  /**
+   * Station whose life clip should replace the still plate. Null keeps the painting.
+   * The plate sets dwellClipDone when the file ends; the auto-walk then seeks.
+   */
+  dwellClipIndex: null as number | null,
+  dwellClipDone: false,
 };
 
 export function prefersReducedMotion() {
@@ -238,6 +251,14 @@ export function pinchQuiet() {
 function restIdle() {
   galaxyTravel.idle = 0;
   galaxyTravel.idleAt = nowMs();
+}
+
+/** Drop an armed life clip. Leaves a prefetch alone so the still hold can buffer. */
+function clearDwellClip() {
+  if (galaxyTravel.dwellClipIndex == null && !galaxyTravel.dwellClipDone) return;
+  galaxyTravel.dwellClipIndex = null;
+  galaxyTravel.dwellClipDone = false;
+  stopDwellClip();
 }
 
 /** Advance the opening birth one display frame. Capped so a hitch never jumps the boom. */
@@ -293,6 +314,7 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.seekStartT = null;
   galaxyTravel.seekElapsed = 0;
   resetExplore(false);
+  clearDwellClip();
   restIdle();
 }
 
@@ -490,6 +512,7 @@ export function recoverStalledEnterSkip() {
  * dissolve the plate, and bloom stars into a per-sign galaxy.
  */
 export function enterSignGalaxy(index?: number) {
+  clearDwellClip();
   if (introPlaying()) return false;
   if (galaxyTravel.birth < 1) return false;
   if (exploringSign()) return false;
@@ -791,6 +814,7 @@ function clearDirectSeek() {
 
 /** Jump the flight path to a sign. Arrive as the animal and hold until they fly or rest. */
 export function seekSign(index: number, opts?: SeekOptions) {
+  clearDwellClip();
   if (enterAnimating()) return galaxyTravel.exploreSignIndex ?? 0;
   if (exploringSign() && galaxyTravel.explorePhase !== "fading") {
     // Strip / external seek leaves an open galaxy first.
@@ -1403,30 +1427,79 @@ export function stepPlayUntil(t: number) {
   return true;
 }
 
-/** Dwell, then seek the next sign. Safe to call from more than one loop — uses wall-clock. */
+function handsBlockAuto(handsOn?: boolean) {
+  return Boolean(handsOn || galaxyTravel.handsOn || galaxyTravel.dragging || galaxyTravel.hold !== 0);
+}
+
+/** Clip URL when the camera is actually parked on this station. */
+function parkedDwellClip(index: number): string | undefined {
+  if (!settledOnSign(galaxyTravel.t, index)) return undefined;
+  const id = CONSTELLATIONS[index]?.id;
+  if (!id) return undefined;
+  return dwellClipFor(id);
+}
+
+/**
+ * Dwell, then seek the next sign. Safe to call from more than one loop — uses wall-clock.
+ * A sign with a life clip waits out the still hold and the file. AUTO_SIGN does not cut it.
+ */
 export function stepAutoSign(
   _dt: number,
-  opts: { canAdvance: boolean; traveling?: boolean; handsOn?: boolean },
+  opts: { canAdvance: boolean; traveling?: boolean; handsOn?: boolean; reduced?: boolean },
 ) {
   if (galaxyTravel.paused) {
     restIdle();
     return false;
   }
-  if (!opts.canAdvance || opts.traveling || opts.handsOn) {
+  if (!opts.canAdvance || opts.traveling || handsBlockAuto(opts.handsOn) || exploringSign()) {
+    if (galaxyTravel.dwellClipIndex != null || galaxyTravel.dwellClipDone) clearDwellClip();
     restIdle();
     return false;
   }
-  // Don't hop while a clicked sign is still held — that was re-arming the 10s timer.
-  if (galaxyTravel.selectionHoldLeft != null) {
-    restIdle();
-    return false;
-  }
+
   const now = nowMs();
   if (!galaxyTravel.idleAt) galaxyTravel.idleAt = now;
   galaxyTravel.idle = (now - galaxyTravel.idleAt) / 1000;
+
+  const i = stationFromT(galaxyTravel.t);
+  const clip = parkedDwellClip(i);
+  const reduced = opts.reduced ?? prefersReducedMotion();
+  const held = galaxyTravel.selectionHoldLeft != null;
+
+  if (galaxyTravel.dwellClipIndex != null && (galaxyTravel.dwellClipIndex !== i || !clip)) {
+    clearDwellClip();
+  }
+
+  if (clip && !reduced) {
+    if (galaxyTravel.dwellClipDone && galaxyTravel.dwellClipIndex === i) {
+      if (held || i >= 11) return false;
+      restIdle();
+      seekSign(i + 1, { auto: true });
+      return true;
+    }
+    if (galaxyTravel.dwellClipIndex !== i && galaxyTravel.idle >= DWELL_STILL_SEC) {
+      galaxyTravel.dwellClipIndex = i;
+      galaxyTravel.dwellClipDone = false;
+    }
+    // The file plays out. Do not walk at AUTO_SIGN while it still owes that once.
+    return false;
+  }
+
+  if (clip && reduced) {
+    if (galaxyTravel.idle < DWELL_STILL_SEC) return false;
+    if (held || i >= 11) return false;
+    restIdle();
+    seekSign(i + 1, { auto: true });
+    return true;
+  }
+
+  // Don't hop while a clicked sign is still held — that was re-arming the 10s timer.
+  if (held) {
+    restIdle();
+    return false;
+  }
   if (galaxyTravel.idle < AUTO_SIGN) return false;
   restIdle();
-  const i = stationFromT(galaxyTravel.t);
   if (i >= 11) return false;
   seekSign(i + 1, { auto: true });
   return true;
@@ -1450,6 +1523,7 @@ export function setPaused(paused: boolean) {
   galaxyTravel.wheelDriven = false;
   if (paused) {
     stopAutoClock();
+    pauseDwellClip();
   } else {
     autoLast = nowMs();
     ensureAutoClock();
@@ -1485,6 +1559,7 @@ export function ensureAutoClock() {
     autoClock = requestAnimationFrame(tick);
     if (typeof document !== "undefined" && document.visibilityState === "hidden") {
       autoLast = now;
+      pauseDwellClip();
       return;
     }
     const dt = Math.min(0.1, (now - autoLast) / 1000);
@@ -1495,6 +1570,7 @@ export function ensureAutoClock() {
       canAdvance: galaxyTravel.birth >= 1 && !galaxyTravel.busy && !introPlaying() && !exploringSign(),
       traveling: galaxyTravel.traveling || galaxyTravel.seek != null || galaxyTravel.playUntil != null,
       handsOn: galaxyTravel.handsOn,
+      reduced: prefersReducedMotion(),
     });
   };
   autoClock = requestAnimationFrame(tick);
