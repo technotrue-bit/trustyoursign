@@ -15,32 +15,32 @@ export function LegalFooter() {
   }, []);
   if (!show) {
     return (
-      <p className="pointer-events-auto px-2 text-center text-[0.58rem] leading-snug tracking-wide text-fg-subtle md:px-3 md:text-[0.6rem] md:leading-relaxed">
-        <Link to="/about" className="text-fg/90 hover:text-fg">
+      <p className="sky-hud-footer pointer-events-auto px-2 text-center text-[0.6rem] leading-snug tracking-wide md:px-3 md:text-[0.62rem] md:leading-relaxed">
+        <Link to="/about" className="hover:text-fg">
           About
         </Link>
         {" · "}
-        <Link to="/how-this-works" className="text-fg/90 hover:text-fg">
+        <Link to="/how-this-works" className="hover:text-fg">
           How
         </Link>
         {" · "}
-        <Link to="/faq" className="text-fg/90 hover:text-fg">
+        <Link to="/faq" className="hover:text-fg">
           FAQ
         </Link>
         {" · "}
-        <Link to="/contact" className="text-fg/90 hover:text-fg">
+        <Link to="/contact" className="hover:text-fg">
           Contact
         </Link>
         {" · "}
-        <Link to="/contact" hash="feedback" className="text-fg/90 hover:text-fg">
+        <Link to="/contact" hash="feedback" className="hover:text-fg">
           Feedback
         </Link>
         {" · "}
-        <Link to="/privacy" className="text-fg/90 hover:text-fg">
+        <Link to="/privacy" className="hover:text-fg">
           Privacy
         </Link>
         {" · "}
-        <Link to="/terms" className="text-fg/90 hover:text-fg">
+        <Link to="/terms" className="hover:text-fg">
           Terms
         </Link>
       </p>
