@@ -15,8 +15,12 @@ import { TEMPLE_SIGNS, type TemplePalette } from "./temple";
  */
 export const CORE_PX = 512;
 
-/** Local units for the sprite at rest (the field group scales it into world units). */
-export const CORE_LOCAL_SIZE = 2.4;
+/**
+ * Local units for the sprite at rest (the field group scales it into world units).
+ * 2.4 filled the threshold frame. 1.2 sank into the dust.
+ * 2.2 is a compact point-of-light with a halo, held at the farther landing.
+ */
+export const CORE_LOCAL_SIZE = 2.2;
 
 function clamp01(n: number) {
   return Math.min(1, Math.max(0, n));
@@ -34,9 +38,13 @@ function rng(seed: number) {
   };
 }
 
-/** How far the core has swelled into frame: 0.34 at first light → 1 at land. */
+/**
+ * How far the core has swelled into frame: 0.34 at first light → 1 at land.
+ * The exponent (was 1.2) keeps it small through the dive so it arrives as a
+ * jewel instead of rushing to a full disc before the camera has settled.
+ */
 export function coreSwell(reveal: number) {
-  return 0.34 + 0.66 * Math.pow(clamp01(reveal), 1.2);
+  return 0.34 + 0.66 * Math.pow(clamp01(reveal), 1.7);
 }
 
 /** Opacity is continuous across the landing: the same value at p = 1 and inside. */
