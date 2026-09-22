@@ -7,12 +7,6 @@
 export type NebulaLayerSpec = {
   /** Base filename under /sky/ (without size suffix). */
   id: string;
-  /** Horizontal bias (−0.5 left … +0.5 right) as a fraction of canvas. */
-  ox: number;
-  /** Vertical bias (−0.5 up … +0.5 down). */
-  oy: number;
-  /** Cover scale (>1 zooms in). */
-  scale: number;
   /** Peak opacity (soft plate edges die to black before the JPG rectangle). */
   opacity: number;
   /** Slow drift radians-per-second coefficient on shaderTime. */
@@ -20,16 +14,83 @@ export type NebulaLayerSpec = {
 };
 
 /**
- * Five compressed refs — corners/edges glow; centre stays quieter via the
- * centre well (WebGL) / vignette (2D). Soft plate falloff kills photo rims.
- * Scales and offsets are large/overlapping so the bake reads as one sky.
+ * Five compressed refs. Where each one lands is `NEBULA_PLACEMENTS`; this is
+ * only what to load and how bright it may burn.
  */
 export const NEBULA_LAYERS: readonly NebulaLayerSpec[] = [
-  { id: "nebula-amber", ox: -0.26, oy: -0.18, scale: 1.72, opacity: 0.72, drift: 0.012 },
-  { id: "nebula-butterfly", ox: 0.28, oy: -0.22, scale: 1.64, opacity: 0.68, drift: -0.01 },
-  { id: "nebula-ring", ox: 0.02, oy: 0.24, scale: 1.58, opacity: 0.58, drift: 0.008 },
-  { id: "nebula-hourglass", ox: -0.34, oy: 0.2, scale: 1.66, opacity: 0.62, drift: -0.014 },
-  { id: "nebula-pillar", ox: 0.36, oy: 0.12, scale: 1.7, opacity: 0.66, drift: 0.009 },
+  { id: "nebula-amber", opacity: 0.72, drift: 0.012 },
+  { id: "nebula-butterfly", opacity: 0.68, drift: -0.01 },
+  { id: "nebula-ring", opacity: 0.58, drift: 0.008 },
+  { id: "nebula-hourglass", opacity: 0.62, drift: -0.014 },
+  { id: "nebula-pillar", opacity: 0.66, drift: 0.009 },
+] as const;
+
+/**
+ * Where each ref lands on the bake. `span` is the drawn long edge as a
+ * fraction of the square canvas: the refs are 635–1024 px, so spans near 0.5
+ * keep the draw at roughly source resolution instead of the 4× cover-fit
+ * blow-up that turned dust into haze.
+ *
+ * `crop` takes a sub-rect of the source (fractions of width/height). The two
+ * showpiece objects — the ring and the hourglass — are unmistakable, so each
+ * appears exactly once, small, out at a corner; everything else is cut from
+ * the amorphous dust of the other three so the sky never reads as one photo
+ * tiled. Corners carry the structure, the middle band stays quiet so type
+ * over it still reads.
+ */
+export type NebulaPlacement = {
+  /** Index into `NEBULA_LAYERS`. */
+  layer: number;
+  /** Centre in canvas fractions (may sit slightly outside to bleed off-edge). */
+  cx: number;
+  cy: number;
+  /** Drawn long edge as a fraction of the canvas side. */
+  span: number;
+  /** Multiplier on the layer opacity for this placement. */
+  weight: number;
+  /** Source sub-rect `[x, y, w, h]` in fractions of the image. */
+  crop?: readonly [number, number, number, number];
+  /** Radians of in-plane rotation. */
+  rot?: number;
+  /** Mirror horizontally. */
+  flip?: boolean;
+};
+
+const AMBER = 0;
+const BUTTERFLY = 1;
+const RING = 2;
+const HOURGLASS = 3;
+const PILLAR = 4;
+
+export const NEBULA_PLACEMENTS: readonly NebulaPlacement[] = [
+  // A laptop window sees the middle band of the square plate, so its four
+  // corners land here — not at the canvas corners.
+  { layer: AMBER, cx: 0.13, cy: 0.3, span: 0.56, weight: 0.95, crop: [0, 0.24, 0.62, 0.56], rot: -0.16 },
+  { layer: PILLAR, cx: 0.87, cy: 0.31, span: 0.56, weight: 0.88, rot: 0.2, flip: true },
+  { layer: PILLAR, cx: 0.13, cy: 0.7, span: 0.54, weight: 0.86, crop: [0, 0.3, 0.58, 0.55], rot: -0.52 },
+  { layer: AMBER, cx: 0.87, cy: 0.7, span: 0.56, weight: 0.9, crop: [0.3, 0.4, 0.7, 0.6], rot: 0.34, flip: true },
+  // A phone sees the middle column instead — same treatment, its own corners.
+  { layer: AMBER, cx: 0.34, cy: 0.11, span: 0.5, weight: 0.8, crop: [0.4, 0, 0.6, 0.5], rot: 0.12 },
+  { layer: PILLAR, cx: 0.66, cy: 0.12, span: 0.5, weight: 0.78, crop: [0.3, 0, 0.5, 0.45], rot: 0.4, flip: true },
+  { layer: PILLAR, cx: 0.33, cy: 0.89, span: 0.5, weight: 0.78, crop: [0.24, 0.45, 0.6, 0.55], rot: -0.22 },
+  { layer: AMBER, cx: 0.67, cy: 0.88, span: 0.5, weight: 0.8, crop: [0, 0.5, 0.5, 0.5], rot: -0.7, flip: true },
+  // One of each showpiece, small, parked where a corner will find it.
+  { layer: RING, cx: 0.9, cy: 0.34, span: 0.26, weight: 0.72, rot: 0.1 },
+  { layer: HOURGLASS, cx: 0.1, cy: 0.66, span: 0.22, weight: 0.6, rot: -0.24 },
+  { layer: BUTTERFLY, cx: 0.62, cy: 0.86, span: 0.3, weight: 0.62, rot: 0.3, flip: true },
+  // Edge midpoints tie the two frames together — no empty band between them.
+  { layer: BUTTERFLY, cx: 0.05, cy: 0.5, span: 0.46, weight: 0.55, crop: [0, 0, 0.46, 0.46], rot: 0.72 },
+  { layer: AMBER, cx: 0.95, cy: 0.5, span: 0.48, weight: 0.6, crop: [0, 0, 0.5, 0.45], rot: -0.88, flip: true },
+  { layer: AMBER, cx: 0.5, cy: 0.05, span: 0.46, weight: 0.5, crop: [0.45, 0.5, 0.55, 0.5], rot: -0.5 },
+  { layer: PILLAR, cx: 0.5, cy: 0.95, span: 0.46, weight: 0.5, crop: [0, 0.5, 0.5, 0.5], rot: -0.95, flip: true },
+  // Canvas corners: cheap bleed so a square-ish window never runs out of sky.
+  { layer: PILLAR, cx: 0.03, cy: 0.04, span: 0.4, weight: 0.45, crop: [0.5, 0, 0.5, 0.5], rot: 0.62 },
+  { layer: AMBER, cx: 0.97, cy: 0.03, span: 0.4, weight: 0.45, crop: [0.1, 0.2, 0.6, 0.55], rot: 0.9 },
+  { layer: AMBER, cx: 0.02, cy: 0.97, span: 0.4, weight: 0.45, crop: [0.45, 0.5, 0.55, 0.5], rot: 1.3 },
+  { layer: BUTTERFLY, cx: 0.98, cy: 0.97, span: 0.4, weight: 0.45, crop: [0.5, 0.5, 0.5, 0.5], rot: -1.1 },
+  // Mid field: real sky, just quieter, so the centre is not a hole.
+  { layer: PILLAR, cx: 0.36, cy: 0.4, span: 0.46, weight: 0.34, crop: [0.3, 0, 0.5, 0.45], rot: 1.4 },
+  { layer: AMBER, cx: 0.64, cy: 0.6, span: 0.48, weight: 0.32, crop: [0.1, 0.2, 0.6, 0.55], rot: -1.5, flip: true },
 ] as const;
 
 /** Mild tone-map multiplier on the wallpaper: pulls mids down, keeps warmth. */
@@ -68,10 +129,31 @@ export const NEBULA_COMPOSITE_SIZE_MODEST = 1024;
 export const NEBULA_COMPOSITE_DRIFT =
   NEBULA_LAYERS.reduce((acc, l) => acc + l.drift, 0) / NEBULA_LAYERS.length;
 
-/** How far from the plate centre soft falloff begins (0–1 half-extent). */
-export const PLATE_FADE_START = 0.52;
+/**
+ * How far from the plate centre soft falloff begins (0–1 half-extent). Kept
+ * late: feathering from the middle of every plate is what smeared the refs
+ * into fog. Two thirds of each plate stays at full strength; only the rim
+ * ramps out, which is all it takes to hide a seam.
+ */
+export const PLATE_FADE_START = 0.66;
 /** Half-extent where plate alpha hits 0 — before the JPG rectangle rim. */
-export const PLATE_FADE_END = 0.98;
+export const PLATE_FADE_END = 0.99;
+
+/**
+ * Pinpoint stars painted into the bake. The refs are 635 px JPEGs, so their
+ * own stars are already mush at sky scale; these are drawn as hard little
+ * discs after the tint so they stay points instead of smudges. They live in
+ * the composite, so they drift with the plate.
+ */
+export const STAR_FIELD = {
+  /** Stars per 1024 px of bake side. */
+  density: 620,
+  /** Disc radius in bake pixels — faintest to brightest. */
+  minRadius: 0.5,
+  maxRadius: 1.45,
+  /** Share of brightness left in the middle, where type sits. */
+  centerDim: 0.3,
+} as const;
 
 export function nebulaCompositeSize(modest: boolean): number {
   return modest ? NEBULA_COMPOSITE_SIZE_MODEST : NEBULA_COMPOSITE_SIZE;
@@ -248,39 +330,105 @@ export function drawCoverImage(
   ctx.globalAlpha = 1;
 }
 
+/** Drawn pixel size of one placement on a `size` bake. */
+export function placementSize(
+  place: NebulaPlacement,
+  imgW: number,
+  imgH: number,
+  size: number,
+): [number, number] {
+  const [, , cw = 1, ch = 1] = place.crop ?? [];
+  const sw = Math.max(1, imgW * cw);
+  const sh = Math.max(1, imgH * ch);
+  const k = (place.span * size) / Math.max(sw, sh);
+  return [Math.max(2, Math.round(sw * k)), Math.max(2, Math.round(sh * k))];
+}
+
 /**
- * Draw one JPG as a soft plate: cover-fit, then multiply by a plate-edge mask
- * so alpha dies to 0 before the rectangle rim. Overlapped plates blend; no
- * photo frames remain.
+ * Stamp one crop, feathered through `scratch` so its rectangle dies before
+ * the rim. Additive: these refs are bright structure on black, so drawing
+ * them `source-over` meant every plate dimmed the one under it — five of
+ * those stacked is exactly the haze we are removing. Adding leaves the black
+ * black and lets the dust lanes keep their edges.
  */
-export function drawSoftPlate(
+export function drawPlacement(
   ctx: CanvasRenderingContext2D,
   img: CanvasImageSource,
-  cx: number,
-  cy: number,
-  canvasW: number,
-  canvasH: number,
-  scale: number,
-  opacity: number,
   plateMask: CanvasImageSource,
+  scratch: HTMLCanvasElement,
+  size: number,
+  place: NebulaPlacement,
+  opacity: number,
 ) {
   const [iw, ih] = imageSize(img);
-  const cover = Math.max(canvasW / iw, canvasH / ih) * scale;
-  const dw = Math.max(2, Math.ceil(iw * cover));
-  const dh = Math.max(2, Math.ceil(ih * cover));
-  const plate = document.createElement("canvas");
-  plate.width = dw;
-  plate.height = dh;
-  const pctx = plate.getContext("2d", { alpha: true });
-  if (!pctx) return;
-  pctx.clearRect(0, 0, dw, dh);
-  pctx.drawImage(img, 0, 0, dw, dh);
-  pctx.globalCompositeOperation = "destination-in";
-  pctx.drawImage(plateMask, 0, 0, dw, dh);
-  pctx.globalCompositeOperation = "source-over";
-  ctx.globalAlpha = Math.min(1, Math.max(0, opacity));
-  ctx.drawImage(plate, cx - dw / 2, cy - dh / 2);
-  ctx.globalAlpha = 1;
+  const [dw, dh] = placementSize(place, iw, ih, size);
+  if (dw > scratch.width || dh > scratch.height) return;
+  const sctx = scratch.getContext("2d", { alpha: true });
+  if (!sctx) return;
+  const [cx = 0, cy = 0, cw = 1, ch = 1] = place.crop ?? [];
+  sctx.clearRect(0, 0, dw, dh);
+  sctx.globalCompositeOperation = "source-over";
+  sctx.drawImage(img, cx * iw, cy * ih, cw * iw, ch * ih, 0, 0, dw, dh);
+  sctx.globalCompositeOperation = "destination-in";
+  sctx.drawImage(plateMask, 0, 0, dw, dh);
+  sctx.globalCompositeOperation = "source-over";
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = clamp01(opacity);
+  ctx.translate(place.cx * size, place.cy * size);
+  if (place.rot) ctx.rotate(place.rot);
+  if (place.flip) ctx.scale(-1, 1);
+  ctx.drawImage(scratch, 0, 0, dw, dh, -dw / 2, -dh / 2, dw, dh);
+  ctx.restore();
+}
+
+function starHash(i: number, salt: number) {
+  const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/**
+ * Hard little discs, additively stamped. Radius stays around a pixel so the
+ * sky reads as points, and the middle is dimmed so nothing competes with the
+ * type. Deterministic, so the sky is the same every load.
+ */
+export function paintPinpointStars(ctx: CanvasRenderingContext2D, size: number) {
+  const n = Math.round((STAR_FIELD.density * size) / 1024);
+  const span = STAR_FIELD.maxRadius - STAR_FIELD.minRadius;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < n; i++) {
+    const x = starHash(i, 1) * size;
+    const y = starHash(i, 2) * size;
+    const nx = (x / size - 0.5) * 2;
+    const ny = (y / size - 0.5) * 2;
+    const field =
+      STAR_FIELD.centerDim +
+      (1 - STAR_FIELD.centerDim) * smoothstep01((Math.hypot(nx, ny) - 0.15) / 0.75);
+    // Few bright, many faint — a flat distribution reads as noise.
+    const mag = Math.pow(starHash(i, 3), 2.3);
+    const r = STAR_FIELD.minRadius + mag * span;
+    const alpha = clamp01((0.3 + mag * 0.7) * field);
+    if (alpha < 0.02) continue;
+    const hue = starHash(i, 4);
+    const tint =
+      hue < 0.16 ? "205, 218, 255" : hue < 0.3 ? "255, 226, 186" : "255, 247, 235";
+    if (mag > 0.72) {
+      const halo = ctx.createRadialGradient(x, y, 0, x, y, r * 4.2);
+      halo.addColorStop(0, `rgba(${tint}, ${alpha * 0.34})`);
+      halo.addColorStop(1, `rgba(${tint}, 0)`);
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 4.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = `rgba(${tint}, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 export type NebulaImageMap = Map<string, HTMLImageElement>;
@@ -305,10 +453,12 @@ export function loadNebulaImages(modest: boolean): Promise<NebulaImageMap> {
 }
 
 /**
- * Bake the five layer JPGs into one soft-edged sky canvas: each plate dies to
- * transparent before its rectangle, layers overlap heavily, then a warm tint
- * and a soft centre multiply (not an opaque square frame) keep exposure tame.
- * Returns null when nothing is ready yet.
+ * Bake the five layer JPGs into one soft-edged sky canvas. Each ref is
+ * feathered once at its own resolution and then stamped additively near that
+ * resolution, so the dust keeps its edges; cover-fitting them 4× across the
+ * canvas is what used to smear the sky into fog. Pinpoint stars go on after
+ * the warm tint, then a soft centre multiply (not an opaque square frame)
+ * keeps exposure tame. Returns null when nothing is ready yet.
  */
 export function composeNebulaWallpaper(
   images: NebulaImageMap,
@@ -323,10 +473,10 @@ export function composeNebulaWallpaper(
   if (!ctx) return null;
   ctx.clearRect(0, 0, size, size);
   // Opaque charcoal underlay so soft plate rims blend into sky, not empty UV holes.
-  ctx.fillStyle = "#0c0a09";
+  ctx.fillStyle = "#0a0908";
   ctx.fillRect(0, 0, size, size);
 
-  const maskSize = 256;
+  const maskSize = 512;
   const plateMaskCanvas = document.createElement("canvas");
   plateMaskCanvas.width = maskSize;
   plateMaskCanvas.height = maskSize;
@@ -337,69 +487,27 @@ export function composeNebulaWallpaper(
   plateImg.data.set(plateMask);
   mctx.putImageData(plateImg, 0, 0);
 
-  // Wrap-around copies so sphere UVs never land on an empty strip (no black gutter).
-  const wrapOffsets: readonly [number, number][] = [
-    [0, 0],
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ];
+  // One scratch buffer for every placement: the old bake allocated a canvas
+  // per plate, each one 4× the ref, which is most of what made it hitch.
+  const widest = NEBULA_PLACEMENTS.reduce((m, p) => Math.max(m, p.span), 0.5);
+  const scratch = document.createElement("canvas");
+  scratch.width = Math.ceil(widest * size);
+  scratch.height = scratch.width;
 
   let painted = 0;
-
-  // Left and right washes cross the canvas centre so the one sky plate
-  // has nebula behind the figure, not a dark gap between two side cards.
-  const washLeft = NEBULA_LAYERS[0];
-  const washRight = NEBULA_LAYERS[1];
-  const washLeftImg = washLeft ? images.get(washLeft.id) : undefined;
-  const washRightImg = washRight ? images.get(washRight.id) : undefined;
-  if (washLeft && washLeftImg) {
-    drawSoftPlate(
+  for (const place of NEBULA_PLACEMENTS) {
+    const layer = NEBULA_LAYERS[place.layer];
+    const img = layer ? images.get(layer.id) : undefined;
+    if (!layer || !img) continue;
+    drawPlacement(
       ctx,
-      washLeftImg,
-      size * 0.46,
-      size * 0.48,
-      size,
-      size,
-      2.75,
-      washLeft.opacity * gain * 0.58,
+      img,
       plateMaskCanvas,
-    );
-    painted++;
-  }
-  if (washRight && washRightImg) {
-    drawSoftPlate(
-      ctx,
-      washRightImg,
-      size * 0.54,
-      size * 0.5,
+      scratch,
       size,
-      size,
-      2.75,
-      washRight.opacity * gain * 0.58,
-      plateMaskCanvas,
+      place,
+      layer.opacity * gain * place.weight,
     );
-    painted++;
-  }
-  for (const layer of NEBULA_LAYERS) {
-    const img = images.get(layer.id);
-    if (!img) continue;
-    for (const [wx, wy] of wrapOffsets) {
-      const fade =
-        wx === 0 && wy === 0 ? 1 : wx === 0 || wy === 0 ? 0.55 : 0.32;
-      drawSoftPlate(
-        ctx,
-        img,
-        size * (0.5 + layer.ox + wx),
-        size * (0.5 + layer.oy + wy),
-        size,
-        size,
-        layer.scale,
-        layer.opacity * gain * fade,
-        plateMaskCanvas,
-      );
-    }
     painted++;
   }
   if (painted === 0) return null;
@@ -410,14 +518,20 @@ export function composeNebulaWallpaper(
   ctx.fillRect(0, 0, size, size);
   ctx.globalCompositeOperation = "source-over";
 
+  paintPinpointStars(ctx, size);
+
+  // Both masks are smooth ramps, so they are built small and scaled up: a
+  // per-pixel loop at bake size is a visible hitch on a phone.
+  const MASK_PX = 256;
+
   // Soft centre darken via multiply — edges stay vivid, no opaque square frame.
   const centre = document.createElement("canvas");
-  centre.width = size;
-  centre.height = size;
+  centre.width = MASK_PX;
+  centre.height = MASK_PX;
   const cctx = centre.getContext("2d");
   if (cctx) {
-    const mask = makeEdgeAlphaMaskData(size);
-    const imgData = cctx.createImageData(size, size);
+    const mask = makeEdgeAlphaMaskData(MASK_PX);
+    const imgData = cctx.createImageData(MASK_PX, MASK_PX);
     for (let i = 0; i < mask.length; i += 4) {
       const v = mask[i]!;
       imgData.data[i] = v;
@@ -427,26 +541,26 @@ export function composeNebulaWallpaper(
     }
     cctx.putImageData(imgData, 0, 0);
     ctx.globalCompositeOperation = "multiply";
-    ctx.drawImage(centre, 0, 0);
+    ctx.drawImage(centre, 0, 0, size, size);
     ctx.globalCompositeOperation = "source-over";
   }
 
   // Soft rim on the final canvas — alpha dies before the square border so a
   // plate edge can never read as a picture frame if it grazes the frustum.
   const rim = document.createElement("canvas");
-  rim.width = size;
-  rim.height = size;
+  rim.width = MASK_PX;
+  rim.height = MASK_PX;
   const rctx = rim.getContext("2d");
   if (rctx) {
-    const imgData = rctx.createImageData(size, size);
-    const half = size / 2;
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
+    const imgData = rctx.createImageData(MASK_PX, MASK_PX);
+    const half = MASK_PX / 2;
+    for (let y = 0; y < MASK_PX; y++) {
+      for (let x = 0; x < MASK_PX; x++) {
         const nx = Math.abs((x + 0.5 - half) / half);
         const ny = Math.abs((y + 0.5 - half) / half);
         const m = Math.max(nx, ny);
         const a = Math.round((1 - smoothstep01((m - 0.9) / 0.1)) * 255);
-        const i = (y * size + x) * 4;
+        const i = (y * MASK_PX + x) * 4;
         imgData.data[i] = 255;
         imgData.data[i + 1] = 255;
         imgData.data[i + 2] = 255;
@@ -455,7 +569,7 @@ export function composeNebulaWallpaper(
     }
     rctx.putImageData(imgData, 0, 0);
     ctx.globalCompositeOperation = "destination-in";
-    ctx.drawImage(rim, 0, 0);
+    ctx.drawImage(rim, 0, 0, size, size);
     ctx.globalCompositeOperation = "source-over";
   }
   return canvas;
@@ -485,7 +599,9 @@ export function paintNebulaWallpaper(
   const cx = w * 0.5 + Math.sin(drift) * w * 0.035 + lookX * w * 0.04;
   const cy = h * 0.5 + Math.cos(drift * 0.85) * h * 0.028 - lookY * h * 0.035;
   ctx.save();
-  drawCoverImage(ctx, baked, cx, cy, w, h, 1.55, 1);
+  // Just past the bake's rim fade (0.9 half-extent) plus the drift — any more
+  // magnification than that is throwing away detail we just sharpened.
+  drawCoverImage(ctx, baked, cx, cy, w, h, 1.28, 1);
   ctx.restore();
   paintCenterVignette(ctx, w, h, CENTER_VIGNETTE_STRENGTH);
 }

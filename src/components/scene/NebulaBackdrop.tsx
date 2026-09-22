@@ -40,7 +40,12 @@ const WELL_DISTANCE = 40;
  * rim outside the frustum so the frame never sees a rectangle edge.
  */
 const BACK_DISTANCE = 70;
-const BACK_OVERSCAN = 1.52;
+/**
+ * Just enough to park the bake's rim fade (last 10% of the square) plus the
+ * drift and look-parallax outside the frustum. Every extra tenth here is
+ * magnification, i.e. texels thrown away, so it stays tight.
+ */
+const BACK_OVERSCAN = 1.26;
 
 function makeDataTexture(data: Uint8ClampedArray, srgb: boolean) {
   const tex = new DataTexture(data, MASK_SIZE, MASK_SIZE, RGBAFormat, UnsignedByteType);
@@ -63,7 +68,8 @@ export function NebulaBackdrop() {
   const group = useRef<Group>(null);
   const back = useRef<Mesh>(null);
   const well = useRef<Mesh>(null);
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
+  const maxAnisotropy = gl.capabilities.getMaxAnisotropy();
   const modest = typeof window !== "undefined" && isSmallGpu();
   const gain = modest ? NEBULA_GL_LAYER_GAIN_MODEST : NEBULA_GL_LAYER_GAIN;
   const urls = useMemo(
@@ -91,13 +97,13 @@ export function NebulaBackdrop() {
     tex.minFilter = LinearFilter;
     tex.magFilter = LinearFilter;
     tex.generateMipmaps = false;
-    tex.anisotropy = modest ? 1 : 4;
+    tex.anisotropy = modest ? 1 : Math.min(8, maxAnisotropy);
     tex.needsUpdate = true;
     setCompositeMap(tex);
     return () => {
       tex.dispose();
     };
-  }, [textures, modest, gain]);
+  }, [textures, modest, gain, maxAnisotropy]);
 
   const wellMap = useMemo(
     () => makeDataTexture(makeCenterWellData(MASK_SIZE), true),

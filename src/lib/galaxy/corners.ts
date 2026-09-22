@@ -63,7 +63,11 @@ void main() {
   vec2 p = gl_PointCoord * 2.0 - 1.0;
   float d = length(p);
   if (d > 1.0) discard;
-  float alpha = (1.0 - d) * (1.0 - d) * vAlpha;
+  // Tight core with a thin halo. A plain (1-d)^2 ramp spread every star over
+  // its whole point and the corners read as smudges instead of galaxies.
+  float core = smoothstep(0.62, 0.16, d);
+  float halo = (1.0 - d) * (1.0 - d) * 0.28;
+  float alpha = min(1.0, core + halo) * vAlpha;
   if (alpha < 0.016) discard;
   gl_FragColor = vec4(vColor * alpha, alpha);
 }
