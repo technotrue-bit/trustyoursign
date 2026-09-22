@@ -20,6 +20,7 @@ import {
   SRGBColorSpace,
   Vector2,
   Vector3,
+  VideoTexture,
 } from "three";
 import { isSmallGpu } from "@/lib/gpu";
 import { CONSTELLATIONS, ELEMENT_TINT, pairFigures } from "@/lib/galaxy/constellations";
@@ -95,6 +96,13 @@ import {
   signArrive,
   stepArriveBurst,
 } from "@/lib/galaxy/signField";
+import {
+  dwellClipFor,
+  pauseDwellClip,
+  playDwellClip,
+  stopDwellClip,
+  syncDwellPrefetch,
+} from "@/lib/galaxy/dwellClip";
 import {
   loadSignArt,
   preloadSignArt,
@@ -262,6 +270,7 @@ export function GalaxyIntro() {
     return () => {
       window.clearTimeout(skyT);
       window.clearTimeout(restT);
+      stopDwellClip();
     };
   }, []);
   useEffect(() => {
@@ -519,6 +528,40 @@ function BirthNebula() {
   );
 }
 
+/** Give up starting a clip that never leaves frame 0, then let the walk continue. */
+const DWELL_START_GIVE_UP_SEC = 4;
+
+function bindDwellTexture(video: HTMLVideoElement, prev: VideoTexture | null): VideoTexture {
+  if (prev && prev.image === video) return prev;
+  if (prev) {
+    try {
+      prev.dispose();
+    } catch {
+      /* element already detached */
+    }
+  }
+  const tex = new VideoTexture(video);
+  tex.colorSpace = SRGBColorSpace;
+  tex.generateMipmaps = false;
+  return tex;
+}
+
+function releaseDwellTexture(
+  mat: MeshBasicMaterial | null,
+  still: CanvasTexture | null,
+  slot: { current: VideoTexture | null },
+) {
+  const tex = slot.current;
+  if (mat && tex && mat.map === tex) mat.map = still;
+  if (!tex) return;
+  slot.current = null;
+  try {
+    tex.dispose();
+  } catch {
+    /* element already detached */
+  }
+}
+
 function Station({ index, sign, eager }: { index: number; sign: TempleSign; eager: boolean }) {
   const volumeGated = hasVolumeSign(sign.id);
   // Volume geometry loads async from the sign's PNG — until it's actually
@@ -537,9 +580,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         uDissolve: { value: number };
         uHubUv: { value: Vector2 };
         uAspect: { value: number };
+        uLifeKey: { value: number };
       })
     | null
   >(null);
+  const dwellTex = useRef<VideoTexture | null>(null);
+  const dwellStall = useRef(0);
   const shellWrap = useRef<Group>(null);
   const shown = useRef(false);
   const hydrated = useRef(false);
@@ -591,6 +637,15 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       coreMat.dispose();
       starGeo.dispose();
       releaseSignArt(artTex);
+      const tex = dwellTex.current;
+      dwellTex.current = null;
+      if (tex) {
+        try {
+          tex.dispose();
+        } catch {
+          /* element already detached */
+        }
+      }
     };
   }, [coreMat, starGeo, artTex]);
 
@@ -626,6 +681,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       uDissolve: { value: 0 },
       uHubUv: { value: new Vector2(0.5, 0.5) },
       uAspect: { value: 16 / 9 },
+      uLifeKey: { value: 0 },
       // Mask numbers (and the seed derivation) come from signBurst — the same
       // ones dissolveMaskDistance is tested with. Never hand-build these.
       ...plateDissolveUniforms(params),
@@ -650,15 +706,25 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             "uniform float uRagged;",
             "uniform float uRadius;",
             "uniform float uAspect;",
+            "uniform float uLifeKey;",
           ].join("\n"),
         )
         .replace(
           "#include <map_fragment>",
-          ["#include <map_fragment>", "{", PLATE_DISSOLVE_GLSL, "}"].join("\n"),
+          [
+            "#include <map_fragment>",
+            "{",
+            PLATE_DISSOLVE_GLSL,
+            "}",
+            "if (uLifeKey > 0.5) {",
+            "  float lifeLuma = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));",
+            "  diffuseColor.a *= smoothstep(0.02, 0.06, lifeLuma);",
+            "}",
+          ].join("\n"),
         );
     };
     // Only this material carries the dissolve; keep the program cache honest.
-    mat.customProgramCacheKey = () => "tys-plate-dissolve";
+    mat.customProgramCacheKey = () => "tys-plate-dissolve-life";
     mat.needsUpdate = true;
   }, [sign.id, sign.palette]);
 
@@ -666,6 +732,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const g = group.current;
     const mesh = cores.current;
     if (!g || !mesh) return;
+    const releaseLife = () => {
+      if (galaxyTravel.dwellClipIndex === index) pauseDwellClip(sign.id);
+      releaseDwellTexture(plateMat.current, artTex, dwellTex);
+      dwellStall.current = 0;
+      if (plateBurst.current) plateBurst.current.uLifeKey.value = 0;
+    };
     if (volumeGated && !volReady.current && getSignVolume(sign.id)) {
       volReady.current = true;
       bumpVolReady((n) => n + 1);
@@ -689,10 +761,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     }
     if (introPlaying() && index !== 0 && !held) {
       g.visible = false;
+      releaseLife();
       return;
     }
     if (direct && !held && index !== aimedIndex()) {
       g.visible = false;
+      releaseLife();
       return;
     }
     const exploringHere =
@@ -700,6 +774,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const worldFade = exploringSign() ? galaxyTravel.worldFade : 1;
     if (exploringSign() && !exploringHere && !held) {
       g.visible = false;
+      releaseLife();
       return;
     }
     const fade =
@@ -717,6 +792,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     if (!show) {
       mesh.visible = false;
       setCloudDrawRange(starGeo, false);
+      releaseLife();
       return;
     }
     if (hydrated.current) setCloudDrawRange(starGeo, true);
@@ -795,6 +871,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     if (landedHere) {
       // Inside: the star volume is the room — keep it lit. The painted plate and
       // the 3D shell are the approach shells and go away (the camera is past them).
+      releaseLife();
       mesh.visible = true;
       setCloudDrawRange(starGeo, true);
       if (art.current) {
@@ -808,8 +885,49 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         const mat = art.current.material as MeshBasicMaterial;
         const plateOn = Boolean(artTex && (artReady(artTex) || ready));
         const bornIn = plateReveal;
+        const reducedMotion = prefersReducedMotion();
+        const lifeOwns =
+          galaxyTravel.dwellClipIndex === index &&
+          !galaxyTravel.dwellClipDone &&
+          Boolean(dwellClipFor(sign.id));
+        const lifeBlocked =
+          reducedMotion ||
+          exploringHere ||
+          exploringSign() ||
+          galaxyTravel.dragging ||
+          galaxyTravel.handsOn ||
+          galaxyTravel.hold !== 0;
+        let lifeVideo = false;
+        if (!lifeOwns || lifeBlocked) {
+          if (lifeOwns) pauseDwellClip(sign.id);
+          dwellStall.current = 0;
+          releaseDwellTexture(mat, artTex, dwellTex);
+        } else if (galaxyTravel.paused) {
+          pauseDwellClip(sign.id);
+          lifeVideo = Boolean(dwellTex.current);
+        } else {
+          const video = playDwellClip(sign.id);
+          if (video && !video.ended && !video.error && video.paused && video.currentTime === 0) {
+            dwellStall.current += dt;
+          } else {
+            dwellStall.current = 0;
+          }
+          const stalled = dwellStall.current > DWELL_START_GIVE_UP_SEC;
+          const giveUp = !video || Boolean(video.error) || video.ended || stalled;
+          const playing = Boolean(video && !video.ended && !video.error && !video.paused);
+          if (giveUp) {
+            if (!video || video.ended || video.error || stalled) galaxyTravel.dwellClipDone = true;
+            dwellStall.current = 0;
+            releaseDwellTexture(mat, artTex, dwellTex);
+          } else if (video && (playing || video.currentTime > 0)) {
+            dwellTex.current = bindDwellTexture(video, dwellTex.current);
+            lifeVideo = true;
+          } else {
+            releaseDwellTexture(mat, artTex, dwellTex);
+          }
+        }
         const ariesBreath =
-          index === 0 && !prefersReducedMotion()
+          !lifeVideo && index === 0 && !reducedMotion
             ? 1 + Math.sin(galaxyTravel.shaderTime * 0.72) * 0.012
             : 1;
         // Plate opacity via tested helper — fully opaque during BirthChat, no plateMorphFade.
@@ -826,14 +944,22 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         art.current.scale.set(wide * ariesBreath, (wide / aspect) * ariesBreath, 1);
         mat.opacity =
           plateOp *
-          (index === 0 && !prefersReducedMotion()
+          (!lifeVideo && index === 0 && !reducedMotion
             ? 0.985 + Math.sin(galaxyTravel.shaderTime * 0.9 + 0.6) * 0.015
             : 1);
         // Measured evidence for M11: what the entered sign's plate is actually
         // drawn at. Only the entered station publishes, so a neighbour's frame
         // can't clobber the value the QA probe reads.
         if (exploringHere) galaxyTravel.plateOpacity = plateOp;
-        mat.map = artTex;
+        if (plateBurst.current) plateBurst.current.uLifeKey.value = lifeVideo ? 1 : 0;
+        if (lifeVideo && dwellTex.current) {
+          if (mat.map !== dwellTex.current) {
+            mat.map = dwellTex.current;
+            mat.needsUpdate = true;
+          }
+        } else {
+          mat.map = artTex;
+        }
         mat.depthTest = false;
         mat.alphaTest = 0.04;
         if (plateOn && !shown.current) {
@@ -1532,6 +1658,9 @@ function TempleRig() {
         scene.fog.density = 0.01;
       }
     }
+    syncDwellPrefetch(
+      prefersReducedMotion() || exploringSign() ? null : (TEMPLE_SIGNS[aimedIndex()]?.id ?? null),
+    );
     galaxyTravel.t = t;
     if (galaxyTravel.moved) galaxyTravel.awaken = 1;
     stepSelectionHold();
