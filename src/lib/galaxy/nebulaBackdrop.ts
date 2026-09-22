@@ -77,8 +77,16 @@ export function nebulaCompositeSize(modest: boolean): number {
   return modest ? NEBULA_COMPOSITE_SIZE_MODEST : NEBULA_COMPOSITE_SIZE;
 }
 
+/**
+ * Kept live in the chunk. A missed `/assets` file used to be cached as
+ * immutable for a year, so browsers that stored that 404 never retry the
+ * same URL. This string moves the content hash without changing the plates.
+ */
+const NEBULA_CHUNK_REV = "2";
+
 export function nebulaUrl(id: string, modest: boolean): string {
-  return modest ? `/sky/${id}-sm.jpg` : `/sky/${id}.jpg`;
+  const file = modest ? `${id}-sm.jpg` : `${id}.jpg`;
+  return `/sky/${file}${id ? "" : NEBULA_CHUNK_REV}`;
 }
 
 function clamp01(v: number) {

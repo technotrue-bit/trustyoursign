@@ -5,6 +5,7 @@ import {
   STICKY_EMPTY_GRACE_MS,
   STICKY_REFETCH_OFFSETS_MS,
   applySessionObservation,
+  stickyRefetchGate,
 } from "./session-sticky";
 
 /** Normalized user shape used across the app, auth on or off. */
@@ -119,7 +120,8 @@ export function useCurrentUserState(): CurrentUserState {
   });
 
   useEffect(() => {
-    if (!resolved.shouldRefetch) return;
+    const settledUser = Boolean(resolved.user) && !resolved.isReadFailed;
+    if (!stickyRefetchGate.claim(resolved.shouldRefetch, settledUser)) return;
     const timers: number[] = [];
     for (const offset of STICKY_REFETCH_OFFSETS_MS) {
       timers.push(
@@ -137,7 +139,7 @@ export function useCurrentUserState(): CurrentUserState {
     return () => {
       for (const id of timers) window.clearTimeout(id);
     };
-  }, [resolved.shouldRefetch]);
+  }, [resolved.shouldRefetch, resolved.user, resolved.isReadFailed]);
 
   return {
     user: resolved.user,

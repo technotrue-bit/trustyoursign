@@ -230,3 +230,27 @@ export function applySessionObservation(input: StickySessionObservation): Sticky
     shouldRefetch: false,
   };
 }
+
+/**
+ * One sticky refetch window per empty streak, shared by every
+ * `useCurrentUserState()` subscriber. Each subscriber used to schedule its own
+ * timers, and a sky error that remounted the tree stacked another window on
+ * top until `/get-session` returned 429.
+ */
+export function createStickyRefetchGate() {
+  let armed = false;
+  return {
+    /** True only for the caller that should start the timer window. */
+    claim(shouldRefetch: boolean, settledUser: boolean): boolean {
+      if (settledUser) {
+        armed = false;
+        return false;
+      }
+      if (!shouldRefetch || armed) return false;
+      armed = true;
+      return true;
+    },
+  };
+}
+
+export const stickyRefetchGate = createStickyRefetchGate();
