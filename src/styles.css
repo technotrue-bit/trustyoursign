@@ -268,6 +268,10 @@
   transition: color 0.2s ease-out;
 }
 
+.chart-talks > summary.sky-hud-kicker {
+  font-size: 0.64rem;
+}
+
 .chart-talks[open] > summary {
   color: var(--color-fg);
 }
@@ -359,6 +363,7 @@
 
 .galaxy-chrome {
   opacity: 0;
+  isolation: isolate;
 }
 
 .galaxy-chrome[style*="opacity"] {
@@ -409,6 +414,142 @@
     0 0 10px rgba(8, 7, 6, 0.9),
     0 1px 4px rgba(8, 7, 6, 0.82),
     0 0 16px rgba(8, 7, 6, 0.48);
+}
+
+/* Sky home HUD — weight + veil so labels read over vibrant nebula */
+.sky-hud-shadow {
+  text-shadow:
+    0 0 10px rgba(8, 7, 6, 0.92),
+    0 1px 4px rgba(8, 7, 6, 0.88),
+    0 0 20px rgba(8, 7, 6, 0.58);
+}
+
+.sky-hud-veil {
+  position: relative;
+  isolation: isolate;
+}
+
+.sky-hud-veil::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+  inset: -0.25rem -0.5rem;
+  border-radius: 0.65rem;
+  background: radial-gradient(
+    ellipse 100% 100% at 50% 50%,
+    rgba(8, 7, 6, 0.62) 0%,
+    rgba(8, 7, 6, 0.28) 55%,
+    rgba(8, 7, 6, 0) 78%
+  );
+}
+
+.sky-hud-veil--tight::before {
+  inset: -0.2rem -0.45rem;
+}
+
+.sky-hud-veil--chip::before {
+  inset: -0.15rem -0.55rem;
+  border-radius: 999px;
+}
+
+.sky-hud-kicker {
+  color: color-mix(in oklab, #efe8dc 72%, var(--color-fg-subtle));
+  font-weight: 600;
+  text-shadow:
+    0 0 10px rgba(8, 7, 6, 0.92),
+    0 1px 3px rgba(8, 7, 6, 0.86),
+    0 0 18px rgba(8, 7, 6, 0.55);
+}
+
+.sky-hud-sub {
+  color: color-mix(in oklab, #efe8dc 80%, var(--color-fg-muted));
+  font-weight: 500;
+  text-shadow:
+    0 0 12px rgba(8, 7, 6, 0.9),
+    0 1px 4px rgba(8, 7, 6, 0.84),
+    0 0 22px rgba(8, 7, 6, 0.5);
+}
+
+.sky-hud-btn {
+  color: color-mix(in oklab, #efe8dc 70%, var(--color-fg-subtle));
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, #c9a15b 42%, transparent);
+  background: color-mix(in oklab, #0c0b0a 48%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, #c9a15b 12%, transparent),
+    0 0 14px rgba(8, 7, 6, 0.55),
+    inset 0 0 12px rgba(8, 7, 6, 0.35);
+  text-shadow:
+    0 0 10px rgba(8, 7, 6, 0.9),
+    0 1px 3px rgba(8, 7, 6, 0.85);
+  transition:
+    color 0.15s ease-out,
+    border-color 0.2s ease-out,
+    box-shadow 0.2s ease-out,
+    background 0.2s ease-out;
+}
+
+.sky-hud-btn:hover,
+.sky-hud-btn:focus-visible {
+  color: #f5efe3;
+  border-color: color-mix(in oklab, #c9a15b 58%, transparent);
+  background: color-mix(in oklab, #0c0b0a 62%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, #c9a15b 18%, transparent),
+    0 0 16px rgba(8, 7, 6, 0.65),
+    0 0 20px color-mix(in oklab, #c9a15b 18%, transparent);
+}
+
+.sky-hud-footer {
+  color: color-mix(in oklab, #efe8dc 68%, var(--color-fg-subtle));
+  font-weight: 600;
+  text-shadow:
+    0 0 10px rgba(8, 7, 6, 0.9),
+    0 1px 3px rgba(8, 7, 6, 0.84),
+    0 0 16px rgba(8, 7, 6, 0.5);
+}
+
+.sky-hud-footer a {
+  color: color-mix(in oklab, #f5efe3 82%, var(--color-fg));
+  text-shadow:
+    0 0 10px rgba(8, 7, 6, 0.88),
+    0 1px 3px rgba(8, 7, 6, 0.82);
+}
+
+.sky-hud-footer a:hover,
+.sky-hud-footer a:focus-visible {
+  color: #f5efe3;
+}
+
+.galaxy-chrome::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+  inset: -2.5rem -0.75rem 0;
+  background: linear-gradient(
+    to top,
+    rgba(8, 7, 6, 0.78) 0%,
+    rgba(8, 7, 6, 0.42) 42%,
+    rgba(8, 7, 6, 0) 88%
+  );
+}
+
+.galaxy-title,
+.galaxy-sign-name {
+  color: #f5efe3;
+  text-shadow:
+    0 0 14px rgba(8, 7, 6, 0.92),
+    0 2px 6px rgba(8, 7, 6, 0.86),
+    0 0 28px rgba(8, 7, 6, 0.52);
+}
+
+.galaxy-title-slot .text-fg-muted {
+  text-shadow:
+    0 0 10px rgba(8, 7, 6, 0.88),
+    0 1px 4px rgba(8, 7, 6, 0.82);
 }
 
 /* Soft warm hover/focus glow for chrome Back controls */
@@ -623,9 +764,14 @@ html.sky-paused .stagger-in > * {
 .sign-claim {
   position: relative;
   isolation: isolate;
+  font-weight: 600;
+  color: color-mix(in oklab, #f5efe3 88%, var(--color-fg));
+  text-shadow:
+    0 0 10px rgba(8, 7, 6, 0.88),
+    0 1px 3px rgba(8, 7, 6, 0.82);
   border-radius: 999px;
-  border: 1px solid color-mix(in oklab, var(--color-fg) 14%, transparent);
-  background: color-mix(in oklab, var(--color-bg) 62%, transparent);
+  border: 1px solid color-mix(in oklab, #c9a15b 36%, var(--color-fg) 12%);
+  background: color-mix(in oklab, var(--color-bg) 68%, #0c0b0a);
   box-shadow:
     0 0 0 1px color-mix(in oklab, var(--color-accent) 8%, transparent),
     0 0 14px 2px color-mix(in oklab, #c9a15b 18%, transparent),
@@ -639,23 +785,35 @@ html.sky-paused .stagger-in > * {
 
 /** Soft gold pill around the chrome Sign in link. */
 .auth-sign-in {
+  font-weight: 600;
+  color: color-mix(in oklab, #efe8dc 76%, var(--color-fg-muted));
   border-radius: 999px;
-  border: 1px solid color-mix(in oklab, #c9a15b 38%, transparent);
+  border: 1px solid color-mix(in oklab, #c9a15b 52%, transparent);
+  background: color-mix(in oklab, #0c0b0a 52%, transparent);
   box-shadow:
-    0 0 0 1px color-mix(in oklab, #c9a15b 10%, transparent),
-    0 0 12px color-mix(in oklab, #c9a15b 16%, transparent);
+    0 0 0 1px color-mix(in oklab, #c9a15b 14%, transparent),
+    0 0 14px rgba(8, 7, 6, 0.55),
+    0 0 12px color-mix(in oklab, #c9a15b 18%, transparent),
+    inset 0 0 10px rgba(8, 7, 6, 0.32);
+  text-shadow:
+    0 0 10px rgba(8, 7, 6, 0.9),
+    0 1px 3px rgba(8, 7, 6, 0.85);
   transition:
     color 0.15s ease-out,
     border-color 0.2s ease-out,
-    box-shadow 0.2s ease-out;
+    box-shadow 0.2s ease-out,
+    background 0.2s ease-out;
 }
 
 .auth-sign-in:hover,
 .auth-sign-in:focus-visible {
-  border-color: color-mix(in oklab, #c9a15b 58%, transparent);
+  color: #f5efe3;
+  border-color: color-mix(in oklab, #c9a15b 62%, transparent);
+  background: color-mix(in oklab, #0c0b0a 64%, transparent);
   box-shadow:
-    0 0 0 1px color-mix(in oklab, #c9a15b 18%, transparent),
-    0 0 16px color-mix(in oklab, #c9a15b 22%, transparent);
+    0 0 0 1px color-mix(in oklab, #c9a15b 20%, transparent),
+    0 0 16px rgba(8, 7, 6, 0.62),
+    0 0 20px color-mix(in oklab, #c9a15b 24%, transparent);
 }
 
 .auth-sign-in:focus-visible {
@@ -898,15 +1056,16 @@ html.sky-paused .stagger-in > * {
 
 .sign-strip-name {
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: 1.02rem;
+  font-weight: 500;
   font-style: italic;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  color: var(--color-fg-muted);
+  color: color-mix(in oklab, #efe8dc 62%, var(--color-fg-muted));
   text-shadow:
-    0 0 10px rgba(12, 11, 10, 0.82),
-    0 1px 4px rgba(12, 11, 10, 0.72),
-    0 0 18px rgba(12, 11, 10, 0.45);
+    0 0 12px rgba(12, 11, 10, 0.9),
+    0 1px 5px rgba(12, 11, 10, 0.82),
+    0 0 22px rgba(12, 11, 10, 0.52);
   transition:
     color 0.22s ease-out,
     text-shadow 0.22s ease-out,
@@ -916,12 +1075,16 @@ html.sky-paused .stagger-in > * {
 .sign-strip-span {
   margin-top: 0.2rem;
   font-family: var(--font-sans);
-  font-size: 0.62rem;
-  font-weight: 600;
+  font-size: 0.64rem;
+  font-weight: 700;
   line-height: 1.2;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--color-fg-subtle);
+  color: color-mix(in oklab, #efe8dc 58%, var(--color-fg-subtle));
+  text-shadow:
+    0 0 10px rgba(12, 11, 10, 0.88),
+    0 1px 3px rgba(12, 11, 10, 0.8),
+    0 0 16px rgba(12, 11, 10, 0.48);
   transition: color 0.22s ease-out;
 }
 

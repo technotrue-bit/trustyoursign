@@ -106,7 +106,7 @@ export function AccountMenu() {
     return (
       <Link
         to="/login"
-        className="auth-sign-in pointer-events-auto inline-flex min-h-11 items-center px-3 text-[0.65rem] tracking-[0.2em] text-fg-muted uppercase hover:text-fg"
+        className="auth-sign-in pointer-events-auto inline-flex min-h-11 items-center px-3 text-[0.68rem] tracking-[0.2em] uppercase"
       >
         Sign in
       </Link>

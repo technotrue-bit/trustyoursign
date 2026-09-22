@@ -84,7 +84,7 @@ export function GalaxyShell() {
         <>
           <p
             data-no-fly
-            className="pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] max-w-[4.5rem] text-[0.6rem] leading-tight tracking-[0.18em] text-fg-subtle uppercase md:max-w-none"
+            className="sky-hud-kicker sky-hud-veil sky-hud-veil--tight pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] max-w-[4.75rem] text-[0.62rem] leading-tight tracking-[0.18em] uppercase md:max-w-none"
             style={{ opacity: worldFade }}
             aria-label={versionChrome.ariaLabel}
           >
@@ -100,7 +100,7 @@ export function GalaxyShell() {
               onClick={togglePaused}
               aria-pressed={paused}
               aria-label={paused ? "Resume the sky's motion" : "Pause the sky's motion"}
-              className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+              className="sky-hud-btn sky-hud-veil sky-hud-veil--chip pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] uppercase"
             >
               {paused ? "Resume" : "Pause"}
             </button>
@@ -108,7 +108,7 @@ export function GalaxyShell() {
               <button
                 type="button"
                 onClick={() => skipIntro()}
-                className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+                className="sky-hud-btn sky-hud-veil sky-hud-veil--chip pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] uppercase"
               >
                 Skip
               </button>
@@ -150,7 +150,7 @@ export function GalaxyShell() {
               ) : null}
               {/* Hero value proposition — fades in with the title, gone once the belt moves. */}
               {!moved && !asking && introTitle > 0.3 ? (
-                <p className="col-start-1 row-start-2 mx-auto mt-2 max-w-md px-1 text-sm leading-relaxed text-fg-muted md:mt-3 md:text-base">
+                <p className="sky-hud-sub sky-hud-veil sky-hud-veil--tight col-start-1 row-start-2 mx-auto mt-2 max-w-md px-1 text-sm leading-relaxed md:mt-3 md:text-[0.95rem]">
                   Pick your sign &amp; Begin to explore
                 </p>
               ) : null}
@@ -203,7 +203,7 @@ export function GalaxyShell() {
             Enter this sign
           </button>
         ) : null}
-        <p className="px-2 text-center text-[0.65rem] tracking-wide text-fg-subtle md:px-4 md:text-xs">
+        <p className="sky-hud-kicker px-2 text-center text-[0.68rem] tracking-wide md:px-4 md:text-xs">
           <span className="md:hidden">
             Slide to fly. Tap a sign to choose it, then tap Enter this sign. Swipe names to jump.
           </span>
@@ -212,7 +212,7 @@ export function GalaxyShell() {
           </span>
         </p>
         <details className="chart-talks pointer-events-auto relative mx-auto w-full max-w-md px-2" data-no-fly>
-          <summary className="min-h-11 cursor-pointer list-none text-center text-[0.6rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg [&::-webkit-details-marker]:hidden">
+          <summary className="sky-hud-kicker min-h-11 cursor-pointer list-none text-center tracking-[0.2em] uppercase hover:text-fg [&::-webkit-details-marker]:hidden">
             How a chart talks here
           </summary>
           {(() => {
