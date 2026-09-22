@@ -66,7 +66,9 @@ for (const view of views) {
   // Time a wallpaper bake on both profiles: headless is always a software GPU,
   // so the full-size path never runs on its own here.
   const bakes = await page.evaluate(async () => {
-    const mod = await import("/src/lib/galaxy/nebulaBackdrop.ts");
+    // Source modules only exist on the dev server; the built output is bundled.
+    const mod = await import("/src/lib/galaxy/nebulaBackdrop.ts").catch(() => null);
+    if (!mod) return [];
     const out = [];
     for (const modest of [true, false]) {
       const images = await mod.loadNebulaImages(modest);
