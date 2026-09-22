@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { PREVIEW_HISTORY_ROOT_KEY } from "@/lib/preview-host-bridge";
 import {
+  hasInsideHistoryEntry,
+  historyModeForPlace,
+  historyStateIsRoot,
+  markInsideHistoryEntry,
   parseSkyPlaceSearch,
   placeFromLiveState,
   placeFromSearch,
@@ -134,6 +139,59 @@ describe("placesEqual / resolveBootPlace", () => {
 
   it("falls back to home when search is empty", () => {
     assert.deepEqual(resolveBootPlace({}), { kind: "home" });
+  });
+});
+
+describe("historyModeForPlace", () => {
+  it("pushes when the inside galaxy opens so Back can leave it", () => {
+    assert.equal(
+      historyModeForPlace({ kind: "belt", signId: "leo" }, { kind: "inside", signId: "leo", star: 0 }),
+      "push",
+    );
+    assert.equal(
+      historyModeForPlace({ kind: "home" }, { kind: "inside", signId: "aries", star: 0 }),
+      "push",
+    );
+  });
+
+  it("replaces belt moves, star changes, and leaving the galaxy", () => {
+    assert.equal(
+      historyModeForPlace({ kind: "home" }, { kind: "belt", signId: "leo" }),
+      "replace",
+    );
+    assert.equal(
+      historyModeForPlace(
+        { kind: "inside", signId: "leo", star: 0 },
+        { kind: "inside", signId: "leo", star: 2 },
+      ),
+      "replace",
+    );
+    assert.equal(
+      historyModeForPlace(
+        { kind: "inside", signId: "leo", star: 0 },
+        { kind: "belt", signId: "leo" },
+      ),
+      "replace",
+    );
+  });
+});
+
+describe("historyStateIsRoot", () => {
+  it("treats the preview root flag as the Back floor even when length is above 1", () => {
+    assert.equal(historyStateIsRoot({ [PREVIEW_HISTORY_ROOT_KEY]: true }, 4), true);
+  });
+
+  it("treats a single untagged entry as the floor", () => {
+    assert.equal(historyStateIsRoot({}, 1), true);
+    assert.equal(historyStateIsRoot(null, 1), true);
+  });
+
+  it("lets Back leave an inside entry that is not the root", () => {
+    assert.equal(historyStateIsRoot({ [PREVIEW_HISTORY_ROOT_KEY]: false }, 2), false);
+    assert.equal(hasInsideHistoryEntry(), false);
+    markInsideHistoryEntry(true);
+    assert.equal(hasInsideHistoryEntry(), true);
+    markInsideHistoryEntry(false);
   });
 });
 

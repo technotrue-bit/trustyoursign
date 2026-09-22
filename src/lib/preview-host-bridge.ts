@@ -17,6 +17,13 @@ export {
 export const PREVIEW_BRIDGE_CHANNEL = "grok-preview-bridge" as const;
 export const PREVIEW_BRIDGE_VERSION = 1 as const;
 
+/**
+ * Stamped on the history entry that preview chrome must not Back out of.
+ * `replaceState` keeps the flag, so a sky-place replace turns whatever URL
+ * is current — including the inside galaxy — into that floor. Back then no-ops.
+ */
+export const PREVIEW_HISTORY_ROOT_KEY = "__grokPreviewBridgeRoot";
+
 const EnvelopeSchema = z.object({
   channel: z.literal(PREVIEW_BRIDGE_CHANNEL),
   version: z.number().int().positive(),
@@ -77,7 +84,7 @@ export function installPreviewHostBridge(
   );
   if (parentOrigin === null) return () => {};
 
-  const ROOT_STATE_KEY = "__grokPreviewBridgeRoot";
+  const ROOT_STATE_KEY = PREVIEW_HISTORY_ROOT_KEY;
   const originalPushState = window.history.pushState.bind(window.history);
   const originalReplaceState = window.history.replaceState.bind(window.history);
 

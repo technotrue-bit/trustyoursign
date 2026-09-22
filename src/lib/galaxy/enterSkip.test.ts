@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
 import {
   enterSignGalaxy,
+  exitSignGalaxy,
+  leaveSignGalaxy,
   skipEnterGalaxy,
   stepExplore,
   galaxyTravel,
@@ -53,6 +55,19 @@ describe("enterSkip soft blackout", () => {
     stepExplore(0.2);
     assert.equal(galaxyTravel.enterSkip, "idle");
     assert.ok(galaxyTravel.skipVeil < 0.01);
+  });
+
+  it("Back unwinds a dive that exitSignGalaxy still refuses", () => {
+    assert.equal(enterSignGalaxy(0), true);
+    stepExplore(0.4);
+    assert.equal(galaxyTravel.explorePhase, "fading");
+    assert.equal(exitSignGalaxy(), false);
+    assert.equal(leaveSignGalaxy(), true);
+    assert.equal(galaxyTravel.explorePhase, "exiting");
+    for (let i = 0; i < 120 && galaxyTravel.explorePhase !== "idle"; i += 1) {
+      stepExplore(1 / 30);
+    }
+    assert.equal(galaxyTravel.explorePhase, "idle");
   });
 
   it("stalled skip recovery lands inside and clears the veil lock", () => {

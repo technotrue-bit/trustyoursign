@@ -531,6 +531,48 @@ export function exitSignGalaxy() {
 }
 
 /**
+ * Leave for Back. `exitSignGalaxy` refuses during the enter dive so Skip stays
+ * the only way to jump the cinematic — Back still has to unwind that dive,
+ * or the visitor sits on a chrome-less canvas until it finishes.
+ */
+export function leaveSignGalaxy(): boolean {
+  if (!exploringSign()) return false;
+  if (galaxyTravel.explorePhase === "exiting") return true;
+  if (galaxyTravel.explorePhase === "inside" && galaxyTravel.enterSkip === "idle") {
+    return exitSignGalaxy();
+  }
+  clearEnterSkip();
+  galaxyTravel.explorePhase = "exiting";
+  galaxyTravel.pointSeek = null;
+  galaxyTravel.zoomTarget = 1;
+  resetExploreLook();
+  noteControl();
+  publishExplore();
+  return true;
+}
+
+/** Title sky — what's-your-sign — after Back pops to a home history entry. */
+export function returnToOpenSky() {
+  resetTravel(false);
+  galaxyTravel.birth = 1;
+  skipIntro();
+  resetExplore(true);
+  publishTravel(OPEN_T, false);
+  useGalaxy.setState({
+    born: true,
+    moved: false,
+    t: OPEN_T,
+    signIndex: 0,
+    introDone: true,
+    introSkip: false,
+    introTitle: 1,
+    introChrome: 1,
+    introAsk: 0,
+    introVeil: 0,
+  });
+}
+
+/**
  * Snap the corridor camera onto a sign station (no cruise lerp). Used when a
  * refresh / deep link restores belt selection.
  */
@@ -656,7 +698,9 @@ function stepEnterSkip(dt: number) {
 }
 
 export function stepExplore(dt: number) {
-  if (galaxyTravel.paused) return;
+  // Pause freezes the sky, but an in-progress exit must still finish so Back
+  // can leave the inside canvas while motion is held.
+  if (galaxyTravel.paused && galaxyTravel.explorePhase !== "exiting") return;
   if (galaxyTravel.enterSkip !== "idle") {
     stepEnterSkip(dt);
     return;

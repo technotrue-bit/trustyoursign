@@ -9,6 +9,7 @@ import {
   insideSignGalaxy,
   resetTravel,
   restoreInsideSignGalaxy,
+  returnToOpenSky,
   snapToSign,
 } from "./travel.ts";
 
@@ -60,6 +61,17 @@ describe("snapToSign / restoreInsideSignGalaxy", () => {
     assert.equal(useGalaxy.getState().explore.phase, "inside");
     assert.equal(useGalaxy.getState().explore.signIndex, 0);
     assert.equal(CONSTELLATIONS[0]?.id, "aries");
+  });
+
+  it("returnToOpenSky clears an inside visit back to the title", () => {
+    resetWorld();
+    assert.equal(restoreInsideSignGalaxy(4, 1), true);
+    returnToOpenSky();
+    assert.equal(exploringSign(), false);
+    assert.equal(useGalaxy.getState().moved, false);
+    assert.equal(useGalaxy.getState().explore.phase, "idle");
+    assert.equal(useGalaxy.getState().born, true);
+    assert.equal(useGalaxy.getState().introDone, true);
   });
 
   it("restores a deeper star index", () => {

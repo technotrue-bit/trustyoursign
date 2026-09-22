@@ -16,9 +16,12 @@ import { useGalaxy } from "@/lib/galaxy/store";
 import {
   ensureAutoClock,
   ensureFlyInput,
+  exploringSign,
   galaxyTravel,
   prefersReducedMotion,
+  leaveSignGalaxy,
   restoreInsideSignGalaxy,
+  returnToOpenSky,
   seekSign,
   setPaused,
   skipBirth,
@@ -29,7 +32,11 @@ import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
 import { readGuestDraft } from "@/lib/ui/guestDraft";
 import { readMotionPaused } from "@/lib/ui/motionPreference";
 import {
+  historyEntryIsRoot,
+  historyModeForPlace,
+  markInsideHistoryEntry,
   placeFromLiveState,
+  placeFromSearch,
   placesEqual,
   releaseFailedResearchPlace,
   resolveBootPlace,
@@ -103,11 +110,31 @@ function applyBootPlace(place: SkyPlace): Promise<boolean> {
   return Promise.resolve(true);
 }
 
+/** Apply a history pop / forward. An open galaxy unwinds; it is not snapped shut. */
+function followHistoryPlace(place: SkyPlace) {
+  if (place.kind !== "inside" && exploringSign()) {
+    leaveSignGalaxy();
+    return;
+  }
+  if (place.kind === "home") {
+    const st = useSessionStore.getState();
+    if (st.session) return;
+    if (st.surface !== "galaxy") st.close();
+    returnToOpenSky();
+    return;
+  }
+  void applyBootPlace(place);
+}
+
 export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   const meshReview = wantsMeshReview(meshParam ? `?mesh=${meshParam}` : "");
   const navigate = useNavigate({ from: "/" });
   const placeReady = useRef(false);
   const lastWritten = useRef<SkyPlace | null>(null);
+  /** Stale first paint must not overwrite the URL before the sky publishes. */
+  const acceptLive = useRef(false);
+  /** True while a sign-select entry is inserted under a deep-linked inside URL. */
+  const seedingHistory = useRef(false);
   const [Scene, setScene] = useState<ComponentType | null>(null);
   const [sceneFailed, setSceneFailed] = useState(false);
   const [deskNotice, setDeskNotice] = useState<string | null>(null);
@@ -249,6 +276,7 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   }, []);
 
   useEffect(() => {
+    let cancelSeed = false;
     bootIntro();
     // Restore sky place before guest-draft claim so a refresh inside Aries
     // lands back in that galaxy (claim can still open on top).
@@ -273,32 +301,72 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
     // I5: the stored motion preference applies to the sky itself, not just the
     // button's label — a returning viewer lands still if that is how they left.
     if (readMotionPaused()) setPaused(true);
+
+    // A deep link that loads already inside is the only history entry, so Back
+    // no-ops. Slip the sign-select under it once the preview bridge has stamped
+    // the root (this effect runs before that parent effect).
+    if (boot.kind === "inside") {
+      const mesh = placeSearch?.mesh;
+      queueMicrotask(() => {
+        if (cancelSeed || !historyEntryIsRoot()) return;
+        void seedInsideBackTarget(boot, mesh);
+      });
+    }
+
     return () => {
+      cancelSeed = true;
       stopAutoClock();
       if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
     };
+
+    async function seedInsideBackTarget(
+      inside: Extract<SkyPlace, { kind: "inside" }>,
+      mesh: string | undefined,
+    ) {
+      if (seedingHistory.current) return;
+      seedingHistory.current = true;
+      acceptLive.current = false;
+      const under: SkyPlace = { kind: "belt", signId: inside.signId };
+      try {
+        await navigate({
+          to: "/",
+          search: searchFromPlace(under, { mesh }),
+          replace: true,
+        });
+        await navigate({
+          to: "/",
+          search: searchFromPlace(inside, { mesh }),
+          replace: false,
+        });
+        markInsideHistoryEntry(true);
+      } finally {
+        lastWritten.current = inside;
+        savePlaceSession(inside);
+        seedingHistory.current = false;
+        acceptLive.current = true;
+      }
+    }
     // Boot once from the arrival URL — live sync owns later updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional cold-load restore
   }, []);
 
-  // AccountMenu (and similar) links to `/?desk=…` after the first paint —
-  // apply those without requiring a full document reload.
+  // Back / Forward and account-menu `?desk=` links. Our own writes set
+  // lastWritten first, so this only runs for a history change we did not author.
+  const historyDesk = placeSearch?.desk ?? "";
+  const historySign = placeSearch?.sign ?? "";
+  const historyGalaxy = placeSearch?.galaxy ? "1" : "";
+  const historyStar = placeSearch?.star ?? "";
   useEffect(() => {
-    if (!placeReady.current) return;
-    const desk = placeSearch?.desk;
-    if (desk === "library") {
-      const st = useSessionStore.getState();
-      if (st.surface === "library" && !st.session) return;
-      bootPlace({ kind: "library" });
-      return;
-    }
-    if (desk === "joey" || desk === "saige") {
-      const st = useSessionStore.getState();
-      if (st.session?.kind === "research" && st.session.chartKey === desk) return;
-      bootPlace({ kind: "research", id: desk });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootPlace only closes over refs + stable setters
-  }, [placeSearch?.desk]);
+    if (!placeReady.current || meshReview || seedingHistory.current) return;
+    const fromUrl = placeFromSearch(placeSearch ?? {});
+    if (lastWritten.current && placesEqual(lastWritten.current, fromUrl)) return;
+    acceptLive.current = false;
+    lastWritten.current = fromUrl;
+    savePlaceSession(fromUrl);
+    markInsideHistoryEntry(fromUrl.kind === "inside" && !historyEntryIsRoot());
+    followHistoryPlace(fromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed fields, not object identity
+  }, [historyDesk, historySign, historyGalaxy, historyStar, meshReview]);
 
   useEffect(() => {
     // Dev-only QA hooks — see scripts/qa/enter-capture.mjs (no production cost).
@@ -313,7 +381,7 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   // Keep the address bar + session backup aligned with the live sky so a
   // refresh returns to this place instead of the title screen.
   useEffect(() => {
-    if (!placeReady.current || meshReview) return;
+    if (!placeReady.current || meshReview || seedingHistory.current) return;
     const next = placeFromLiveState({
       surface,
       sessionKind,
@@ -325,6 +393,23 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
       signIndex,
       signIdAt: (i) => CONSTELLATIONS[i]?.id ?? null,
     });
+    if (!acceptLive.current) {
+      const target = lastWritten.current;
+      if (target && placesEqual(target, next)) {
+        acceptLive.current = true;
+        return;
+      }
+      // Research charts load async — don't treat the still-home sky as Back.
+      if (
+        target?.kind === "research" &&
+        next.kind === "home" &&
+        sessionKind !== "research"
+      ) {
+        return;
+      }
+      if (target && explorePhase === "idle") followHistoryPlace(target);
+      return;
+    }
     if (lastWritten.current && placesEqual(lastWritten.current, next)) return;
     // Research charts load async — don't wipe `?desk=joey` while the fetch is in flight.
     if (
@@ -334,10 +419,13 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
     ) {
       return;
     }
+    const mode = historyModeForPlace(lastWritten.current, next);
     lastWritten.current = next;
     savePlaceSession(next);
+    if (next.kind !== "inside") markInsideHistoryEntry(false);
+    else if (mode === "push") markInsideHistoryEntry(true);
     const search = searchFromPlace(next, { mesh: placeSearch?.mesh ?? meshParam });
-    void navigate({ to: "/", search, replace: true });
+    void navigate({ to: "/", search, replace: mode !== "push" });
   }, [
     surface,
     sessionKind,
