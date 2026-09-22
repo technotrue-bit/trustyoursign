@@ -1,20 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { VaultApp } from "@/components/overlay/VaultApp";
-
-type HomeSearch = {
-  mesh?: string;
-  desk?: string;
-};
+import { parseSkyPlaceSearch, type SkyPlaceSearch } from "@/lib/ui/skyPlace";
 
 export const Route = createFileRoute("/")({
-  validateSearch: (search: Record<string, unknown>): HomeSearch => ({
-    mesh: typeof search.mesh === "string" ? search.mesh : undefined,
-    desk: typeof search.desk === "string" ? search.desk : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): SkyPlaceSearch =>
+    parseSkyPlaceSearch(search),
   component: Home,
 });
 
 function Home() {
-  const { mesh } = Route.useSearch();
-  return <VaultApp meshParam={mesh} />;
+  const search = Route.useSearch();
+  return <VaultApp meshParam={search.mesh} placeSearch={search} />;
 }

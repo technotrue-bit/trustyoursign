@@ -1,4 +1,5 @@
-import { useEffect, useState, type ComponentType, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, type ComponentType, lazy, Suspense } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { getResearchChart } from "@/lib/chart/research";
 import {
   useClaim,
@@ -10,20 +11,40 @@ import {
   roomsFor,
 } from "@/lib/chart/session";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
+import { signIndexOf } from "@/lib/chart/sign-canon";
 import { useGalaxy } from "@/lib/galaxy/store";
 import {
   ensureAutoClock,
   ensureFlyInput,
+  exploringSign,
   galaxyTravel,
   prefersReducedMotion,
+  leaveSignGalaxy,
+  restoreInsideSignGalaxy,
+  returnToOpenSky,
   seekSign,
   setPaused,
   skipBirth,
+  snapToSign,
   stopAutoClock,
 } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
 import { readGuestDraft } from "@/lib/ui/guestDraft";
 import { readMotionPaused } from "@/lib/ui/motionPreference";
+import {
+  historyEntryIsRoot,
+  historyModeForPlace,
+  markInsideHistoryEntry,
+  placeFromLiveState,
+  placeFromSearch,
+  placesEqual,
+  releaseFailedResearchPlace,
+  resolveBootPlace,
+  savePlaceSession,
+  searchFromPlace,
+  type SkyPlace,
+  type SkyPlaceSearch,
+} from "@/lib/ui/skyPlace";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { GalaxyShell } from "./GalaxyShell";
@@ -45,12 +66,98 @@ const FALLBACK_NOTE =
 type VaultAppProps = {
   /** From route search — keeps SSR/client mesh-review branch in sync. */
   meshParam?: string;
+  /** Validated home search — used once on boot to restore place after refresh. */
+  placeSearch?: SkyPlaceSearch;
 };
 
-export function VaultApp({ meshParam }: VaultAppProps = {}) {
+/** Copy for a `?desk=` deep link the server refused — the tap must not look dead. */
+const DESK_LOCKED_NOTE = "That desk isn’t unlocked for this sign-in — flying the open sky.";
+
+/**
+ * Apply a boot place. Resolves `false` only when a research deep link could not
+ * be opened (owner gate refused, network) so the caller can clear the URL and
+ * say so instead of pinning `?desk=` on a sky that never changed.
+ */
+function applyBootPlace(place: SkyPlace): Promise<boolean> {
+  if (place.kind === "home") return Promise.resolve(true);
+  skipIntro();
+  skipBirth();
+  useGalaxy.getState().markBorn();
+  if (place.kind === "library") {
+    useSessionStore.getState().openLibrary();
+    return Promise.resolve(true);
+  }
+  if (place.kind === "research") {
+    return getResearchChart({ data: place.id })
+      .then((nat) => {
+        const st = useSessionStore.getState();
+        st.openResearch(place.id, nat);
+        // Account-menu "The sky" deep links land on the planet wheel, not under the sheet.
+        st.setMode("sky");
+        st.foldSheet(true);
+        return true;
+      })
+      .catch(() => false);
+  }
+  const index = signIndexOf(place.signId);
+  if (index < 0) return Promise.resolve(true);
+  if (place.kind === "belt") {
+    snapToSign(index);
+    return Promise.resolve(true);
+  }
+  restoreInsideSignGalaxy(index, place.star);
+  return Promise.resolve(true);
+}
+
+/** Apply a history pop / forward. An open galaxy unwinds; it is not snapped shut. */
+function followHistoryPlace(place: SkyPlace) {
+  if (place.kind !== "inside" && exploringSign()) {
+    leaveSignGalaxy();
+    return;
+  }
+  if (place.kind === "home") {
+    const st = useSessionStore.getState();
+    if (st.session) return;
+    if (st.surface !== "galaxy") st.close();
+    returnToOpenSky();
+    return;
+  }
+  void applyBootPlace(place);
+}
+
+export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   const meshReview = wantsMeshReview(meshParam ? `?mesh=${meshParam}` : "");
+  const navigate = useNavigate({ from: "/" });
+  const placeReady = useRef(false);
+  const lastWritten = useRef<SkyPlace | null>(null);
+  /** Stale first paint must not overwrite the URL before the sky publishes. */
+  const acceptLive = useRef(false);
+  /** True while a sign-select entry is inserted under a deep-linked inside URL. */
+  const seedingHistory = useRef(false);
   const [Scene, setScene] = useState<ComponentType | null>(null);
-  const [sceneFailed, setSceneFailed] = useState(false);
+  // Stay pending until the effect chooses. Mounting FallbackSky on the first
+  // paint imported it on every visit; a 404 there took down the 3D sky and the
+  // one-shot reload cleared its latch when the scene committed, so it looped.
+  const [skyMode, setSkyMode] = useState<"pending" | "webgl" | "flat">("pending");
+  const [deskNotice, setDeskNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<number | null>(null);
+
+  // A research place that fails must let go of the URL: with `?desk=` pinned
+  // every refresh re-ran the same refused fetch and the sky never moved.
+  const bootPlace = (place: SkyPlace) => {
+    lastWritten.current = place;
+    void applyBootPlace(place).then((ok) => {
+      if (ok || place.kind !== "research") return;
+      const released = releaseFailedResearchPlace(lastWritten.current, place.id);
+      if (!released) return;
+      lastWritten.current = released;
+      savePlaceSession(released);
+      void navigate({ to: "/", search: (prev) => ({ ...prev, desk: undefined }), replace: true });
+      setDeskNotice(DESK_LOCKED_NOTE);
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+      noticeTimer.current = window.setTimeout(() => setDeskNotice(null), 7000);
+    });
+  };
   const claim = useClaim();
   const surface = useSurface();
   const entered = useIsEntered();
@@ -63,23 +170,38 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
   const showStarBack =
     (entered && !shelf) || claiming || (sessionOrigin ?? surface) === "library";
 
+  const moved = useGalaxy((s) => s.moved);
+  const signIndex = useGalaxy((s) => s.signIndex);
+  const explorePhase = useGalaxy((s) => s.explore.phase);
+  const exploreSignIndex = useGalaxy((s) => s.explore.signIndex);
+  const pointIndex = useGalaxy((s) => s.explore.pointIndex);
+  const researchId = useSessionStore((s) =>
+    s.session?.kind === "research" &&
+    (s.session.chartKey === "joey" || s.session.chartKey === "saige")
+      ? s.session.chartKey
+      : null,
+  );
+
   useEffect(() => {
     // Reduced motion: never import or mount the WebGL scene - the 2D
     // FallbackSky is the whole canvas for these users.
     if (prefersReducedMotion() || !shouldUse3D()) {
-      setSceneFailed(true);
+      setSkyMode("flat");
       return;
     }
     let cancelled = false;
     void import("@/components/scene/ChartCanvas")
       .then((m) => {
-        if (!cancelled && canWebGL()) setScene(() => m.ChartCanvas);
-        else if (!cancelled) setSceneFailed(true);
+        if (cancelled) return;
+        if (canWebGL()) {
+          setScene(() => m.ChartCanvas);
+          setSkyMode("webgl");
+        } else setSkyMode("flat");
       })
       .catch(() => {
-        if (!cancelled) setSceneFailed(true);
+        if (!cancelled) setSkyMode("flat");
       });
-    const onLost = () => setSceneFailed(true);
+    const onLost = () => setSkyMode("flat");
     const hideLost = (e: Event) => {
       const t = e.target;
       if (t instanceof HTMLCanvasElement && t.closest(".canvas-root")) buryWebGLCanvas(t);
@@ -159,7 +281,14 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
   }, []);
 
   useEffect(() => {
+    let cancelSeed = false;
     bootIntro();
+    // Restore sky place before guest-draft claim so a refresh inside Aries
+    // lands back in that galaxy (claim can still open on top).
+    const boot = resolveBootPlace(placeSearch ?? {});
+    bootPlace(boot);
+    placeReady.current = true;
+
     // D2/F7: an in-progress guest birth survives reloads and sign-in
     // redirects — reopen it if this tab still holds one and nothing else
     // is open. In-tab storage only (see guestDraft).
@@ -177,8 +306,72 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
     // I5: the stored motion preference applies to the sky itself, not just the
     // button's label — a returning viewer lands still if that is how they left.
     if (readMotionPaused()) setPaused(true);
-    return () => stopAutoClock();
+
+    // A deep link that loads already inside is the only history entry, so Back
+    // no-ops. Slip the sign-select under it once the preview bridge has stamped
+    // the root (this effect runs before that parent effect).
+    if (boot.kind === "inside") {
+      const mesh = placeSearch?.mesh;
+      queueMicrotask(() => {
+        if (cancelSeed || !historyEntryIsRoot()) return;
+        void seedInsideBackTarget(boot, mesh);
+      });
+    }
+
+    return () => {
+      cancelSeed = true;
+      stopAutoClock();
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+    };
+
+    async function seedInsideBackTarget(
+      inside: Extract<SkyPlace, { kind: "inside" }>,
+      mesh: string | undefined,
+    ) {
+      if (seedingHistory.current) return;
+      seedingHistory.current = true;
+      acceptLive.current = false;
+      const under: SkyPlace = { kind: "belt", signId: inside.signId };
+      try {
+        await navigate({
+          to: "/",
+          search: searchFromPlace(under, { mesh }),
+          replace: true,
+        });
+        await navigate({
+          to: "/",
+          search: searchFromPlace(inside, { mesh }),
+          replace: false,
+        });
+        markInsideHistoryEntry(true);
+      } finally {
+        lastWritten.current = inside;
+        savePlaceSession(inside);
+        seedingHistory.current = false;
+        acceptLive.current = true;
+      }
+    }
+    // Boot once from the arrival URL — live sync owns later updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional cold-load restore
   }, []);
+
+  // Back / Forward and account-menu `?desk=` links. Our own writes set
+  // lastWritten first, so this only runs for a history change we did not author.
+  const historyDesk = placeSearch?.desk ?? "";
+  const historySign = placeSearch?.sign ?? "";
+  const historyGalaxy = placeSearch?.galaxy ? "1" : "";
+  const historyStar = placeSearch?.star ?? "";
+  useEffect(() => {
+    if (!placeReady.current || meshReview || seedingHistory.current) return;
+    const fromUrl = placeFromSearch(placeSearch ?? {});
+    if (lastWritten.current && placesEqual(lastWritten.current, fromUrl)) return;
+    acceptLive.current = false;
+    lastWritten.current = fromUrl;
+    savePlaceSession(fromUrl);
+    markInsideHistoryEntry(fromUrl.kind === "inside" && !historyEntryIsRoot());
+    followHistoryPlace(fromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed fields, not object identity
+  }, [historyDesk, historySign, historyGalaxy, historyStar, meshReview]);
 
   useEffect(() => {
     // Dev-only QA hooks — see scripts/qa/enter-capture.mjs (no production cost).
@@ -190,34 +383,68 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
     galaxyTravel.claiming = Boolean(claiming);
   }, [claiming, entered]);
 
+  // Keep the address bar + session backup aligned with the live sky so a
+  // refresh returns to this place instead of the title screen.
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("desk");
-    if (!q) return;
-    const clean = () => {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("desk");
-      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
-    };
-    if (q === "library") {
-      skipIntro();
-      skipBirth();
-      useGalaxy.getState().markBorn();
-      useSessionStore.getState().openLibrary();
-      clean();
+    if (!placeReady.current || meshReview || seedingHistory.current) return;
+    const next = placeFromLiveState({
+      surface,
+      sessionKind,
+      researchId: researchId ?? null,
+      explorePhase,
+      exploreSignIndex,
+      pointIndex,
+      moved,
+      signIndex,
+      signIdAt: (i) => CONSTELLATIONS[i]?.id ?? null,
+    });
+    if (!acceptLive.current) {
+      const target = lastWritten.current;
+      if (target && placesEqual(target, next)) {
+        acceptLive.current = true;
+        return;
+      }
+      // Research charts load async — don't treat the still-home sky as Back.
+      if (
+        target?.kind === "research" &&
+        next.kind === "home" &&
+        sessionKind !== "research"
+      ) {
+        return;
+      }
+      if (target && explorePhase === "idle") followHistoryPlace(target);
       return;
     }
-    if (q === "saige" || q === "joey") {
-      skipIntro();
-      skipBirth();
-      useGalaxy.getState().markBorn();
-      void getResearchChart({ data: q })
-        .then((nat) => {
-          useSessionStore.getState().openResearch(q, nat);
-          clean();
-        })
-        .catch(() => clean());
+    if (lastWritten.current && placesEqual(lastWritten.current, next)) return;
+    // Research charts load async — don't wipe `?desk=joey` while the fetch is in flight.
+    if (
+      lastWritten.current?.kind === "research" &&
+      next.kind === "home" &&
+      sessionKind !== "research"
+    ) {
+      return;
     }
-  }, []);
+    const mode = historyModeForPlace(lastWritten.current, next);
+    lastWritten.current = next;
+    savePlaceSession(next);
+    if (next.kind !== "inside") markInsideHistoryEntry(false);
+    else if (mode === "push") markInsideHistoryEntry(true);
+    const search = searchFromPlace(next, { mesh: placeSearch?.mesh ?? meshParam });
+    void navigate({ to: "/", search, replace: mode !== "push" });
+  }, [
+    surface,
+    sessionKind,
+    researchId,
+    explorePhase,
+    exploreSignIndex,
+    pointIndex,
+    moved,
+    signIndex,
+    meshReview,
+    meshParam,
+    placeSearch?.mesh,
+    navigate,
+  ]);
 
   // Isolated mesh-review stage — keeps GalaxyIntro / plate hydrate path untouched.
   if (meshReview) return <MeshReviewShell />;
@@ -229,7 +456,7 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
       style={{ background: "#0c0b0a", color: "#efe8dc" }}
       tabIndex={-1}
     >
-      {Scene && !sceneFailed ? (
+      {skyMode === "webgl" && Scene ? (
         <SceneErrorBoundary
           fallback={
             <Suspense fallback={null}>
@@ -239,13 +466,23 @@ export function VaultApp({ meshParam }: VaultAppProps = {}) {
         >
           <Scene />
         </SceneErrorBoundary>
-      ) : (
+      ) : skyMode === "flat" ? (
         <Suspense fallback={null}>
           {/* Reduced motion chose the 2D sky on purpose — only a real
               WebGL failure gets the "could not load" note. */}
           <FallbackSky note={prefersReducedMotion() ? undefined : FALLBACK_NOTE} />
         </Suspense>
+      ) : (
+        <div className="canvas-root" style={{ background: "#0c0b0a" }} aria-hidden />
       )}
+      {deskNotice ? (
+        <p
+          role="status"
+          className="pointer-events-none absolute inset-x-0 top-[calc(var(--chrome-top)+3.5rem)] z-40 px-6 text-center text-[0.6rem] leading-snug tracking-[0.18em] text-fg-subtle uppercase"
+        >
+          {deskNotice}
+        </p>
+      ) : null}
       {showStarBack ? <StarBack /> : null}
       {gate === "galaxy" ? <GalaxyShell /> : null}
       {gate === "claim" ? <ClaimShell /> : null}

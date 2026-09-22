@@ -1,4 +1,12 @@
+import { useEffect, useRef, useState } from "react";
 import { authClient, authEnabled } from "./client";
+import { softRecoverSession } from "./session-recover";
+import {
+  STICKY_EMPTY_GRACE_MS,
+  STICKY_REFETCH_OFFSETS_MS,
+  applySessionObservation,
+  stickyRefetchGate,
+} from "./session-sticky";
 
 /** Normalized user shape used across the app, auth on or off. */
 export type AppUser = {
@@ -36,11 +44,34 @@ export type CurrentUserState = {
    * server hiccup). NOT "signed out": the cookie may be perfectly good. A phone
    * waking from the app switcher fires exactly this request, so treating it as
    * signed out logs people out on resume. See `session-guard`.
+   *
+   * Also true briefly when `/get-session` returns empty after we already knew a
+   * user — sticky session holds the identity so Profile clicks cannot bounce
+   * you to sign-in over a transient miss (see `session-sticky`).
    */
   isReadFailed: boolean;
-  /** Re-read the session (the "try again" path after a failed read). */
+  /**
+   * Re-read the session after a failed read. Wakes the auth server first, then
+   * refetches with cookie-cache bypass — a bare `refetch()` is what made Try
+   * Again look dead when the function was still cold.
+   */
   refetchSession: () => void;
 };
+
+function mapUser(user: {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}): AppUser {
+  return {
+    id: user.id,
+    displayName: user.name ?? null,
+    primaryEmail: user.email ?? null,
+    profileImageUrl: user.image ?? null,
+    isDevFallback: false,
+  };
+}
 
 /**
  * Current user + loading state. Same behavior in live preview and when deployed:
@@ -67,21 +98,56 @@ export function useCurrentUserState(): CurrentUserState {
   if (!authEnabled) {
     return { user: DEV_USER, isPending: false, isReadFailed: false, refetchSession: () => {} };
   }
-  const { data, isPending, error, refetch } = authClient.useSession();
-  const user = data?.user;
+  const { data, isPending, isRefetching, error, refetch } = authClient.useSession();
+  // `refetch` is a fresh identity on most renders. Hold it in a ref so the sticky
+  // retry effect below cannot re-schedule itself every render — that turned the
+  // intended four probes into dozens of `/get-session` calls and tripped the auth
+  // rate limiter, after which Log out (and anything else needing a session read)
+  // silently failed.
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+  // Tick so sticky empty grace can expire / re-resolve without another BA event.
+  const [, setStickTick] = useState(0);
+
+  const liveUser = data?.user ? mapUser(data.user) : null;
+  // Better Auth only sets isPending on the first load (or when data is null).
+  // A Try Again after an error sets isRefetching — treat that as pending so the
+  // guard can leave the dead error screen.
+  const resolved = applySessionObservation({
+    liveUser,
+    isPending: isPending || isRefetching,
+    hasError: Boolean(error) && !isRefetching,
+  });
+
+  useEffect(() => {
+    const settledUser = Boolean(resolved.user) && !resolved.isReadFailed;
+    if (!stickyRefetchGate.claim(resolved.shouldRefetch, settledUser)) return;
+    const timers: number[] = [];
+    for (const offset of STICKY_REFETCH_OFFSETS_MS) {
+      timers.push(
+        window.setTimeout(() => {
+          // Soft atom retry — wake/reload is reserved for the explicit Try Again path.
+          void refetchRef.current({ query: { disableCookieCache: true } });
+          setStickTick((n) => n + 1);
+        }, offset),
+      );
+    }
+    // Final tick after the full grace so sticky can drop if still empty.
+    timers.push(
+      window.setTimeout(() => setStickTick((n) => n + 1), STICKY_EMPTY_GRACE_MS),
+    );
+    return () => {
+      for (const id of timers) window.clearTimeout(id);
+    };
+  }, [resolved.shouldRefetch, resolved.user, resolved.isReadFailed]);
+
   return {
-    user: user
-      ? {
-          id: user.id,
-          displayName: user.name ?? null,
-          primaryEmail: user.email ?? null,
-          profileImageUrl: user.image ?? null,
-          isDevFallback: false,
-        }
-      : null,
-    isPending,
-    isReadFailed: Boolean(error),
-    refetchSession: () => void refetch(),
+    user: resolved.user,
+    isPending: resolved.isPending,
+    isReadFailed: resolved.isReadFailed,
+    refetchSession: () => {
+      void softRecoverSession({ refetch });
+    },
   };
 }
 

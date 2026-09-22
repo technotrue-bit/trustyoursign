@@ -1,43 +1,29 @@
 import { useEffect, useRef } from "react";
 import { authClient } from "@/lib/auth/client";
+import {
+  isLivePreviewHost,
+  syncBearerStorageOnLoad,
+  writePreviewBearerToken,
+} from "@/lib/auth/bearer-storage";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
 import { bindOwnerPreview, claimSite } from "@/lib/site";
 
-const BEARER = "grok-auth.bearer-token";
-
-function readStore(which: Storage | undefined) {
-  if (!which) return null;
-  try {
-    return which.getItem(BEARER);
-  } catch {
-    return null;
-  }
+function previewWindow() {
+  if (typeof window === "undefined") return null;
+  if (!isLivePreviewHost(window.location.hostname)) return null;
+  return window;
 }
 
-function writeStore(token: string) {
-  try {
-    window.sessionStorage.setItem(BEARER, token);
-    window.localStorage.setItem(BEARER, token);
-  } catch {
-    /* ignore */
-  }
+// Deployed: purge any leftover preview bearer so it cannot shadow the cookie.
+// Preview: restore session←local so a refreshed iframe keeps the desk open.
+if (typeof window !== "undefined") {
+  syncBearerStorageOnLoad({
+    hostname: window.location.hostname,
+    session: window.sessionStorage,
+    local: window.localStorage,
+  });
 }
-
-function restoreBearer() {
-  if (typeof window === "undefined") return;
-  const session = readStore(window.sessionStorage);
-  const lasting = readStore(window.localStorage);
-  if (!session && lasting) {
-    try {
-      window.sessionStorage.setItem(BEARER, lasting);
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-restoreBearer();
 
 /** Keeps Devin's desk open in the live preview for this build session. */
 export function OwnerBind() {
@@ -51,17 +37,34 @@ export function OwnerBind() {
       if (isSiteOwner(user)) void claimSite().catch(() => {});
       return;
     }
+
+    // Deployed cookie auth: never mint or restore a bearer. A leftover token
+    // attached as Authorization replaces the real session cookie inside Better
+    // Auth's bearer plugin and makes /account look signed out.
+    const win = previewWindow();
+    if (!win) {
+      ran.current = true;
+      return;
+    }
+
     ran.current = true;
     try {
-      if (sessionStorage.getItem("grok-auth.skip-owner-bind") === "1") return;
+      if (win.sessionStorage.getItem("grok-auth.skip-owner-bind") === "1") return;
     } catch {
       /* ignore */
     }
     void (async () => {
-      restoreBearer();
-      const next = await bindOwnerPreview().catch(() => ({ token: null }));
+      syncBearerStorageOnLoad({
+        hostname: win.location.hostname,
+        session: win.sessionStorage,
+        local: win.localStorage,
+      });
+      const next = await bindOwnerPreview().catch(() => ({ token: null as string | null }));
       if (!next.token) return;
-      writeStore(next.token);
+      writePreviewBearerToken(next.token, {
+        session: win.sessionStorage,
+        local: win.localStorage,
+      });
       try {
         await authClient.getSession();
       } catch {

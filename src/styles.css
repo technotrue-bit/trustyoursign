@@ -467,6 +467,18 @@
   animation: sign-galaxy-dot-sweep 10s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
 }
 
+html.sky-paused .sign-galaxy-dot-sweep,
+html.sky-paused .stagger-in > * {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sign-galaxy-dot-sweep {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+}
+
 .sign-galaxy-dot {
   --i: 0;
   position: relative;
@@ -1230,4 +1242,132 @@
   -webkit-background-clip: text;
   color: transparent;
   animation: cookie-notice-glow 5.5s ease-in-out infinite;
+}
+
+/* Sky guide — soft float-in beside targets */
+@keyframes sky-guide-in {
+  0% {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+.sky-guide-card {
+  animation: sky-guide-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.sky-guide-glow {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent) 55%, transparent),
+    0 0 24px color-mix(in oklab, var(--color-accent) 22%, transparent);
+  border-radius: 0.75rem;
+  transition: box-shadow 0.35s ease;
+}
+
+/* Fairy / star word reveal */
+@keyframes star-reveal-word {
+  0% {
+    opacity: 0;
+    filter: blur(4px);
+    text-shadow: 0 0 12px color-mix(in oklab, #f0d4a1 0%, transparent);
+    transform: translateY(0.35em);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(0);
+    text-shadow: 0 0 10px color-mix(in oklab, #f0d4a1 55%, transparent);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    text-shadow: 0 0 0 transparent;
+    transform: translateY(0);
+  }
+}
+
+.star-reveal-word {
+  display: inline-block;
+  opacity: 0;
+  animation: star-reveal-word 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.star-reveal-word::after {
+  content: none;
+}
+
+.star-reveal-word:nth-child(3n)::after {
+  content: "✧";
+  margin-left: 0.1em;
+  font-size: 0.55em;
+  vertical-align: super;
+  opacity: 0;
+  color: color-mix(in oklab, #f0d4a1 80%, var(--color-fg));
+  animation: star-twinkle 0.9s ease-out forwards;
+  animation-delay: inherit;
+}
+
+.star-reveal-word:nth-child(6n)::after {
+  content: "✦";
+}
+
+.star-reveal-plain {
+  display: inline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sky-guide-card {
+    animation: none;
+  }
+
+  .star-reveal-word {
+    opacity: 1;
+    animation: none;
+  }
+
+  .star-reveal-word::after {
+    display: none;
+  }
+}
+
+/* Natal chart sheet: fold reveals the wheel instead of a hard cut. */
+.chart-sheet__body {
+  max-height: min(42dvh, 24rem);
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    max-height 0.32s ease,
+    opacity 0.28s ease,
+    transform 0.28s ease,
+    padding 0.28s ease;
+}
+
+.chart-sheet__body--folded {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(0.35rem);
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+@media (min-width: 768px) {
+  .chart-sheet__body {
+    max-height: min(70dvh, 40rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-sheet__body {
+    transition: none;
+  }
+
+  .chart-sheet__body--folded {
+    transform: none;
+  }
 }

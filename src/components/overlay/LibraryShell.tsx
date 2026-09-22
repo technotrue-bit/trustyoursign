@@ -5,7 +5,8 @@ import { listCharts, type SavedChart } from "@/lib/charts";
 import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
 import { openSavedChart, useSessionStore } from "@/lib/chart/session";
 import { isResearchChartId, type ChartId } from "@/lib/chart/types";
-import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
+import { SITE_OWNER } from "@/lib/owner";
+import { classifyOwnerFetchError, forgetOwnerVerdict, useOwnerVerdict } from "@/lib/owner-state";
 import { Gloss, GlossRoot } from "./Gloss";
 
 export function LibraryShell() {
@@ -14,10 +15,14 @@ export function LibraryShell() {
 
 function Intro() {
   const user = useCurrentUser();
-  const owner = isSiteOwner(user);
+  // Server truth, not the cosmetic client check — the research fetch behind each
+  // book is owner-gated, so a cosmetic "owner" here rendered books that 404'd.
+  const owner = useOwnerVerdict(user?.id) === true;
   const [desk, setDesk] = useState<
     { id: ChartId; title: string; oneCut: string; date: string }[] | null
   >(null);
+  const [busyId, setBusyId] = useState<ChartId | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!owner) {
@@ -30,9 +35,26 @@ function Intro() {
   }, [owner]);
 
   const openResearch = async (id: ChartId) => {
-    if (!isResearchChartId(id)) return;
-    const nat = await getResearchChart({ data: id });
-    useSessionStore.getState().openResearch(id, nat);
+    if (!isResearchChartId(id) || busyId) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      const nat = await getResearchChart({ data: id });
+      useSessionStore.getState().openResearch(id, nat);
+    } catch (err) {
+      const kind = classifyOwnerFetchError(err);
+      console.error("[library] openResearch failed", kind, err);
+      if (kind !== "unreachable") forgetOwnerVerdict(user?.id);
+      setError(
+        kind === "signed_out"
+          ? "Your sign-in lapsed. Sign in again to open the desk."
+          : kind === "not_owner"
+            ? "The desk isn’t unlocked for this sign-in."
+            : "That chart wouldn’t open. Try again in a moment.",
+      );
+    } finally {
+      setBusyId(null);
+    }
   };
 
   return (
@@ -63,21 +85,36 @@ function Intro() {
                 <li key={book.id}>
                   <button
                     type="button"
+                    disabled={busyId !== null}
+                    aria-busy={busyId === book.id || undefined}
                     onClick={() => void openResearch(book.id)}
-                    className="w-full rounded-md border border-border bg-bg-elevated/80 px-4 py-4 text-left transition-colors duration-150 hover:bg-bg-subtle"
+                    className="w-full rounded-md border border-border bg-bg-elevated/80 px-4 py-4 text-left transition-colors duration-150 hover:bg-bg-subtle disabled:cursor-default disabled:opacity-60"
                   >
                     <p className="font-display text-xl tracking-tight text-fg italic">
                       {book.title}
                     </p>
                     <p className="mt-1 text-sm text-fg-muted">{book.oneCut}</p>
                     <p className="mt-1 text-xs tracking-wide text-fg-subtle uppercase">
-                      {book.id === "saige" ? "Premium house" : "Walkthrough"} · {book.date} ·
-                      research
+                      {busyId === book.id ? (
+                        <span aria-live="polite">Opening…</span>
+                      ) : (
+                        <>
+                          {book.id === "saige" ? "Premium house" : "Walkthrough"} · {book.date} ·
+                          research
+                        </>
+                      )}
                     </p>
                   </button>
                 </li>
               ))
             )}
+            {error ? (
+              <li>
+                <p role="alert" className="text-xs leading-snug text-wine">
+                  {error}
+                </p>
+              </li>
+            ) : null}
             <li>
               <div className="rounded-md border border-dashed border-border px-4 py-4">
                 <p className="font-display text-xl tracking-tight text-fg italic">The third</p>
@@ -100,7 +137,23 @@ function Intro() {
 function SavedShelf() {
   const user = useCurrentUser();
   const [rows, setRows] = useState<SavedChart[] | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const userId = user?.id ?? null;
+
+  const open = async (c: SavedChart) => {
+    if (busyId) return;
+    setBusyId(c.id);
+    setError(null);
+    try {
+      await openSavedChart(c, "library");
+    } catch (err) {
+      console.error("[library] openSavedChart failed", err);
+      setError("That chart wouldn’t open. Try again in a moment.");
+    } finally {
+      setBusyId(null);
+    }
+  };
   // Depend on the id, not the object: the session hook rebuilds `user` on every
   // render, so a `[user]` dependency re-fetches in a loop (fetch → setState → render).
   useEffect(() => {
@@ -142,21 +195,32 @@ function SavedShelf() {
           <li key={c.id}>
             <button
               type="button"
-              onClick={async () => {
-                await openSavedChart(c, "library");
-              }}
-              className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-bg-subtle"
+              disabled={busyId !== null}
+              aria-busy={busyId === c.id || undefined}
+              onClick={() => void open(c)}
+              className="w-full rounded-md border border-border px-4 py-3 text-left hover:bg-bg-subtle disabled:cursor-default disabled:opacity-60"
             >
               <p className="font-display text-lg text-fg italic">{c.label}</p>
               <p className="text-xs tracking-wide text-fg-subtle uppercase">
-                {c.signId} · {c.birthMonth}/{c.birthDay}/{c.birthYear}
-                {c.birthPlace ? ` · ${c.birthPlace}` : ""}
-                {c.natal ? " · natal" : " · sun-sign shelf"}
+                {busyId === c.id ? (
+                  <span aria-live="polite">Opening…</span>
+                ) : (
+                  <>
+                    {c.signId} · {c.birthMonth}/{c.birthDay}/{c.birthYear}
+                    {c.birthPlace ? ` · ${c.birthPlace}` : ""}
+                    {c.natal ? " · natal" : " · sun-sign shelf"}
+                  </>
+                )}
               </p>
             </button>
           </li>
         ))}
       </ul>
+      {error ? (
+        <p role="alert" className="mt-2 text-xs leading-snug text-wine">
+          {error}
+        </p>
+      ) : null}
       <Link
         to="/account"
         className="mt-3 inline-flex min-h-11 items-center text-xs tracking-[0.18em] text-fg-muted uppercase"

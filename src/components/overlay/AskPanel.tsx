@@ -25,6 +25,7 @@ import {
   useSessionSelection,
   useSkyNatal,
 } from "@/lib/chart/session/hooks";
+import { useAskMachinePref } from "@/lib/ui/askMachinePref";
 import { cn } from "@/lib/utils";
 import { Gloss, GlossRoot } from "./Gloss";
 import { ChartSheet } from "./ChartSheet";
@@ -42,6 +43,8 @@ export function AskPanel() {
   const selection = useSessionSelection();
   const { user, isPending } = useCurrentUserState();
   const signedIn = Boolean(user);
+  const remoteEnabled = useAskMachinePref((s) => s.remoteEnabled);
+  const hydrateMachinePref = useAskMachinePref((s) => s.hydrate);
   const savedId = session?.savedId ?? null;
   const researchKey = research?.chartKey ?? null;
   const chartId =
@@ -90,6 +93,10 @@ export function AskPanel() {
   const notesRef = useRef(notes);
   notesRef.current = notes;
   const saveAskTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    hydrateMachinePref();
+  }, [hydrateMachinePref]);
 
   const trimSkyForAsk = (natal: NonNullable<typeof skyNatal>) => ({
     tone: natal.tone,
@@ -186,7 +193,7 @@ export function AskPanel() {
     try {
       let text = "";
       if (nat && visitor) {
-        if (signedIn && skyNatal) {
+        if (signedIn && skyNatal && remoteEnabled) {
           const result = await askTheSky({
             data: {
               natal: trimSkyForAsk(skyNatal),
@@ -197,6 +204,8 @@ export function AskPanel() {
             },
           });
           text = result.text;
+        } else if (signedIn && skyNatal && !remoteEnabled) {
+          text = answerFromBones(nat, q, about?.focus);
         } else if (!signedIn && guestAsks >= 2) {
           text =
             "The bones answered twice as a guest. Sign in to keep the thread, ask the machine, and save this natal.";
@@ -205,7 +214,7 @@ export function AskPanel() {
           if (!signedIn) setGuestAsks((n) => n + 1);
         }
       } else if (sky && shelf) {
-        if (signedIn) {
+        if (signedIn && remoteEnabled) {
           const result = await askTheSky({
             data: {
               natal: trimSkyForAsk(sky),
@@ -216,6 +225,8 @@ export function AskPanel() {
             },
           });
           text = result.text;
+        } else if (signedIn && !remoteEnabled) {
+          text = answerFromSky(sky, q, about?.focus);
         } else {
           text = answerFromSky(sky, q, about?.focus);
         }
@@ -231,16 +242,20 @@ export function AskPanel() {
           .join(" · ");
         text = answerFromShelf(sign, q, when, who, Boolean(shelf.birth.place));
       } else if (nat && research && isResearchChartId(chartKey)) {
-        const result = await askTheChart({
-          data: {
-            chartId: chartKey,
-            question: q,
-            notes: notes.map((n) => n.text),
-            history: thread,
-            focus: about?.focus,
-          },
-        });
-        text = result.ok ? result.text : answerFromBones(nat, q, about?.focus);
+        if (remoteEnabled) {
+          const result = await askTheChart({
+            data: {
+              chartId: chartKey,
+              question: q,
+              notes: notes.map((n) => n.text),
+              history: thread,
+              focus: about?.focus,
+            },
+          });
+          text = result.ok ? result.text : answerFromBones(nat, q, about?.focus);
+        } else {
+          text = answerFromBones(nat, q, about?.focus);
+        }
       } else if (nat) {
         text = answerFromBones(nat, q, about?.focus);
       } else {

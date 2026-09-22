@@ -40,56 +40,41 @@ export function hasFullChartForSign(opts: {
 export type ExploreLockReason = "auth" | "chart" | null;
 
 /**
- * How many star points a guest (unsigned visitor) may open with real copy.
- * The hub is always open on top of these.
+ * @deprecated Sign galaxies are open to everyone. Kept so older call sites
+ * that paint "preview" chrome stay green — always true.
  */
-export const GUEST_PREVIEW_COUNT = 3;
+export const GUEST_PREVIEW_COUNT = Number.POSITIVE_INFINITY;
 
-/**
- * Guests get the hub plus the first few stars as a taste of the galaxy.
- * Everything deeper stays behind the auth gate.
- */
-export function guestPreviewUnlocked(pointIndex: number, isHub = false): boolean {
-  if (isHub) return true;
-  if (!Number.isFinite(pointIndex)) return false;
-  const i = Math.trunc(pointIndex);
-  return i >= 0 && i < GUEST_PREVIEW_COUNT;
+/** @deprecated Always true — lore is no longer gated by preview count. */
+export function guestPreviewUnlocked(_pointIndex: number, _isHub = false): boolean {
+  return true;
 }
 
 /**
- * Stars beyond the hub unlock only when the viewer is signed in (or signed up)
- * and has a full timed natal / saved self profile for this sign.
- * Guests still see the hub and the first GUEST_PREVIEW_COUNT points.
+ * Sign-galaxy lore is open for every viewer so they can learn the sign.
+ * Auth + a kept chart still matter for *saving* a sky across devices, not for
+ * reading stars here.
  */
-export function canExploreSignStars(opts: {
+export function canExploreSignStars(_opts: {
   signId: SignId;
   session: ChartSession | null | undefined;
   savedCharts?: ExplorableChart[] | null;
-  /** True when the viewer has a real signed-in / signed-up session. */
   signedIn: boolean;
 }): boolean {
-  return exploreLockReason(opts) == null;
+  return true;
 }
 
-export function exploreLockReason(opts: {
+/**
+ * Always unlocked. `ExploreLockReason` stays for HUD typing; callers should
+ * treat a non-null value as legacy-only.
+ */
+export function exploreLockReason(_opts: {
   signId: SignId;
   session: ChartSession | null | undefined;
   savedCharts?: ExplorableChart[] | null;
   signedIn: boolean;
-  /**
-   * Point context for the star being viewed. When supplied, a guest keeps the
-   * hub and the first GUEST_PREVIEW_COUNT points open; the rest return "auth".
-   * Omit it to ask the sign-level question (does this viewer have the whole galaxy?).
-   */
   pointIndex?: number | null;
   isHub?: boolean;
 }): ExploreLockReason {
-  const hub = opts.isHub ?? false;
-  const hasPointContext = opts.pointIndex != null || hub;
-  if (!opts.signedIn) {
-    if (!hasPointContext) return "auth";
-    return guestPreviewUnlocked(opts.pointIndex ?? Number.POSITIVE_INFINITY, hub) ? null : "auth";
-  }
-  if (!hasFullChartForSign(opts)) return "chart";
   return null;
 }

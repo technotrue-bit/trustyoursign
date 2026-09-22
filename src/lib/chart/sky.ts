@@ -137,7 +137,7 @@ export const computeVisitorNatal = createServerFn({ method: "POST" })
       geo = await geocodePlace(data.place);
     }
     const utc = localToUtc(data.year, data.month, data.day, data.hour, data.minute, geo.timeZone);
-    const cast = computeNatalCast(utc, geo);
+    const cast = await computeNatalCast(utc, geo);
     const dateLabel = formatBirth(data.month, data.day, data.year);
     const timeLabel = formatClock(data.hour, data.minute);
     const when = `${dateLabel} · ${timeLabel}`;

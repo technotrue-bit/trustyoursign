@@ -12,7 +12,6 @@ import {
   fieldVisible,
   stepArriveBurst,
 } from "./signField.ts";
-import { kickDiskBurst } from "./disk.ts";
 
 describe("sign field keep-alive", () => {
   it("stays visible through a light scroll", () => {
@@ -74,25 +73,5 @@ describe("arrive burst", () => {
     assert.ok(cloudBurstGain(1).opacity > 1.3);
     assert.equal(cloudBurstGain(0).swirl, 1);
     assert.ok(burstEnvelope(1) > burstEnvelope(0.4));
-  });
-});
-
-describe("kickDiskBurst", () => {
-  it("adds energy to the existing pool", () => {
-    const n = 40;
-    const pos = new Float32Array(n * 3);
-    const vel = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      pos[i * 3] = 0.4;
-      pos[i * 3 + 2] = 0.2;
-    }
-    kickDiskBurst({ n, pos, vel }, 1);
-    let energy = 0;
-    for (let i = 0; i < n * 3; i++) energy += Math.abs(vel[i]!);
-    assert.ok(energy > 4, `kick energy ${energy}`);
-    kickDiskBurst({ n, pos, vel }, 0);
-    let same = 0;
-    for (let i = 0; i < n * 3; i++) same += Math.abs(vel[i]!);
-    assert.equal(same, energy);
   });
 });

@@ -4,6 +4,11 @@ import { createAuthClient } from "better-auth/react";
 import { runPreSignInSignOut, runSignOut } from "../../../scripts/sign-out-plan.mjs";
 import { signInAvailability } from "./email-otp";
 import { GROK_PROVIDERS } from "./providers";
+import {
+  readBearerTokenForRequest,
+  writeSessionBearerToken,
+} from "./bearer-storage";
+import { clearStickySession } from "./session-sticky";
 
 /**
  * Better Auth client for this React SPA (browser-side).
@@ -21,6 +26,14 @@ import { GROK_PROVIDERS } from "./providers";
  */
 export const authClient = createAuthClient({
   plugins: [genericOAuthClient(), emailOTPClient(), passkeyClient()],
+  // Focus/visibility refetch is how a warm session gets wiped on iPhone: Safari
+  // flaps visibility (app switcher, Face ID sheet, menu), `/get-session` briefly
+  // answers empty, and Better Auth replaces the atom with null — Profile clicks
+  // then look like a sign-out. Sticky session covers the miss; skipping the
+  // automatic focus refetch stops the miss from being invited.
+  sessionOptions: {
+    refetchOnWindowFocus: false,
+  },
   fetchOptions: {
     onRequest(ctx) {
       const token = getBearerToken();
@@ -50,28 +63,26 @@ function providerLabel(providerId: string): string {
 // ── Live-preview bearer token ────────────────────────────────────────────────
 // The embedded preview iframe has partitioned cookies, so we keep the session's
 // bearer token in sessionStorage and attach it to every Better Auth request (and
-// to server functions, via `@/lib/auth/middleware`). Empty everywhere except the
-// preview after a popup sign-in, so the cookie path is untouched elsewhere.
-const BEARER_KEY = "grok-auth.bearer-token";
-
-/** The stored preview bearer token, or null. */
+// to server functions, via `@/lib/auth/middleware`). Deployed hosts MUST NOT
+// attach a bearer: Better Auth's bearer plugin replaces the cookie with it, so
+// a leftover token shadows a good `__Host-` session and `/account` bounces to
+// login. See `./bearer-storage`.
+/** The stored preview bearer token, or null (always null outside live preview). */
 export function getBearerToken(): string | null {
   if (typeof window === "undefined") return null;
-  try {
-    return window.sessionStorage.getItem(BEARER_KEY);
-  } catch {
-    return null;
-  }
+  return readBearerTokenForRequest({
+    hostname: window.location.hostname,
+    session: window.sessionStorage,
+    local: window.localStorage,
+  });
 }
 
 function setBearerToken(token: string | null): void {
   if (typeof window === "undefined") return;
-  try {
-    if (token) window.sessionStorage.setItem(BEARER_KEY, token);
-    else window.sessionStorage.removeItem(BEARER_KEY);
-  } catch {
-    /* storage unavailable — ignore */
-  }
+  writeSessionBearerToken(token, {
+    session: window.sessionStorage,
+    local: window.localStorage,
+  });
 }
 
 /**
@@ -192,7 +203,12 @@ export async function signIn(
     errorCallbackURL,
   });
   if (error) throw new Error(error.message ?? "Sign-in failed");
-  if (data?.url) window.location.href = data.url;
+  // Without a URL the broker never starts — resolving here used to leave the
+  // login form permanently busy (buttons disabled, no message). Fail loudly.
+  if (!data?.url) {
+    throw new Error("Sign-in did not start — try again, or use your email instead.");
+  }
+  window.location.href = data.url;
 }
 
 /**
@@ -262,6 +278,9 @@ function waitForPopupToken(popup: Window): Promise<string | null> {
  * preview the local clear is sufficient, so it always resolves.
  */
 export async function signOut(redirectTo = "/"): Promise<void> {
+  // Drop sticky identity first so a slow `/get-session` cannot resurrect the
+  // avatar after Log out.
+  clearStickySession();
   await runSignOut({
     livePreview: inLivePreview(),
     hasBearer: Boolean(getBearerToken()),

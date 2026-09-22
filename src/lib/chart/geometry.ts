@@ -1,26 +1,5 @@
-/** Chart angles — tropical longitudes. */
+/** Chart angles — tropical longitudes. Geometry helpers only; natal angles live under nativities/. */
 export type Angles = { asc: number; ic: number; dsc: number; mc: number };
-
-/** Saige K — Placidus. */
-export const SAIGE_ANGLES: Angles = {
-  asc: 24 + 33 / 60 + 57 / 3600 + 240,
-  ic: 19 + 15 / 60 + 12 / 3600,
-  dsc: 24 + 33 / 60 + 57 / 3600 + 60,
-  mc: 19 + 15 / 60 + 12 / 3600 + 180,
-};
-
-/** Joey Devin Norris — Whole Sign; MC in Aquarius. */
-export const JOEY_ANGLES: Angles = {
-  asc: 2 + 14 / 60 + 60,
-  ic: 13 + 6 / 60 + 120,
-  dsc: 2 + 14 / 60 + 240,
-  mc: 13 + 6 / 60 + 300,
-};
-
-export const ASC_LON = SAIGE_ANGLES.asc;
-export const IC_LON = SAIGE_ANGLES.ic;
-export const DSC_LON = SAIGE_ANGLES.dsc;
-export const MC_LON = SAIGE_ANGLES.mc;
 
 export function wrap360(x: number): number {
   return ((x % 360) + 360) % 360;

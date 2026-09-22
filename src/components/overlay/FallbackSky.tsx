@@ -9,6 +9,15 @@ import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temp
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { useSessionStore } from "@/lib/chart/session/store";
+import {
+  NEBULA_2D_LAYER_GAIN,
+  composeNebulaWallpaper,
+  loadNebulaImages,
+  nebulaCompositeSize,
+  paintNebulaWallpaper,
+  type NebulaImageMap,
+} from "@/lib/galaxy/nebulaBackdrop";
+import { isSmallGpu } from "@/lib/gpu";
 
 type Star = {
   x: number;
@@ -150,6 +159,17 @@ export function FallbackSky({ note }: { note?: string }) {
     let gx = 0.5;
     let gy = 0.48;
     let glow = 0;
+    let nebulae: NebulaImageMap = new Map();
+    let nebulaComposite: HTMLCanvasElement | null = null;
+    const modestGpu = typeof window !== "undefined" && isSmallGpu();
+    void loadNebulaImages(modest).then((map) => {
+      nebulae = map;
+      nebulaComposite = composeNebulaWallpaper(
+        map,
+        nebulaCompositeSize(modestGpu),
+        NEBULA_2D_LAYER_GAIN,
+      );
+    });
 
     const resize = () => {
       w = canvas.clientWidth;
@@ -181,6 +201,8 @@ export function FallbackSky({ note }: { note?: string }) {
       const scale = Math.min(w, h) * 0.055;
       const inner = 4.15 * scale;
       const outer = 6.55 * scale;
+      const t = galaxyTravel.shaderTime;
+      const paused = galaxyTravel.paused;
 
       ctx.strokeStyle = "rgba(239,232,220,0.7)";
       ctx.lineWidth = 1.4;
@@ -196,6 +218,14 @@ export function FallbackSky({ note }: { note?: string }) {
       ctx.fillStyle = "rgba(20,18,16,0.55)";
       ctx.beginPath();
       ctx.arc(w * 0.5, h * 0.48, outer + 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Soft band pulse between rings (parity with 3D ecliptic fill).
+      const bandPulse = paused ? 0 : Math.sin(t * 0.55) * 0.012;
+      ctx.fillStyle = `rgba(239,232,220,${0.04 + bandPulse})`;
+      ctx.beginPath();
+      ctx.arc(w * 0.5, h * 0.48, outer, 0, Math.PI * 2);
+      ctx.arc(w * 0.5, h * 0.48, inner, 0, Math.PI * 2, true);
       ctx.fill();
 
       for (const c of nat.houses) {
@@ -220,8 +250,12 @@ export function FallbackSky({ note }: { note?: string }) {
         const [bx, bz] = lonToXZ(pb.lon, pb.radius, nat.angles);
         const a = plot(ax, az, scale);
         const b = plot(bx, bz, scale);
+        let alpha = asp.iron ? 0.42 : 0.16;
+        if (!paused && asp.iron) {
+          alpha *= 1 + Math.sin(t * 0.85 + asp.orb * 4) * 0.055;
+        }
         ctx.strokeStyle = ASPECT_COLOR[asp.type];
-        ctx.globalAlpha = asp.iron ? 0.42 : 0.16;
+        ctx.globalAlpha = alpha;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(a[0], a[1]);
@@ -243,7 +277,20 @@ export function FallbackSky({ note }: { note?: string }) {
       for (const planet of nat.planets) {
         const [x, z] = lonToXZ(planet.lon, planet.radius, nat.angles);
         const p = plot(x, z, scale);
-        const r = Math.max(3, planet.size * 14);
+        const luminous = planet.id === "sun" || planet.id === "moon" || nat.alwaysLabel.includes(planet.id);
+        const pulse = paused ? 1 : 1 + Math.sin(t * 1.6 + planet.lon) * (luminous ? 0.1 : 0.06);
+        const r = Math.max(3, planet.size * 14) * pulse;
+        const halo = r * 2.4;
+        const rg = ctx.createRadialGradient(p[0], p[1], 0, p[0], p[1], halo);
+        rg.addColorStop(0, planet.glow);
+        rg.addColorStop(0.35, `${planet.glow}55`);
+        rg.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.globalAlpha = paused ? 0.22 : 0.28 + (luminous ? 0.06 : 0);
+        ctx.fillStyle = rg;
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], halo, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
         ctx.fillStyle = planet.color;
         ctx.beginPath();
         ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
@@ -546,6 +593,20 @@ export function FallbackSky({ note }: { note?: string }) {
       if (w < 2 || h < 2) return;
       ctx.fillStyle = "#0c0b0a";
       ctx.fillRect(0, 0, w, h);
+      // Fill the void first — vibrant nebula wallpaper behind everything else.
+      // Uses skyTime so Pause freezes drift with the rest of the 2D sky.
+      const earlyLookX = exploring ? galaxyTravel.exploreLookX : 0;
+      const earlyLookY = exploring ? galaxyTravel.exploreLookY : 0;
+      paintNebulaWallpaper(
+        ctx,
+        nebulae,
+        w,
+        h,
+        skyTime,
+        earlyLookX,
+        earlyLookY,
+        nebulaComposite,
+      );
       const sought = stepSeek(galaxyTravel.t, dt);
       galaxyTravel.t = clamp01(sought.t);
       if (sought.active) {
@@ -618,13 +679,14 @@ export function FallbackSky({ note }: { note?: string }) {
       if (birthing) {
         drawBirth(galaxyTravel.birth, cx, cy, depth);
       } else {
+        // Soft parchment lift only — do not gray out the nebula wallpaper.
         const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.72);
-        core.addColorStop(0, "rgba(46, 38, 30, 0.55)");
-        core.addColorStop(0.28, "rgba(22, 18, 16, 0.22)");
+        core.addColorStop(0, "rgba(46, 38, 30, 0.1)");
+        core.addColorStop(0.35, "rgba(22, 18, 16, 0.04)");
         core.addColorStop(1, "rgba(12, 11, 10, 0)");
         ctx.fillStyle = core;
         ctx.fillRect(0, 0, w, h);
-        if (!entered) {
+        if (!entered && !exploring) {
           for (const c of clouds) {
             if (flying) {
               c.z -= vel * dt * 0.08;
@@ -638,7 +700,7 @@ export function FallbackSky({ note }: { note?: string }) {
             const rad = (c.r * depth) / Math.max(0.2, c.z);
             if (!Number.isFinite(px) || rad < 1) continue;
             const g = ctx.createRadialGradient(px, py, 0, px, py, rad);
-            g.addColorStop(0, `rgba(${c.rgb[0]},${c.rgb[1]},${c.rgb[2]},${c.a})`);
+            g.addColorStop(0, `rgba(${c.rgb[0]},${c.rgb[1]},${c.rgb[2]},${c.a * 0.55})`);
             g.addColorStop(1, `rgba(${c.rgb[0]},${c.rgb[1]},${c.rgb[2]},0)`);
             ctx.fillStyle = g;
             ctx.beginPath();
@@ -648,7 +710,7 @@ export function FallbackSky({ note }: { note?: string }) {
         }
         ctx.lineCap = "round";
         for (const s of stars) flyStar(s, dt, vel, depth, flying);
-        if (!entered) {
+        if (!entered && !exploring) {
           for (const s of dust) flyStar(s, dt, vel * 1.08, depth, flying);
         }
         if (!entered) drawPointerGlow();
@@ -687,6 +749,24 @@ export function FallbackSky({ note }: { note?: string }) {
 
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
+      // Hidden tab / Pause-while-idle: keep the clock scheduled so resume is
+      // instant, but skip the full 2D repaint until something moves again.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        last = now;
+        return;
+      }
+      const idlePaused =
+        galaxyTravel.paused &&
+        !galaxyTravel.dragging &&
+        !galaxyTravel.handsOn &&
+        galaxyTravel.seek == null &&
+        galaxyTravel.playUntil == null &&
+        !introPlaying() &&
+        !exploringSign();
+      if (idlePaused) {
+        last = now;
+        return;
+      }
       try {
         tickSky(now);
       } catch {

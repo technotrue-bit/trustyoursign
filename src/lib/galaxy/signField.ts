@@ -1,11 +1,11 @@
 /**
- * Corridor star field: how long the disk + cloud stay live while you fly,
- * and a one-shot land burst from that same pool.
+ * Corridor star field: how long the station cloud stays live while you fly,
+ * and a one-shot land burst that kicks its swirl/glow.
  *
  * Station gap is 1/11 ≈ 0.0909 in travel t.
  */
 
-/** Keep disk/cloud through a light scroll — a bit past halfway to the next sign. */
+/** Keep the cloud through a light scroll — a bit past halfway to the next sign. */
 export const FIELD_KEEP_DIST = 0.11;
 /** Gather below this hides the field (soft fade, not a pop). */
 export const FIELD_HIDE_GATHER = 0.16;
@@ -41,7 +41,7 @@ export function createArriveBurst(): ArriveBurst {
   return { aimed: null, far: true, burst: 0 };
 }
 
-/** Shared corridor land-burst. Ticked once from SignDisk (owns the disk kick). */
+/** Shared corridor land-burst. Ticked once per frame by ArriveBurstTicker (GalaxyIntro). */
 export const signArrive = createArriveBurst();
 
 export function resetArriveBurst(state: ArriveBurst = signArrive) {

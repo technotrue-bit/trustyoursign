@@ -1,0 +1,61 @@
+# Gates that mean something for every PR.
+#
+# The Vercel check on a PR can fail for infrastructure reasons (its Neon preview
+# database branch), which says nothing about the code — so this workflow is the
+# signal that answers "does this branch build, typecheck, and pass its tests".
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "ci-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # A workflow file that cannot be parsed makes GitHub fail EVERY run of it
+      # at startup, with no jobs and no logs (that is exactly what happened in
+      # #103) — so lint the workflow files before trusting anything else here.
+      - name: Lint workflows
+        run: |
+          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:app
+
+      # Advisory, NOT blocking. This suite carries pre-existing failures that
+      # assert the Grok app-builder template's own scaffolding (`.grok/app-env.json`,
+      # `.grok/skills/og/SKILL.md`) and symlink behaviour — neither of which exists
+      # in this repo. It stays visible here so the gap cannot quietly grow, without
+      # making every PR red for reasons unrelated to the app.
+      - name: Scripts suite (advisory)
+        continue-on-error: true
+        run: node --test scripts/*.test.mjs
+
+      - name: Build
+        run: npm run build

@@ -69,6 +69,7 @@ describe("session factories", () => {
     assert.equal(s.chartKey, "visitor");
     assert.equal(s.nativity?.id, "visitor");
     assert.equal(s.mode, "sky");
+    assert.equal(s.sheetFolded, true);
     assert.equal(s.origin, "galaxy");
     assert.equal(s.tourBeat, null);
     assert.ok(s.id.length > 0);
@@ -148,7 +149,7 @@ describe("session factories", () => {
     assert.equal(canEnter(s.kind, s.mode), true);
   });
 
-  it("fromShelf coerces illegal mode to ask", () => {
+  it("fromShelf coerces illegal mode to sky", () => {
     const s = fromShelf({
       signId: "virgo",
       birth,
@@ -157,11 +158,12 @@ describe("session factories", () => {
       origin: "library",
       mode: "body",
     });
-    assert.equal(s.mode, "ask");
+    assert.equal(s.mode, "sky");
+    assert.equal(s.sheetFolded, true);
     assert.equal(canEnter(s.kind, s.mode), true);
   });
 
-  it("fromShelf allows null nativity and defaults mode ask", () => {
+  it("fromShelf allows null nativity and defaults mode sky", () => {
     const s = fromShelf({
       id: "saved-1",
       signId: "virgo",
@@ -177,7 +179,8 @@ describe("session factories", () => {
     });
     assert.equal(s.kind, "shelf");
     assert.equal(s.nativity, null);
-    assert.equal(s.mode, "ask");
+    assert.equal(s.mode, "sky");
+    assert.equal(s.sheetFolded, true);
     assert.equal(s.savedId, "saved-1");
     assert.equal(s.chartKey, "saved-1");
   });

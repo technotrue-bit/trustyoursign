@@ -13,6 +13,7 @@ import {
   applyWheel,
   enterSignGalaxy,
   galaxyTravel,
+  pointerTracksHover,
   resetExplore,
   resetTravel,
   seekGalaxyPoint,
@@ -40,14 +41,20 @@ function landInside(index = 4) {
 describe("explore look inside a locked galaxy", () => {
   beforeEach(() => landInside(4));
 
+  it("touch does not arm hover sway — only mouse does", () => {
+    assert.equal(pointerTracksHover("mouse"), true);
+    assert.equal(pointerTracksHover("touch"), false);
+    assert.equal(pointerTracksHover("pen"), false);
+  });
+
   it("drag pans look and does not change corridor t", () => {
     const t0 = galaxyTravel.tTarget;
     const ok = applyExploreLook(0, 120, true);
     assert.equal(ok, true);
     assert.equal(galaxyTravel.tTarget, t0);
     assert.ok(
-      galaxyTravel.exploreLookX < -0.5,
-      `drag right should look left (grab-the-sky), got ${galaxyTravel.exploreLookX}`,
+      galaxyTravel.exploreLookX > 0.5,
+      `drag right should look right, got ${galaxyTravel.exploreLookX}`,
     );
     assert.ok(Math.abs(galaxyTravel.exploreLookY) < 0.05);
   });
@@ -56,7 +63,7 @@ describe("explore look inside a locked galaxy", () => {
     const t0 = galaxyTravel.tTarget;
     applyFlyDelta(80, 0, true);
     assert.equal(galaxyTravel.tTarget, t0);
-    assert.ok(galaxyTravel.exploreLookY > 0.5, `drag down should look up, got ${galaxyTravel.exploreLookY}`);
+    assert.ok(galaxyTravel.exploreLookY < -0.5, `drag down should look down, got ${galaxyTravel.exploreLookY}`);
   });
 
   it("enter dive still ignores drag", () => {
@@ -72,15 +79,14 @@ describe("explore look inside a locked galaxy", () => {
     assert.equal(galaxyTravel.tTarget, t0);
   });
 
-  it("locked galaxies still let you travel between stars; lore stays sealed", () => {
+  it("galaxies let you travel between stars even if unlock flag is forced off", () => {
     galaxyTravel.starsUnlocked = false;
     applyExploreLook(10, 40, true);
     assert.equal(seekGalaxyPoint(1), true);
     assert.equal(galaxyTravel.pointIndex, 1);
-    assert.equal(galaxyTravel.starsUnlocked, false);
   });
 
-  it("every sign galaxy can look and move while locked", () => {
+  it("every sign galaxy can look and move", () => {
     for (let i = 0; i < CONSTELLATIONS.length; i++) {
       landInside(i);
       galaxyTravel.starsUnlocked = false;
@@ -88,12 +94,11 @@ describe("explore look inside a locked galaxy", () => {
       const name = CONSTELLATIONS[i]!.name;
       assert.equal(applyExploreLook(0, 80, true), true, `${name}: look`);
       assert.equal(galaxyTravel.tTarget, t0, `${name}: corridor t must not cruise`);
-      assert.ok(galaxyTravel.exploreLookX < -0.3, `${name}: look X ${galaxyTravel.exploreLookX}`);
+      assert.ok(galaxyTravel.exploreLookX > 0.3, `${name}: look X ${galaxyTravel.exploreLookX}`);
       const galaxy = getSignGalaxy(CONSTELLATIONS[i]!.id);
       assert.ok(galaxy.points.length >= 3, `${name}: travel points`);
       assert.equal(seekGalaxyPoint(1), true, `${name}: seek star 1`);
       assert.equal(galaxyTravel.pointIndex, 1, `${name}: landed on star 1`);
-      assert.equal(galaxyTravel.starsUnlocked, false, `${name}: lore stays sealed`);
       assert.equal(seekGalaxyPoint(0), true, `${name}: return to hub`);
       assert.equal(galaxyTravel.pointIndex, 0, `${name}: hub`);
     }

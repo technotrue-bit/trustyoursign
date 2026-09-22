@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { SIGN_INSIGHTS, insightToneLabel } from "@/lib/galaxy/signInsights";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
-import { enterSignGalaxy, noteControl, setPaused } from "@/lib/galaxy/travel";
+import {
+  enterSignGalaxy,
+  exploringSign,
+  noteControl,
+  setPaused,
+  skipBirth,
+} from "@/lib/galaxy/travel";
 import { readMotionPaused, writeMotionPaused } from "@/lib/ui/motionPreference";
 import { skipIntro } from "@/lib/galaxy/intro";
 import { cn } from "@/lib/utils";
@@ -11,8 +17,10 @@ import { SignStrip } from "./SignStrip";
 import { AuthSlot } from "./AuthSlot";
 import { LegalFooter } from "./LegalFooter";
 import { SignGalaxyHud } from "./SignGalaxyHud";
+import { siteVersionChrome } from "@/lib/site-version";
 
 export function GalaxyShell() {
+  const versionChrome = siteVersionChrome();
   const moved = useGalaxy((s) => s.moved);
   const signIndex = useGalaxy((s) => s.signIndex);
   const born = useGalaxy((s) => s.born);
@@ -37,6 +45,12 @@ export function GalaxyShell() {
     writeMotionPaused(next);
     setPaused(next);
   };
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("sky-paused", paused);
+    return () => document.documentElement.classList.remove("sky-paused");
+  }, [paused]);
+
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
   const exploring = explorePhase !== "idle";
   const worldFade = exploring ? exploreWorldFade : 1;
@@ -72,9 +86,9 @@ export function GalaxyShell() {
             data-no-fly
             className="pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] max-w-[4.5rem] text-[0.6rem] leading-tight tracking-[0.18em] text-fg-subtle uppercase md:max-w-none"
             style={{ opacity: worldFade }}
-            aria-label="Closed beta version 0.1"
+            aria-label={versionChrome.ariaLabel}
           >
-            Closed beta · V.01
+            {versionChrome.text}
           </p>
           <div
             data-no-fly
@@ -176,6 +190,12 @@ export function GalaxyShell() {
             type="button"
             onClick={() => {
               if (!sign) return;
+              if (enterSignGalaxy(signIndex) || exploringSign()) return;
+              // Refused only while the intro/birth is still playing — the tap
+              // is the viewer's answer to that, so finish it and go.
+              skipIntro();
+              skipBirth();
+              useGalaxy.getState().markBorn();
               enterSignGalaxy(signIndex);
             }}
             className="sign-claim pointer-events-auto inline-flex min-h-11 w-auto items-center px-5 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent active:text-accent md:min-h-12 md:px-6"

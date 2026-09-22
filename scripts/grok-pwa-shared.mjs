@@ -7,6 +7,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const DEFAULT_APP_NAME = "Grok App";
+/** Match app chrome in `src/routes/__root.tsx` (edge-to-edge / safe-area). */
+export const PWA_THEME_COLOR = "#0c0b0a";
+export const PWA_STATUS_BAR_STYLE = "black-translucent";
 export const OG_SERVICE_URL_DEFAULT = "https://og.grok.me";
 export const OG_SITE_REL_PATH = "src/lib/og/site.json";
 
@@ -151,14 +154,24 @@ export function stripInstallParams(url) {
   return rest ? `${path}?${rest}` : path;
 }
 
-export function renderInstallPageHtml(template, { host, url } = {}) {
+/**
+ * Display name for PWA chrome (manifest, install page, apple title).
+ * Prefers `site.json` / baked OG title, then `*.grok.me` slug, then DEFAULT.
+ * Pass `site` explicitly on Vercel (no workspace FS); omit to read site.json.
+ */
+export function resolvePwaAppName(hostHeader, site) {
+  const resolvedSite = site !== undefined ? site : readOgSite();
+  return resolveOgTitle(resolvedSite, DEFAULT_APP_NAME, hostHeader);
+}
+
+export function renderInstallPageHtml(template, { host, url, site } = {}) {
   return String(template)
-    .replaceAll("{{APP_NAME}}", escapeHtml(appNameFromHost(host)))
+    .replaceAll("{{APP_NAME}}", escapeHtml(resolvePwaAppName(host, site)))
     .replaceAll("{{APP_URL}}", escapeHtml(stripInstallParams(url)));
 }
 
-export function renderWebManifest(hostHeader) {
-  const name = appNameFromHost(hostHeader);
+export function renderWebManifest(hostHeader, site) {
+  const name = resolvePwaAppName(hostHeader, site);
   return JSON.stringify(
     {
       name,
@@ -167,8 +180,8 @@ export function renderWebManifest(hostHeader) {
       start_url: "/",
       scope: "/",
       display: "standalone",
-      background_color: "#000000",
-      theme_color: "#000000",
+      background_color: PWA_THEME_COLOR,
+      theme_color: PWA_THEME_COLOR,
       icons: [
         {
           src: "/__grok/icon-180.png",
@@ -194,9 +207,9 @@ export function grokPwaHeadTags(appName = DEFAULT_APP_NAME) {
     ],
     [
       "apple-mobile-web-app-status-bar-style",
-      '<meta name="apple-mobile-web-app-status-bar-style" content="black">',
+      `<meta name="apple-mobile-web-app-status-bar-style" content="${PWA_STATUS_BAR_STYLE}">`,
     ],
-    ["theme-color", '<meta name="theme-color" content="#000000">'],
+    ["theme-color", `<meta name="theme-color" content="${PWA_THEME_COLOR}">`],
   ];
 }
 

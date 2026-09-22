@@ -129,7 +129,8 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
       dust.visible = op > 0.005;
       const du = dustShader.uniforms;
       du.uOpacity!.value = Math.min(1, op);
-      du.uTime!.value = state.clock.elapsedTime;
+      // Shared sky clock so Pause freezes dust with the rest of the field.
+      du.uTime!.value = galaxyTravel.shaderTime;
       // The blast throws the ring outward — debris the galaxy then forms from.
       du.uImpulse!.value = impulse;
       du.uImpulseAmp!.value = burst.debrisPush;
@@ -178,9 +179,10 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
 
     // The ignition itself: rays + shock front, centred on the hub star the camera
     // is already aiming at, sized to the pulse so it swells and dies with it.
+    // Burst and flash belong to the enter only — never parked on the inside view.
     const burstSprite = burstRef.current;
     if (burstSprite && burstMat.current) {
-      const show = exploring && pulse > 0.004;
+      const show = exploring && !inside && pulse > 0.004;
       burstSprite.visible = show;
       if (show) {
         burstSprite.scale.setScalar(burstSpriteSize(pulse, burst));
@@ -196,7 +198,9 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
     const flashSprite = flashRef.current;
     if (flashSprite && flashMat.current && flashTex) {
       const fl =
-        exploring && !prefersReducedMotion() ? flashPulse(galaxyTravel.exploreProgress) : 0;
+        exploring && !inside && !prefersReducedMotion()
+          ? flashPulse(galaxyTravel.exploreProgress)
+          : 0;
       flashSprite.visible = fl > 0.01;
       if (flashSprite.visible) {
         flashSprite.scale.setScalar(burstFlashSize(fl, burst));

@@ -12,7 +12,12 @@ import {
 import { introArms, introField, introHaze } from "@/lib/galaxy/intro";
 import { buildNearSky, makeNearSkyMaterial } from "@/lib/galaxy/nearSky";
 import { TEMPLE_STATIONS, stationFromT } from "@/lib/galaxy/temple";
-import { galaxyLayerName } from "@/lib/galaxy/layers";
+import {
+  galaxyLayerName,
+  INSIDE_SKY_ARMS_RESIDUAL,
+  INSIDE_SKY_FIELD_RESIDUAL,
+  INSIDE_SKY_HAZE_RESIDUAL,
+} from "@/lib/galaxy/layers";
 import { exploringSign, galaxyTravel } from "@/lib/galaxy/travel";
 
 function noopRaycast() {
@@ -57,7 +62,7 @@ export function CelestialSky() {
     };
   }, [camera, tex, haze, layers, nearGeo, matArms, matField, matNear]);
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     if (camera instanceof PerspectiveCamera && camera.far !== 2500) {
       camera.far = 2500;
       camera.updateProjectionMatrix();
@@ -66,9 +71,12 @@ export function CelestialSky() {
     const t = galaxyTravel.shaderTime;
     for (const m of mats.current) m.uniforms.uTime.value = t;
     const world = exploringSign() ? galaxyTravel.worldFade : 1;
-    const field = introField() * world;
-    const haze = introHaze() * world;
-    const arms = introArms() * world;
+    const inside = galaxyTravel.explorePhase === "inside";
+    // Residual floor while parked inside: distant field breathes; dive still
+    // uses worldFade alone so the enter blackout stays intentional.
+    const field = Math.max(introField() * world, inside ? INSIDE_SKY_FIELD_RESIDUAL : 0);
+    const haze = Math.max(introHaze() * world, inside ? INSIDE_SKY_HAZE_RESIDUAL : 0);
+    const arms = Math.max(introArms() * world, inside ? INSIDE_SKY_ARMS_RESIDUAL : 0);
     matField.uniforms.uOpacity.value = 0.7 * field;
     matNear.uniforms.uOpacity.value = 0.5 * field;
     matArms.uniforms.uOpacity.value = 0.78 * arms;

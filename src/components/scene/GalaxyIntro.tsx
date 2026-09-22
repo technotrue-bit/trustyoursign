@@ -36,6 +36,7 @@ import {
   EXPLORE_ZOOM_MAX,
   EXPLORE_ZOOM_MIN,
   HOLD_FLY,
+  INSIDE_LANDING_DISTANCE,
   aimedIndex,
   ensureAutoClock,
   stopAutoClock,
@@ -84,11 +85,9 @@ import {
   lerpToward,
   computePlateOpacity,
 } from "@/lib/galaxy/birthchat-slide";
-import { createDiskSim, disposeDisk, kickDiskBurst, stepDisk } from "@/lib/galaxy/disk";
 import { galaxyLayerName } from "@/lib/galaxy/layers";
 import {
   CLOUD_GAIN_IDLE,
-  burstEnvelope,
   cloudBurstGain,
   fieldFade,
   fieldGather,
@@ -120,7 +119,6 @@ import {
   hasVolumeSign,
   interiorCloud,
   primeSignVolumes,
-  volumeChest,
   type SignVolume,
 } from "@/lib/galaxy/signVolume";
 import { buildBirthNebula, makeNebulaMaterial } from "@/lib/galaxy/nebula";
@@ -144,10 +142,12 @@ import {
 import { useShelfSession } from "@/lib/chart/session/hooks";
 import { useSessionStore } from "@/lib/chart/session/store";
 import { CelestialSky } from "./CelestialSky";
+import { NebulaBackdrop } from "./NebulaBackdrop";
 import { CornerGalaxies } from "./CornerGalaxies";
 import { SignShell } from "./SignShell";
 import { SignGalaxyField, pointLocalOffset } from "./SignGalaxyField";
 import { getFigureMatch, landingBiasNdc } from "@/lib/galaxy/signAlign";
+import { offsetExploreLookPose } from "@/lib/galaxy/exploreLookPose";
 
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const STAR_PROFILE = starRenderProfile(SMALL);
@@ -167,18 +167,58 @@ const _camUp = new Vector3();
 const _hub = new Vector3();
 const _hubNdc = new Vector3();
 
-/** Enter flythrough: where the camera comes to rest relative to the hub star. */
-export const HUB_STANDOFF = 2.6;
+/** Enter flythrough: where the inside camera comes to rest relative to the hub star. */
+export const HUB_STANDOFF = INSIDE_LANDING_DISTANCE;
+
+let cachedViewW = 1280;
+let cachedViewH = 900;
+let viewCacheBound = false;
+
+function bindViewCache() {
+  if (viewCacheBound || typeof window === "undefined") return;
+  viewCacheBound = true;
+  const sync = () => {
+    cachedViewW = window.visualViewport?.width ?? window.innerWidth;
+    cachedViewH = window.visualViewport?.height ?? window.innerHeight;
+  };
+  sync();
+  window.addEventListener("resize", sync);
+  window.visualViewport?.addEventListener("resize", sync);
+  window.visualViewport?.addEventListener("scroll", sync);
+}
 
 function cssViewWidth() {
+  bindViewCache();
   if (typeof window === "undefined") return 1280;
-  return window.visualViewport?.width ?? window.innerWidth;
+  return cachedViewW;
 }
 
 /** CSS viewport height — short frames need the core framed higher (see landingBiasNdc). */
 function cssViewHeight() {
+  bindViewCache();
   if (typeof window === "undefined") return 900;
-  return window.visualViewport?.height ?? window.innerHeight;
+  return cachedViewH;
+}
+
+/** One session read per frame for all 12 Stations — filled by TempleRig. */
+type FrameSessionSnap = {
+  chatting: boolean;
+  claimSignId: string | null;
+  shelfSignId: string | null;
+};
+let frameSession: FrameSessionSnap = {
+  chatting: false,
+  claimSignId: null,
+  shelfSignId: null,
+};
+
+function syncFrameSession() {
+  const state = useSessionStore.getState();
+  frameSession = {
+    chatting: state.claim !== null && state.session === null,
+    claimSignId: state.claim?.signId ?? null,
+    shelfSignId: state.session?.kind === "shelf" ? state.session.signId : null,
+  };
 }
 
 function noopRaycast() {
@@ -285,10 +325,15 @@ export function GalaxyIntro() {
   }, [gl, scene]);
   return (
     <>
-      <color attach="background" args={["#000000"]} />
+      <color attach="background" args={["#0c0b0a"]} />
       <ambientLight intensity={0.08} color="#c8b8a0" />
       <hemisphereLight args={["#1a1820", "#080706", 0.18]} />
       <StationLight />
+      {sky ? (
+        <Suspense fallback={null}>
+          <NebulaBackdrop />
+        </Suspense>
+      ) : null}
       {sky ? <CelestialSky /> : null}
       {sky ? <CornerGalaxies /> : null}
       {sky ? <Dust /> : null}
@@ -296,7 +341,7 @@ export function GalaxyIntro() {
       {TEMPLE_SIGNS.map((sign, i) => (
         <Station key={sign.id} index={i} sign={sign} eager={i <= 2} />
       ))}
-      {sky ? <SignDisk /> : null}
+      {sky ? <ArriveBurstTicker /> : null}
       <ChartRing />
       <TempleRig />
     </>
@@ -318,117 +363,24 @@ function StationLight() {
   return <pointLight ref={light} intensity={2.4} distance={48} decay={2} color="#e8c49a" />;
 }
 
-function SignDisk() {
-  const group = useRef<Group>(null);
-  const slideX = useRef(0);
-  const slideY = useRef(0);
-  const scaleBoost = useRef(1);
-  const sim = useMemo(() => createDiskSim(), []);
-  useEffect(() => () => disposeDisk(sim), [sim]);
-  useFrame(({ clock, gl, camera }, dt) => {
-    const g = group.current;
-    if (!g) return;
+/**
+ * Headless: ticks the shared land-burst state once per frame so the station
+ * cloud still gets its arrival swirl/glow kick. This used to live inside the
+ * sign disk's frame loop; the disk itself is gone.
+ */
+function ArriveBurstTicker() {
+  useFrame((_, dt) => {
     const idx = aimedIndex();
-    const sign = TEMPLE_SIGNS[idx];
-    if (!sign) {
-      g.visible = false;
-      return;
-    }
-    const sit = TEMPLE_STATIONS[idx]!;
-    const chest = volumeChest(sign.id);
-    const aspect = getSignVolume(sign.id)?.aspect ?? 16 / 9;
-    const dist = Math.abs(galaxyTravel.t - stationT(idx));
-    const gather = fieldGather(dist);
-    const intro = introPlaying() ? introAries() : 1;
-    const veil = useGalaxy.getState().introVeil;
-    const state = useSessionStore.getState();
-    const chatting = state.claim !== null && state.session === null;
-    const picked = chatting && state.claim?.signId === sign.id;
-    const world = exploringSign() ? galaxyTravel.worldFade : 1;
-    const reduced = prefersReducedMotion();
-    const { burst, fired } = stepArriveBurst(signArrive, {
+    if (!TEMPLE_SIGNS[idx]) return;
+    stepArriveBurst(signArrive, {
       aimed: idx,
-      dist,
+      dist: Math.abs(galaxyTravel.t - stationT(idx)),
       dt,
-      reduced,
+      reduced: prefersReducedMotion(),
       paused: exploringSign() || introPlaying() || enterAnimating(),
     });
-    const show =
-      fieldVisible(gather) &&
-      intro > 0.4 &&
-      veil < 0.45 &&
-      world > 0.08 &&
-      !insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
-    g.visible = show;
-    if (!show) {
-      sim.mat.uniforms.uFade.value = 0;
-      return;
-    }
-    const cam = camera as PerspectiveCamera;
-    _sitCam.copy(sit);
-    cam.worldToLocal(_sitCam);
-    const slide = computeBirthChatSlide({
-      picked,
-      travelT: galaxyTravel.t,
-      stationT: stationT(idx),
-      fov: cam.fov,
-      sitCameraZ: _sitCam.z,
-      aspect: cam.aspect,
-      cssWidth: cssViewWidth(),
-      plateWide: PLATE_WIDE,
-      plateAspect: aspect,
-      currentScale: scaleBoost.current,
-    });
-    slideX.current = lerpToward({ current: slideX.current, target: slide.offsetX, dt, rate: 2.2 });
-    slideY.current = lerpToward({ current: slideY.current, target: slide.offsetY, dt, rate: 2.2 });
-    scaleBoost.current = lerpToward({
-      current: scaleBoost.current,
-      target: slide.targetScale,
-      dt,
-      rate: 2.2,
-    });
-    g.position.set(
-      sit.x + chest.x * PLATE_WIDE * 0.55,
-      sit.y + chest.y * (PLATE_WIDE / aspect) * 0.45,
-      sit.z + 0.22,
-    );
-    _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
-    _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
-    g.position.addScaledVector(_camRight, slideX.current);
-    g.position.addScaledVector(_camUp, slideY.current);
-    g.scale.setScalar(3.2 * scaleBoost.current);
-    if (fired) kickDiskBurst(sim, 1);
-    stepDisk(
-      sim,
-      dt,
-      sign.id,
-      null,
-      galaxyTravel.ptrX,
-      galaxyTravel.ptrY,
-      galaxyTravel.ptrOn && !galaxyTravel.dragging,
-      reduced,
-    );
-    sim.mat.uniforms.uTime.value = galaxyTravel.shaderTime;
-    sim.mat.uniforms.uFade.value =
-      fieldFade(gather) *
-      Math.min(1, (intro - 0.38) / 0.4) *
-      (1 - veil) *
-      (1 + burstEnvelope(burst) * 0.55);
-    sim.mat.uniforms.uPixelRatio.value = Math.min(2, gl.getPixelRatio());
   });
-  return (
-    <group ref={group} visible={false} frustumCulled={false} name={galaxyLayerName("sign-disk")}>
-      <points
-        key={galaxyLayerName("sign-disk")}
-        name={galaxyLayerName("sign-disk")}
-        geometry={sim.geo}
-        material={sim.mat}
-        frustumCulled={false}
-        renderOrder={16}
-        raycast={noopRaycast}
-      />
-    </group>
-  );
+  return null;
 }
 
 function Dust() {
@@ -742,11 +694,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       volReady.current = true;
       bumpVolReady((n) => n + 1);
     }
-    const state = useSessionStore.getState();
-    const chatting = state.claim !== null && state.session === null;
-    const shelf = state.session?.kind === "shelf" ? state.session : null;
-    const picked = chatting && state.claim?.signId === sign.id;
-    const held = picked || shelf?.signId === sign.id;
+    const state = frameSession;
+    const chatting = state.chatting;
+    const shelfSignId = state.shelfSignId;
+    const picked = chatting && state.claimSignId === sign.id;
+    const held = picked || shelfSignId === sign.id;
     const t = galaxyTravel.t;
     const direct = galaxyTravel.seekDirect && galaxyTravel.seek != null;
     const dest = stationT(index);
@@ -1399,6 +1351,7 @@ function TempleRig() {
   }, []);
 
   useFrame((_, delta) => {
+    syncFrameSession();
     const d = Math.min(0.05, Math.max(0.001, delta));
     if (epoch.current !== galaxyTravel.epoch) {
       epoch.current = galaxyTravel.epoch;
@@ -1584,14 +1537,13 @@ function TempleRig() {
           const lx = galaxyTravel.exploreLookX;
           const ly = galaxyTravel.exploreLookY;
           if (lx !== 0 || ly !== 0) {
-            _camRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
-            _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
-            // Negative lookX is look-left / grab-right so A and a right-drag agree.
-            _look.addScaledVector(_camRight, -lx);
-            _look.addScaledVector(_camUp, ly);
-            _cam.addScaledVector(_camRight, -lx * 0.72);
-            _cam.addScaledVector(_camUp, ly * 0.68);
+            // Stable parked-hub screen axes — NOT camera.quaternion. The live
+            // quat already includes last frame's lookAt, so re-applying the same
+            // offsets in that basis oscillates hard at the clamp extremes.
+            offsetExploreLookPose(_cam, _look, lx, ly);
           }
+          // Mouse hover peek only — touch must not sway until a real drag
+          // (ptrOn stays false for fingers; see pointerTracksHover).
           if (!galaxyTravel.dragging && galaxyTravel.ptrOn) {
             _look.x += galaxyTravel.ptrX * 0.35;
             _look.y += -galaxyTravel.ptrY * 0.2;
@@ -1608,6 +1560,12 @@ function TempleRig() {
       camera.position.copy(_cam);
       camera.lookAt(_look);
       booted.current = true;
+    } else if (galaxyTravel.explorePhase === "inside") {
+      // Inside pose is already an absolute park + look offset. Soft-lerping
+      // position while lookAt snaps left cam and aim disagreeing every frame,
+      // which amplified the old quaternion-basis jitter.
+      camera.position.copy(_cam);
+      camera.lookAt(_look);
     } else {
       const ease = exploring ? 1 - Math.exp(-d * 1.6) : k;
       camera.position.lerp(_cam, ease);

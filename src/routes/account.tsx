@@ -22,9 +22,24 @@ import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
 import { authClient, signOut } from "@/lib/auth/client";
 import { signInAvailability } from "@/lib/auth/email-otp";
+import { platformAuthenticatorAvailable } from "@/lib/auth/passkey-sign-in";
+import {
+  clearLocalPasskeyCredentialIds,
+  rememberLocalPasskeyCredentialIds,
+} from "@/lib/auth/passkey-local";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/account")({ component: Account });
+export const Route = createFileRoute("/account")({
+  component: Account,
+  validateSearch: (search: Record<string, unknown>): { enablePasskey?: true } => ({
+    enablePasskey:
+      search.enablePasskey === true ||
+      search.enablePasskey === "1" ||
+      search.enablePasskey === "true"
+        ? true
+        : undefined,
+  }),
+});
 
 const MONTHS = [
   "January",
@@ -44,15 +59,29 @@ const MONTHS = [
 function Account() {
   const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
   const navigate = useNavigate();
+  const { enablePasskey } = Route.useSearch();
   const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [charts, setCharts] = useState<SavedChart[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Right after email/OTP sign-in the first /get-session can still read as empty
+  // while the cookie settles. One short grace + refetch avoids bouncing to
+  // /login and stranding a freshly signed-in visitor on the form.
+  const [signedOutGrace, setSignedOutGrace] = useState(true);
+
+  const [chartsFailed, setChartsFailed] = useState(false);
 
   const load = () => {
+    setChartsFailed(false);
     listCharts()
-      .then(setCharts)
-      .catch(() => setCharts([]));
+      .then((rows) => {
+        setCharts(rows);
+      })
+      .catch(() => {
+        // An empty vault and a failed read must not look the same.
+        setCharts((prev) => prev ?? []);
+        setChartsFailed(true);
+      });
   };
 
   const userId = user?.id ?? null;
@@ -68,14 +97,32 @@ function Account() {
     if (owner) void claimSite().catch(() => undefined);
   }, [userId, owner]);
 
-  if (guard === "loading") {
+  useEffect(() => {
+    if (guard !== "signed_out") {
+      setSignedOutGrace(false);
+      return;
+    }
+    let cancelled = false;
+    setSignedOutGrace(true);
+    refetchSession();
+    const id = window.setTimeout(() => {
+      if (!cancelled) setSignedOutGrace(false);
+    }, 600);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+    // `refetchSession` is a new function each render — only re-run when guard flips.
+  }, [guard]);
+
+  if (guard === "loading" || (guard === "signed_out" && signedOutGrace)) {
     return (
       <main id="main-content" className="grid vault-page place-items-center bg-bg text-fg">
         <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
       </main>
     );
   }
-  if (guard === "unavailable") return <SessionUnavailable onRetry={refetchSession} />;
+  if (guard === "unavailable") return <SessionUnavailable />;
   if (!user) return <Navigate to="/login" search={{ from: "account" }} />;
 
   const mine = charts?.filter((c) => c.relation === "self") ?? [];
@@ -133,6 +180,14 @@ function Account() {
           <p className="mt-2 text-sm text-fg-muted">{user.primaryEmail}</p>
         </section>
 
+        <section id="settings" className="mt-8 scroll-mt-24">
+          <h2 className="font-display text-2xl text-fg italic">Settings</h2>
+          <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+            Change email, password, natal-machine preference, or delete your data from the account
+            menu (your initial in the corner) → Settings.
+          </p>
+        </section>
+
         <section id="subscription" className="mt-8 scroll-mt-24">
           <h2 className="font-display text-2xl text-fg italic">Subscription</h2>
           <p className="mt-2 text-sm leading-relaxed text-fg-muted">
@@ -142,7 +197,7 @@ function Account() {
           </p>
         </section>
 
-        <PasskeySection onError={setError} />
+        <PasskeySection onError={setError} nudgeEnable={Boolean(enablePasskey)} />
 
         <AddChart
           onSaved={() => {
@@ -162,6 +217,19 @@ function Account() {
           <h2 className="font-display text-2xl text-fg italic">Your chart</h2>
           {charts === null ? (
             <div className="mt-3 h-16 animate-pulse rounded-md bg-bg-subtle" />
+          ) : chartsFailed && mine.length === 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <p role="alert" className="text-sm text-wine">
+                Your charts couldn’t load.
+              </p>
+              <button
+                type="button"
+                onClick={load}
+                className="min-h-11 text-xs tracking-[0.16em] text-fg uppercase hover:text-accent"
+              >
+                Try again
+              </button>
+            </div>
           ) : mine.length === 0 ? (
             <div className="mt-3 space-y-4">
               <p className="text-sm text-fg-muted">
@@ -198,7 +266,7 @@ function Account() {
           ) : (
             <ul className="mt-3 space-y-2">
               {mine.map((c) => (
-                <ChartRow key={c.id} chart={c} onGone={load} />
+                <ChartRow key={c.id} chart={c} onGone={load} onError={setError} />
               ))}
             </ul>
           )}
@@ -207,12 +275,12 @@ function Account() {
         <section className="mt-10">
           <h2 className="font-display text-2xl text-fg italic">Other people</h2>
           <p className="mt-1 text-sm text-fg-subtle">Only with their permission.</p>
-          {charts === null ? null : others.length === 0 ? (
+          {charts === null || (chartsFailed && others.length === 0) ? null : others.length === 0 ? (
             <p className="mt-3 text-sm text-fg-muted">No one else is in this vault.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {others.map((c) => (
-                <ChartRow key={c.id} chart={c} onGone={load} />
+                <ChartRow key={c.id} chart={c} onGone={load} onError={setError} />
               ))}
             </ul>
           )}
@@ -280,15 +348,36 @@ function Account() {
 type PasskeyRow = {
   id: string;
   name?: string | null;
+  credentialID?: string;
   deviceType?: string;
   createdAt?: string | Date;
   backedUp?: boolean;
 };
 
-function PasskeySection({ onError }: { onError: (msg: string | null) => void }) {
+function PasskeySection({
+  onError,
+  nudgeEnable,
+}: {
+  onError: (msg: string | null) => void;
+  nudgeEnable?: boolean;
+}) {
   const [enabled, setEnabled] = useState(false);
   const [rows, setRows] = useState<PasskeyRow[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [platformOk, setPlatformOk] = useState(false);
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
+
+  const rememberFromRows = (list: PasskeyRow[]) => {
+    const ids = list
+      .map((pk) => pk.credentialID)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+    if (ids.length > 0) {
+      rememberLocalPasskeyCredentialIds(ids);
+    } else {
+      // Account has no passkeys — drop stale local IDs so /login stays gated.
+      clearLocalPasskeyCredentialIds();
+    }
+  };
 
   const load = () => {
     void (async () => {
@@ -300,7 +389,9 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
           setRows([]);
           return;
         }
-        setRows(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setRows(list);
+        rememberFromRows(list);
       } catch {
         setRows([]);
       }
@@ -318,6 +409,9 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
       .catch(() => {
         if (!cancelled) setEnabled(false);
       });
+    void platformAuthenticatorAvailable().then((ok) => {
+      if (!cancelled) setPlatformOk(ok);
+    });
     return () => {
       cancelled = true;
     };
@@ -333,11 +427,22 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
         typeof navigator !== "undefined" && /iPhone|iPad|Mac/.test(navigator.userAgent)
           ? "This Apple device"
           : "This device";
-      const { error } = await authClient.passkey.addPasskey({
+      const { data, error, ...rest } = await authClient.passkey.addPasskey({
         name: label,
         authenticatorAttachment: "platform",
+        returnWebAuthnResponse: true,
       });
       if (error) throw new Error(error.message ?? "Could not add a passkey");
+      // Better Auth returns the new passkey row (includes credentialID).
+      // Also capture the WebAuthn credential id if the row shape is missing it.
+      const created = data as PasskeyRow | null | undefined;
+      const webauthnId = (rest as { webauthn?: { response?: { id?: string } } }).webauthn
+        ?.response?.id;
+      const ids = [created?.credentialID, webauthnId].filter(
+        (id): id is string => typeof id === "string" && id.length > 0,
+      );
+      if (ids.length > 0) rememberLocalPasskeyCredentialIds(ids);
+      setNudgeDismissed(true);
       load();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not add a passkey";
@@ -364,6 +469,13 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
     }
   };
 
+  const showNudge =
+    Boolean(nudgeEnable) &&
+    !nudgeDismissed &&
+    platformOk &&
+    rows !== null &&
+    rows.length === 0;
+
   return (
     <section id="passkeys" className="mt-8 scroll-mt-24">
       <h2 className="font-display text-2xl text-fg italic">Passkeys</h2>
@@ -371,6 +483,32 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
         Unlock next time with Face ID or Touch ID. Passkeys sync through iCloud Keychain on your
         Apple devices — this is not Sign in with Apple.
       </p>
+      {showNudge ? (
+        <div className="mt-4 space-y-3 rounded-md border border-accent/40 bg-bg-elevated/80 px-4 py-4">
+          <p className="text-sm leading-relaxed text-fg">
+            Enable Face ID on this device so next time you can unlock without the email code — and
+            without Safari’s Scan QR sheet.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void add()}
+              className="min-h-12 rounded-md bg-accent px-4 text-xs tracking-[0.18em] text-accent-fg uppercase disabled:opacity-50"
+            >
+              Enable Face ID now
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setNudgeDismissed(true)}
+              className="min-h-11 text-xs tracking-[0.16em] text-fg-subtle uppercase hover:text-fg disabled:opacity-50"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      ) : null}
       {rows === null ? (
         <div className="mt-3 h-12 animate-pulse rounded-md bg-bg-subtle" />
       ) : rows.length === 0 ? (
@@ -419,8 +557,46 @@ function PasskeySection({ onError }: { onError: (msg: string | null) => void }) 
   );
 }
 
-function ChartRow({ chart, onGone }: { chart: SavedChart; onGone: () => void }) {
+function ChartRow({
+  chart,
+  onGone,
+  onError,
+}: {
+  chart: SavedChart;
+  onGone: () => void;
+  onError: (message: string | null) => void;
+}) {
   const navigate = useNavigate();
+  const [busy, setBusy] = useState<"open" | "remove" | null>(null);
+
+  const open = async () => {
+    if (busy) return;
+    setBusy("open");
+    onError(null);
+    try {
+      await openSavedChart(chart, "library");
+      void navigate({ to: "/" });
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Could not open that chart");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const remove = async () => {
+    if (busy) return;
+    setBusy("remove");
+    onError(null);
+    try {
+      await deleteChart({ data: chart.id });
+      onGone();
+    } catch (e) {
+      // Without this a failed delete looked like nothing happened.
+      onError(e instanceof Error ? e.message : "Could not remove that chart");
+    } finally {
+      setBusy(null);
+    }
+  };
   const sign = CONSTELLATIONS.find((s) => s.id === chart.signId);
   return (
     <li className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated/70 px-4 py-3">
@@ -434,23 +610,21 @@ function ChartRow({ chart, onGone }: { chart: SavedChart; onGone: () => void }) 
       <div className="flex shrink-0 items-center gap-3">
         <button
           type="button"
-          className="min-h-11 text-xs tracking-[0.16em] text-fg uppercase hover:text-accent"
-          onClick={async () => {
-            await openSavedChart(chart, "library");
-            void navigate({ to: "/" });
-          }}
+          disabled={busy !== null}
+          aria-busy={busy === "open" || undefined}
+          className="min-h-11 text-xs tracking-[0.16em] text-fg uppercase hover:text-accent disabled:opacity-50"
+          onClick={() => void open()}
         >
-          Open
+          {busy === "open" ? <span aria-live="polite">Opening…</span> : "Open"}
         </button>
         <button
           type="button"
-          className="min-h-11 text-xs tracking-[0.16em] text-fg-subtle uppercase hover:text-wine"
-          onClick={async () => {
-            await deleteChart({ data: chart.id });
-            onGone();
-          }}
+          disabled={busy !== null}
+          aria-busy={busy === "remove" || undefined}
+          className="min-h-11 text-xs tracking-[0.16em] text-fg-subtle uppercase hover:text-wine disabled:opacity-50"
+          onClick={() => void remove()}
         >
-          Remove
+          {busy === "remove" ? <span aria-live="polite">Removing…</span> : "Remove"}
         </button>
       </div>
     </li>

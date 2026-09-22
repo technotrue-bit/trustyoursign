@@ -30,6 +30,8 @@ export type EmailMessage = {
   subject: string;
   text: string;
   html: string;
+  /** Per-message Reply-To; wins over `EMAIL_REPLY_TO` when set. */
+  replyTo?: string;
 };
 
 /** Default provider endpoint (Resend). Override with `EMAIL_API_URL`. */
@@ -135,7 +137,8 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
     text: message.text,
     html: message.html,
   };
-  if (config.replyTo) body.reply_to = config.replyTo;
+  const replyTo = message.replyTo ?? config.replyTo;
+  if (replyTo) body.reply_to = replyTo;
 
   let res: Response;
   try {

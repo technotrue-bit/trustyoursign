@@ -54,6 +54,12 @@ import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { passkeyAvailable, passkeyRpConfig } from "./passkey-config";
 import { GROK_PROVIDERS } from "./providers";
+import { hostSessionCookieEmit } from "./session-cookie.server.ts";
+import { SESSION_TOKEN_COOKIE } from "./session-cookie-names.ts";
+import {
+  SESSION_EXPIRES_IN_SEC,
+  SESSION_UPDATE_AGE_SEC,
+} from "./session-lifetime.ts";
 import { extraTrustedOrigins } from "./trusted-origins";
 import { pgliteDialect } from "./pglite-dialect";
 import {
@@ -62,6 +68,9 @@ import {
   PREVIEW_CLIENT_ID,
   PreviewOAuthSecret,
 } from "./preview";
+
+/** Session token cookie name — also read by the live-preview popup completion page. */
+export { SESSION_TOKEN_COOKIE };
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
 void ensureDbReady();
@@ -213,9 +222,6 @@ const database = databaseUrl
   ? getNeonPool()
   : { dialect: pgliteDialect(() => getPglite()), type: "postgres" as const };
 
-/** Session token cookie name — also read by the live-preview popup completion page. */
-export const SESSION_TOKEN_COOKIE = "__Host-grok-auth.session_token";
-
 // Built separately so the `betterAuth({...})` call stays easy to edit without
 // breaking brackets (models often trip on the conditional plugin spread).
 const grokOAuthPlugin = authConfigured
@@ -240,9 +246,10 @@ const grokOAuthPlugin = authConfigured
     })
   : null;
 
-// App-owned WebAuthn — Face ID / Touch ID / security keys. Registered whenever
-// auth is on (see `passkeysConfigured`). rpID pins to the stable public host
-// when we have one; otherwise the plugin takes the per-request baseURL hostname.
+// App-owned WebAuthn — Face ID / Touch ID only (platform authenticatorSelection).
+// Registered whenever auth is on (see `passkeysConfigured`). rpID pins to the
+// stable public host when we have one; otherwise the plugin takes the
+// per-request baseURL hostname.
 const passkeyPlugin = passkeysConfigured ? passkey(passkeyRpConfig(explicitBaseURL)) : null;
 
 /**
@@ -310,11 +317,25 @@ export const auth = betterAuth({
     },
   },
 
-  // Cache the session in the short-lived signed `session_data` cookie so reads
-  // (incl. the client's `/get-session`) skip the DB — this shrinks the "loading"
-  // window and reduces auth flicker. See the `auth` skill for the full
-  // flicker-prevention guidance (gate on `isPending`; SSR the session).
-  session: { cookieCache: { enabled: true, maxAge: 300 } },
+  user: {
+    changeEmail: {
+      enabled: true,
+      // Allow immediate updates when the address is not yet verified (common
+      // for email/password and some federated paths). Verified users still get
+      // a verification mail when email delivery is configured.
+      updateEmailWithoutVerification: true,
+    },
+  },
+
+  // Durable sessions: visitors expect to stay signed in when they come back.
+  // expiresIn is the cookie + DB lifetime; updateAge slides that window forward
+  // on active use so a regular visitor is not bounced after a quiet week.
+  // cookieCache keeps `/get-session` off the DB for a few minutes (flicker).
+  session: {
+    expiresIn: SESSION_EXPIRES_IN_SEC,
+    updateAge: SESSION_UPDATE_AGE_SEC,
+    cookieCache: { enabled: true, maxAge: 300 },
+  },
 
   // Local email/password — toggled only via `./email-password` (not a plugin).
   // sendResetPassword is the callback that makes "Forgot password?" real:
@@ -463,7 +484,7 @@ export const auth = betterAuth({
         ]
       : []),
 
-    // Face ID / Touch ID / security keys — app-owned, not broker-federated.
+    // Face ID / Touch ID — app-owned platform passkeys (not broker-federated).
     ...(passkeyPlugin ? [passkeyPlugin] : []),
 
     // One genericOAuth provider per upstream (when auth is on), all federating
@@ -477,6 +498,11 @@ export const auth = betterAuth({
     // fires when an Authorization header is present, so the cookie path
     // (deployed apps) is unaffected.
     bearer(),
+
+    // Re-emit `__Host-` session cookies via TanStack with sanitized options
+    // (no Domain, Max-Age intact) so Safari/Chrome/Firefox all keep the cookie.
+    // Must run before tanstackStartCookies (which stays last).
+    hostSessionCookieEmit(),
 
     // Bridges Better Auth's Set-Cookie into TanStack Start responses. MUST be
     // last so it runs after every other plugin's hooks.

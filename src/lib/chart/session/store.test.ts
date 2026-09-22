@@ -151,7 +151,8 @@ describe("session store", () => {
     assert.equal(session?.savedId, "saved-1");
     assert.equal(session?.birth.month, 9);
     assert.equal(session?.skyNatal, sky);
-    assert.equal(session?.mode, "ask");
+    assert.equal(session?.mode, "sky");
+    assert.equal(session?.sheetFolded, true);
 
     const warmer = { ...sky, tone: "vault" as const };
     useSessionStore.getState().setShelfNatal(warmer);

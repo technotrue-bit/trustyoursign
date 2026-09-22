@@ -77,6 +77,14 @@ export const OPEN_T = 0;
 /** Max look offset inside a sign galaxy (camera-right, world units). */
 export const EXPLORE_LOOK_MAX_X = 8.5;
 export const EXPLORE_LOOK_MAX_Y = 5.5;
+/**
+ * Inside / Galaxy-threshold landing only. World units the camera stops short
+ * of the hub star. Corridor flight does not use this.
+ *
+ * 2.6 put the lens inside the core's glare (a blown disc over the card).
+ * 8.0 holds the home star as a jewel in the room, with sky around it.
+ */
+export const INSIDE_LANDING_DISTANCE = 8.0;
 /** Inside-sign wheel/pinch zoom — pull-back below 1 keeps multiple nodes readable. */
 export const EXPLORE_ZOOM_MIN = 0.72;
 export const EXPLORE_ZOOM_MAX = 3.2;
@@ -85,9 +93,15 @@ const SEEK_FRAME_ZOOM = 1.12;
 /** Corridor pinch stays tighter so the hero station doesn't drift out. */
 const CORRIDOR_ZOOM_MIN = 1;
 const CORRIDOR_ZOOM_MAX = 2.7;
-/** Drag pixels → look units. Grab-the-sky: drag right moves stars right. */
-const EXPLORE_LOOK_DRAG_X = 78;
-const EXPLORE_LOOK_DRAG_Y = 92;
+/**
+ * Drag pixels → look units. Higher = calmer pan (more pixels per degree of look).
+ * Tuned so a finger swipe feels deliberate, not hypersensitive.
+ * Grab-the-sky: drag right moves stars right.
+ */
+const EXPLORE_LOOK_DRAG_X = 115;
+const EXPLORE_LOOK_DRAG_Y = 135;
+/** Touch used to run 1.7× mouse; that made phones whip. Stay near parity. */
+const EXPLORE_LOOK_TOUCH_FEEL = 1.05;
 /** Look units per second while WASD / arrows are held. */
 const EXPLORE_LOOK_KEY_RATE = 3.2;
 /** Below this a wheel impulse is trackpad momentum dribble, not a new flick. */
@@ -547,6 +561,106 @@ export function exitSignGalaxy() {
   return true;
 }
 
+/**
+ * Leave for Back. `exitSignGalaxy` refuses during the enter dive so Skip stays
+ * the only way to jump the cinematic — Back still has to unwind that dive,
+ * or the visitor sits on a chrome-less canvas until it finishes.
+ */
+export function leaveSignGalaxy(): boolean {
+  if (!exploringSign()) return false;
+  if (galaxyTravel.explorePhase === "exiting") return true;
+  if (galaxyTravel.explorePhase === "inside" && galaxyTravel.enterSkip === "idle") {
+    return exitSignGalaxy();
+  }
+  clearEnterSkip();
+  galaxyTravel.explorePhase = "exiting";
+  galaxyTravel.pointSeek = null;
+  galaxyTravel.zoomTarget = 1;
+  resetExploreLook();
+  noteControl();
+  publishExplore();
+  return true;
+}
+
+/** Title sky — what's-your-sign — after Back pops to a home history entry. */
+export function returnToOpenSky() {
+  resetTravel(false);
+  galaxyTravel.birth = 1;
+  skipIntro();
+  resetExplore(true);
+  publishTravel(OPEN_T, false);
+  useGalaxy.setState({
+    born: true,
+    moved: false,
+    t: OPEN_T,
+    signIndex: 0,
+    introDone: true,
+    introSkip: false,
+    introTitle: 1,
+    introChrome: 1,
+    introAsk: 0,
+    introVeil: 0,
+  });
+}
+
+/**
+ * Snap the corridor camera onto a sign station (no cruise lerp). Used when a
+ * refresh / deep link restores belt selection.
+ */
+export function snapToSign(index: number) {
+  const i = ((Math.round(index) % 12) + 12) % 12;
+  const dest = stationT(i);
+  const sign = CONSTELLATIONS[i];
+  if (!sign) return false;
+  if (exploringSign()) resetExplore(false);
+  clearDirectSeek();
+  galaxyTravel.t = dest;
+  galaxyTravel.tTarget = dest;
+  galaxyTravel.seek = null;
+  galaxyTravel.playUntil = null;
+  galaxyTravel.moved = true;
+  galaxyTravel.awaken = 1;
+  galaxyTravel.birth = 1;
+  galaxyTravel.zoom = 1;
+  galaxyTravel.zoomTarget = 1;
+  primeSignArt(sign.id);
+  armSelectionHold();
+  publishTravel(dest, true);
+  noteControl();
+  return true;
+}
+
+/**
+ * Land inside a sign galaxy immediately (no enter dive). Refresh / deep-link
+ * restore path — same end state as finishing or skipping the dive.
+ */
+export function restoreInsideSignGalaxy(index: number, pointIndex = 0) {
+  const i = ((Math.round(index) % 12) + 12) % 12;
+  const sign = CONSTELLATIONS[i];
+  if (!sign) return false;
+  skipBirth();
+  skipIntro();
+  useGalaxy.getState().markBorn();
+  snapToSign(i);
+  galaxyTravel.exploreSignIndex = i;
+  galaxyTravel.starsUnlocked = false;
+  galaxyTravel.claimPrompt = false;
+  clearEnterSkip();
+  primeSignArt(sign.id);
+  const galaxy = getSignGalaxy(sign.id);
+  landInsideHub();
+  const n = galaxy.points.length;
+  if (n > 0 && pointIndex > 0) {
+    const p = ((Math.round(pointIndex) % n) + n) % n;
+    galaxyTravel.pointIndex = p;
+    galaxyTravel.pointT = p;
+    galaxyTravel.pointTTarget = p;
+    galaxyTravel.pointSeek = null;
+    publishExplore();
+  }
+  return true;
+}
+
 export function setExploreStarsUnlocked(unlocked: boolean) {
   galaxyTravel.starsUnlocked = Boolean(unlocked);
 }
@@ -564,8 +678,8 @@ export function seekGalaxyPoint(pointIndex: number) {
   const i = ((Math.round(pointIndex) % galaxy.points.length) + galaxy.points.length) % galaxy.points.length;
   const point = galaxy.points[i]!;
   if (!point) return false;
-  // Every sign galaxy can travel its form while locked. Lore stays sealed in the HUD
-  // until starsUnlocked (sign-in + timed chart). Do not gate movement on unlock.
+  // Every sign galaxy can travel its form. Lore is open in the HUD for everyone
+  // (starsUnlocked stays true via exploreAccess). Do not gate movement on unlock.
   galaxyTravel.pointSeek = i;
   galaxyTravel.pointTTarget = i;
   galaxyTravel.pointIndex = i;
@@ -615,7 +729,9 @@ function stepEnterSkip(dt: number) {
 }
 
 export function stepExplore(dt: number) {
-  if (galaxyTravel.paused) return;
+  // Pause freezes the sky, but an in-progress exit must still finish so Back
+  // can leave the inside canvas while motion is held.
+  if (galaxyTravel.paused && galaxyTravel.explorePhase !== "exiting") return;
   if (galaxyTravel.enterSkip !== "idle") {
     stepEnterSkip(dt);
     return;
@@ -759,7 +875,7 @@ function flyLocked() {
 }
 
 const FLY_IGNORE =
-  "button, a, input, textarea, select, details, summary, .sign-strip, .birth-chat, .gloss-card, .chart-talks, [data-no-fly]";
+  "button, a, input, textarea, select, details, summary, .sign-strip, .birth-chat, .gloss-card, .chart-talks, [data-no-fly], [role='menu'], [role='menuitem'], [role='dialog'], [data-radix-menu-content], [data-radix-popper-content-wrapper]";
 
 /** Duck-typed so the rule is testable outside a browser realm (and across iframes). */
 function closestElement(target: EventTarget | null): Element | null {
@@ -807,7 +923,17 @@ export function wheelFlies(target: EventTarget | null): boolean {
   return !scrollsItself(el);
 }
 
+/**
+ * Hover / pointer sway is mouse-only. Touch has no hover — tracking the finger
+ * on pointerdown made the sky ease toward the contact point before any drag,
+ * which feels like the camera starts moving on its own.
+ */
+export function pointerTracksHover(pointerType: string) {
+  return pointerType === "mouse";
+}
+
 function trackPtr(e: PointerEvent) {
+  if (!pointerTracksHover(e.pointerType)) return;
   const w = window.innerWidth || 1;
   const h = window.innerHeight || 1;
   galaxyTravel.ptrX = Math.min(0.5, Math.max(-0.5, e.clientX / w - 0.5));
@@ -840,13 +966,13 @@ export function setExploreLookHold(x: number, y: number) {
 }
 
 /**
- * Grab-the-sky pan inside a sign galaxy. Drag right moves the stars right
- * (look left). Does not change corridor t, and does not unseal stars.
+ * Look-around pan inside a sign galaxy. Drag right looks right; drag down
+ * looks down (same sense as a camera stick). Does not change corridor t.
  */
 export function applyExploreLook(dy: number, dx = 0, touch = false) {
   if (!canExploreLook()) return false;
-  const feel = touch ? 1.7 : 1;
-  applyExploreLookOffset(-(dx * feel) / EXPLORE_LOOK_DRAG_X, (dy * feel) / EXPLORE_LOOK_DRAG_Y);
+  const feel = touch ? EXPLORE_LOOK_TOUCH_FEEL : 1;
+  applyExploreLookOffset((dx * feel) / EXPLORE_LOOK_DRAG_X, -(dy * feel) / EXPLORE_LOOK_DRAG_Y);
   galaxyTravel.handsOn = true;
   galaxyTravel.awaken = 1;
   noteControl();
@@ -1027,7 +1153,8 @@ export function ensureFlyInput() {
     pid = e.pointerId;
     originX = lastX = e.clientX;
     originY = lastY = e.clientY;
-    trackPtr(e);
+    if (pointerTracksHover(e.pointerType)) trackPtr(e);
+    else galaxyTravel.ptrOn = false;
     galaxyTravel.handsOn = true;
     if (e.pointerType !== "mouse") e.preventDefault();
     if (e.button === 1) {
@@ -1054,7 +1181,7 @@ export function ensureFlyInput() {
       return;
     }
     if (leftoverLock || mode === "pinch") return;
-    trackPtr(e);
+    if (pointerTracksHover(e.pointerType)) trackPtr(e);
     if (e.pointerId !== pid) return;
     if (mode === "pending") {
       const dist = Math.hypot(e.clientX - originX, e.clientY - originY);
@@ -1065,6 +1192,9 @@ export function ensureFlyInput() {
       lastY = e.clientY;
     }
     if (mode !== "fly") return;
+    // Own the gesture once look/fly has started so iOS rubber-band cannot
+    // scroll the visualViewport under the fixed stage mid-pan.
+    if (e.pointerType !== "mouse") e.preventDefault();
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
     lastX = e.clientX;

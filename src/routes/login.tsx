@@ -18,16 +18,63 @@ import {
   normalizeOtpInput,
   signInAvailability,
 } from "@/lib/auth/email-otp";
+import { lookupPasskeyCredentialIds } from "@/lib/auth/passkey-lookup";
+import { normalizePasskeyLookupEmail } from "@/lib/auth/passkey-lookup-email";
+import {
+  hasUsableLocalPasskeyEvidence,
+  markLocalPasskeyAutofillOk,
+  platformAuthenticatorAvailable,
+  rememberLocalPasskeyCredentialIds,
+  signInWithPlatformPasskey,
+} from "@/lib/auth/passkey-sign-in";
 import { MIN_AGE } from "@/lib/legal";
 import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
 import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
 
-/** Always land on the profile after a successful sign-in — never linger on /login. */
-function goToProfile() {
+/** Profile URL after a successful sign-in — never linger on /login. */
+function profileHref(opts?: { enablePasskey?: boolean }) {
+  return opts?.enablePasskey ? "/account?enablePasskey=1#passkeys" : "/account";
+}
+
+/**
+ * Confirm the session is readable, then hard-navigate to the profile.
+ * Without this, a race after email/OTP can load /account before the cookie is
+ * visible — /account treats that as signed out and bounces straight back here,
+ * which feels like "I signed in and nothing happened."
+ */
+async function goToProfileAfterSignIn(opts?: { enablePasskey?: boolean }) {
   if (typeof window === "undefined") return;
-  window.location.assign("/account");
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const { data } = await authClient.getSession();
+      if (data?.user) {
+        window.location.replace(profileHref(opts));
+        return;
+      }
+    } catch {
+      /* retry — a dropped read is not "still signed out" */
+    }
+    await new Promise((r) => window.setTimeout(r, 120 * (attempt + 1)));
+  }
+  // Last resort: full navigation still gives the next document a fresh cookie read.
+  window.location.assign(profileHref(opts));
+}
+
+/** After email/OTP/password: nudge Face ID enroll when this device can do UVPA. */
+function goToProfileAfterPasswordlessGate(platformOk: boolean) {
+  return goToProfileAfterSignIn({
+    enablePasskey: platformOk && !hasUsableLocalPasskeyEvidence(),
+  });
+}
+
+/** Pull credential id out of Better Auth’s optional webauthn return payload. */
+function credentialIdFromWebauthn(result: {
+  webauthn?: { response?: { id?: string } };
+} | null): string | null {
+  const id = result?.webauthn?.response?.id;
+  return typeof id === "string" && id.length > 0 ? id : null;
 }
 
 export const Route = createFileRoute("/login")({
@@ -80,6 +127,10 @@ function Login() {
   const [otpSandbox, setOtpSandbox] = useState(false);
   const [servedProviders, setServedProviders] = useState<readonly string[]>([]);
   const [passkeyOk, setPasskeyOk] = useState(false);
+  // Platform authenticator (Face ID / Touch ID) — required to offer the modal button.
+  const [platformPasskey, setPlatformPasskey] = useState(false);
+  // Local credential evidence — without it, Safari opens hybrid QR on discoverable get.
+  const [localPasskeyEvidence, setLocalPasskeyEvidence] = useState(false);
   const [otpStage, setOtpStage] = useState<"idle" | "code" | "sent">("idle");
   const [otp, setOtp] = useState("");
   const [codeSentTo, setCodeSentTo] = useState("");
@@ -109,14 +160,23 @@ function Login() {
 
   // Conditional UI: preload the browser's passkey autofill when the host can
   // finish a passkey sign-in (Safari / iOS offer Face ID in the keyboard bar).
+  // Capture the assertion id so modal evidence survives after autofill success.
   useEffect(() => {
     if (!passkeyOk || !authEnabled) return;
     let cancelled = false;
     void authClient
-      .signIn.passkey({ autoFill: true })
+      .signIn.passkey({ autoFill: true, returnWebAuthnResponse: true })
       .then((result) => {
         if (cancelled) return;
-        if (result.data) goToProfile();
+        if (result.data) {
+          const credId = credentialIdFromWebauthn(
+            result as { webauthn?: { response?: { id?: string } } },
+          );
+          if (credId) rememberLocalPasskeyCredentialIds(credId);
+          markLocalPasskeyAutofillOk();
+          setLocalPasskeyEvidence(hasUsableLocalPasskeyEvidence());
+          void goToProfileAfterSignIn();
+        }
       })
       .catch(() => {
         /* autofill abort / no credential is expected — ignore */
@@ -125,6 +185,47 @@ function Login() {
       cancelled = true;
     };
   }, [passkeyOk]);
+
+  useEffect(() => {
+    if (!passkeyOk) return;
+    let cancelled = false;
+    setLocalPasskeyEvidence(hasUsableLocalPasskeyEvidence());
+    void platformAuthenticatorAvailable().then((ok) => {
+      if (!cancelled) setPlatformPasskey(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [passkeyOk]);
+
+  // When localStorage was cleared but the account still has passkeys, re-seed
+  // credential IDs once a plausible email is known — then the modal button can
+  // safely call WebAuthn with allowCredentials (no hybrid QR).
+  useEffect(() => {
+    if (!passkeyOk || !authEnabled) return;
+    const lookupEmail = normalizePasskeyLookupEmail(email);
+    if (!lookupEmail) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void lookupPasskeyCredentialIds({ data: lookupEmail })
+        .then((result) => {
+          if (cancelled) return;
+          if (result.credentialIds.length === 0) return;
+          rememberLocalPasskeyCredentialIds(result.credentialIds);
+          setLocalPasskeyEvidence(true);
+        })
+        .catch(() => {
+          /* keep gated UI — recovery is best-effort */
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [passkeyOk, email]);
+
+  // Modal button only when UVPA + credential IDs — never a naked discoverable get.
+  const offerModalPasskey = passkeyOk && platformPasskey && localPasskeyEvidence;
 
   // Ticks only while a code is on screen, to re-enable "send another code".
   useEffect(() => {
@@ -231,11 +332,9 @@ function Login() {
         fetchOptions: { headers: turnstileCaptchaHeaders() },
       });
       if (err) throw new Error(err.message ?? "That code did not work");
-      // Everyone lands on their profile. The owner's desk is one tap from it
-      // ("Owner desk" on /account), so routing by the address typed here is no
-      // longer needed — and guessing from a string disagreed with what the
-      // session actually was.
-      goToProfile();
+      // Everyone lands on their profile. Nudge Face ID enroll when this device
+      // can do UVPA but has no local passkey evidence yet.
+      await goToProfileAfterPasswordlessGate(platformPasskey);
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "That code did not work");
@@ -244,11 +343,11 @@ function Login() {
   };
 
   /**
-   * The email-code path, for anyone the broker cannot federate (it serves
-   * Google and X only). Choosing it puts the form into that mode for real: the
-   * address field takes focus, and if an address is already typed the code goes
-   * out immediately. (Scrolling to a form the visitor can already see is not an
-   * action.)
+   * Apple / iCloud users have no SSO here (the broker federates Google and X
+   * only), so their path is a code by email. Tapping the Apple button puts the
+   * form into that mode for real: the address field takes focus, and if an
+   * address is already typed the code goes out immediately. (Scrolling to a
+   * form the visitor can already see is not an action.)
    */
   const startCodeSignIn = (opts: { sendNow?: boolean } = {}) => {
     setError(null);
@@ -269,6 +368,9 @@ function Login() {
       await signIn(id, { callbackURL: "/account" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign-in failed");
+    } finally {
+      // A popup closed by the visitor resolves without throwing — the buttons
+      // must come back either way.
       setBusy(false);
     }
   };
@@ -277,9 +379,10 @@ function Login() {
     setError(null);
     setBusy(true);
     try {
-      const { error: err } = await authClient.signIn.passkey({ autoFill: false });
+      // Prefer platform (Face ID / Touch ID) over iOS hybrid QR — see passkey-sign-in.ts.
+      const { error: err } = await signInWithPlatformPasskey();
       if (err) throw new Error(err.message ?? "Passkey sign-in failed");
-      goToProfile();
+      await goToProfileAfterSignIn();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Passkey sign-in failed";
       // User dismissed the sheet — not an error worth alarming over.
@@ -334,7 +437,7 @@ function Login() {
         });
         if (err) throw new Error(err.message ?? "Could not sign in");
       }
-      goToProfile();
+      await goToProfileAfterPasswordlessGate(platformPasskey);
     } catch (e) {
       resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not continue");
@@ -384,18 +487,21 @@ function Login() {
   // The note under the buttons. It must not imply Google/X exist when the
   // broker cannot be served — that is the same lie as a button that 404s.
   // Passkeys are Face ID / iCloud Keychain, not Sign in with Apple.
+  // Only mention the modal button when it is actually offered.
   const signInNote = (() => {
-    const passkeyHint = passkeyOk
-      ? " A saved passkey unlocks with Face ID or Touch ID on Apple devices."
-      : "";
+    const passkeyHint = offerModalPasskey
+      ? " A saved passkey unlocks with Face ID or Touch ID on this device."
+      : passkeyOk
+        ? " Sign in with email, then enable Face ID under Account."
+        : "";
     if (socialProviders.length > 0) {
       return otpAvailable
-        ? `Your email gets you a code — no password to invent.${passkeyHint}`
+        ? `Apple Sign-In isn't offered here — use your iCloud or Apple email for a code instead, no password to invent.${passkeyHint}`
         : `Your email works the same way, with a password, below.${passkeyHint}`;
     }
     return otpAvailable
-      ? `Google and X sign-in aren't offered on this address. Your email gets you a code instead — no password to invent.${passkeyHint}`
-      : `Google and X sign-in aren't offered on this address. Use your email and a password below.${passkeyHint}`;
+      ? `Google, X, and Apple Sign-In aren't offered on this address. Your iCloud or Apple email gets you a code instead — no password to invent.${passkeyHint}`
+      : `Google, X, and Apple Sign-In aren't offered on this address. Use your email and a password below.${passkeyHint}`;
   })();
 
   return (
@@ -455,10 +561,10 @@ function Login() {
                   Continue with {p.label}
                 </button>
               ))}
-            {/* This host has no SSO for every address (the broker federates
-                Google and X only), so the email-code path covers the rest. It
-                starts that flow for real, and is only rendered when the host can
-                send mail — never a button that merely scrolls the page. */}
+            {/* No Apple SSO exists (the broker federates Google and X only), so
+                the Apple path is a code by email. This starts that flow for
+                real, and is only rendered when the host can send mail — never a
+                button that merely scrolls the page. */}
             {otpAvailable ? (
               <button
                 type="button"
@@ -466,20 +572,27 @@ function Login() {
                 onClick={() => startCodeSignIn({ sendNow: true })}
                 className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
               >
-                Email me a code
+                Use Apple or iCloud email
               </button>
             ) : null}
-            {/* App-owned WebAuthn — only when the passkey plugin is registered.
+            {/* App-owned WebAuthn — only when UVPA + local credential evidence.
+                Never call discoverable get without allowCredentials — iOS opens hybrid QR.
                 Not Sign in with Apple; Face ID comes from a passkey on this vault. */}
-            {passkeyOk ? (
+            {passkeyOk && offerModalPasskey ? (
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void passkeySignIn()}
                 className="min-h-12 w-full rounded-md border border-border px-4 text-sm tracking-wide text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
               >
-                Continue with passkey
+                Face ID on this device
               </button>
+            ) : passkeyOk ? (
+              <p className="rounded-md border border-border/70 bg-bg-elevated/40 px-4 py-3 text-xs leading-relaxed text-fg-subtle">
+                Sign in with email, then enable Face ID under Account. The Face ID button stays
+                off until a passkey is enrolled on this device — or until you enter the email
+                that already has one — so Safari never opens its Scan QR Code sheet.
+              </p>
             ) : null}
             <p className="pt-1 text-xs leading-relaxed text-fg-subtle">{signInNote}</p>
           </div>
@@ -689,7 +802,7 @@ function Login() {
                 code right now.{" "}
                 {socialProviders.length > 0
                   ? "Signing in with Google or X works as usual."
-                  : "There is no Google or X sign-in on this host to fall back on."}
+                  : "There is no Google, X, or Apple Sign-In on this host to fall back on. Use a password below, or wait until mail is fully open."}
               </p>
             ) : null}
             {error ? (

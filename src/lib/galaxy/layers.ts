@@ -2,11 +2,10 @@
  * Corridor / ambient render passes — not SignId.
  * Sign-bound layers still key content by SignId; these ids name the pass.
  */
-export type GalaxyLayerId = "station-cloud" | "sign-disk" | "dust-field";
+export type GalaxyLayerId = "station-cloud" | "dust-field";
 
 export const GALAXY_LAYER_IDS: readonly GalaxyLayerId[] = [
   "station-cloud",
-  "sign-disk",
   "dust-field",
 ] as const;
 
@@ -26,12 +25,6 @@ export const GALAXY_LAYERS: Record<GalaxyLayerId, GalaxyLayerMeta> = {
     label: "Station cloud",
     draws: "Per-sign morphing station point clouds along the temple curve",
   },
-  "sign-disk": {
-    id: "sign-disk",
-    name: "vault-layer-sign-disk",
-    label: "Sign disk",
-    draws: "Aimed-sign chakra disk sim (SignDisk / disk.ts)",
-  },
   "dust-field": {
     id: "dust-field",
     name: "vault-layer-dust-field",
@@ -47,3 +40,13 @@ export function isGalaxyLayerId(id: string): id is GalaxyLayerId {
 export function galaxyLayerName(id: GalaxyLayerId): string {
   return GALAXY_LAYERS[id].name;
 }
+
+/**
+ * Quiet residual when landed inside a sign galaxy — distant sky / corner
+ * blobs stay faintly alive without competing with lesson stars or HUD type.
+ * Atmosphere only; never interactive.
+ */
+export const INSIDE_SKY_FIELD_RESIDUAL = 0.1;
+export const INSIDE_SKY_HAZE_RESIDUAL = 0.09;
+export const INSIDE_SKY_ARMS_RESIDUAL = 0.08;
+export const INSIDE_CORNER_RESIDUAL = 0.12;

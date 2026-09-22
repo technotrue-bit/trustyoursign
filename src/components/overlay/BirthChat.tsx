@@ -9,7 +9,6 @@ import { isSiteOwner } from "@/lib/owner";
 import { upsertChart } from "@/lib/charts";
 import { computeVisitorNatal } from "@/lib/chart/sky";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
-import type { Nativity } from "@/lib/chart/schema";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { cn } from "@/lib/utils";
 import { Gloss, GlossRoot } from "./Gloss";
@@ -56,7 +55,6 @@ export function BirthChat() {
   const [meridiem, setMeridiem] = useState<"am" | "pm">("am");
   const [place, setPlace] = useState("");
   const [natal, setNatal] = useState<SkyNatal | null>(null);
-  const [visitorBook, setVisitorBook] = useState<Nativity | null>(null);
   const [casting, setCasting] = useState(false);
   const [castErr, setCastErr] = useState<string | null>(null);
   const dialogRef = useDialogFocus<HTMLDivElement>(true);
@@ -142,13 +140,18 @@ export function BirthChat() {
           label: "Your natal",
         },
       });
-      setNatal(sky);
-      setVisitorBook(nativity);
-      setStep("rest");
+      openSession(
+        fromVisitor({
+          nativity,
+          skyNatal: sky,
+          birth: next,
+          signId: sign.id,
+          origin: "galaxy",
+        }),
+      );
     } catch (e) {
       setCastErr(e instanceof Error ? e.message : "The place could not be read.");
       setNatal(null);
-      setVisitorBook(null);
       setStep("rest");
     } finally {
       setCasting(false);
@@ -416,13 +419,14 @@ export function BirthChat() {
               {birth.place ? ` · ${birth.place}` : ""}.
             </p>
             <p className="font-display text-xl tracking-tight text-fg italic">
-              {visitorBook
-                ? "Your natal is tabled. Planets, houses, rising."
-                : natal
-                  ? "The Big Three are tabled. Sun, Moon, Rising."
-                  : birth.place
-                    ? "The clock is held. Planets wait until the sky is calculated."
-                    : `The sun was in ${sunName}. You reached for what was already yours.`}
+              {natal
+                ? "The Big Three are tabled. Sun, Moon, Rising."
+                : birth.place
+                  ? "The clock is held. Planets wait until the sky is calculated."
+                  : `The sun was in ${sunName}. You reached for what was already yours.`}
+            </p>
+            <p className="text-sm leading-relaxed text-fg-muted">
+              Your sky is ready. Ask lives as a room inside once you open it.
             </p>
             {castErr ? <p role="alert" className="text-sm text-wine">{castErr}</p> : null}
             {natal ? (
@@ -434,32 +438,15 @@ export function BirthChat() {
                 ))}
               </ul>
             ) : null}
-            {visitorBook ? (
-              <p className="text-xs leading-relaxed text-fg-subtle">
-                Tropical · Whole Sign · {natal?.timeZone ?? "birth place timezone"} · astronomy-engine. Entertainment, not advice.
-              </p>
-            ) : null}
             <button
               type="button"
               onClick={() => {
-                if (visitorBook) {
-                  openSession(
-                    fromVisitor({
-                      nativity: visitorBook,
-                      skyNatal: natal,
-                      birth,
-                      signId: sign.id,
-                      origin: "galaxy",
-                    }),
-                  );
-                  return;
-                }
                 const s = sketch();
                 if (s) openShelf(s);
               }}
               className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase hover:bg-fg md:min-h-11"
             >
-              {visitorBook ? "Open this natal" : "Ask this sun"}
+              Open your sky
             </button>
             {owner ? (
               <button
