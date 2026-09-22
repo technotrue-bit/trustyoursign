@@ -1,5 +1,6 @@
 :root {
-  --bg: #000000;
+  /* Match document / manifest theme (scripts/grok-pwa-shared.mjs PWA_THEME_COLOR). */
+  --bg: #0c0b0a;
   --title: #fcfcfc;
   --white: #ffffff;
   --text-footnote: 0.9375rem; /* 15 — iOS Subhead */
@@ -125,6 +126,20 @@ img {
   margin: 0 auto;
   gap: 40px;
   padding-top: 28px;
+}
+
+/* Platform panes: iOS tutorial is the historical default for phone/tablet. */
+.content-android {
+  display: none;
+}
+
+html.platform-android .content-ios {
+  display: none;
+}
+
+html.platform-android.device-phone .content-android,
+html.platform-android.device-tablet .content-android {
+  display: flex;
 }
 
 /* The desktop fallback is opt-in: hidden unless the device is a desktop. */
@@ -272,7 +287,8 @@ html.device-tablet .step-ios-legacy {
 
 /* Desktop (also the no-JS default): swap the tutorial for a visible fallback
    that links back to the app instead of hiding everything. */
-html.device-desktop .content {
+html.device-desktop .content-ios,
+html.device-desktop .content-android {
   display: none;
 }
 
@@ -286,6 +302,143 @@ html.device-desktop .content-desktop {
   color: rgba(255, 255, 255, 0.5);
   text-align: center;
   text-wrap: balance;
+}
+
+.desktop-title-android,
+.desktop-title-generic,
+.desktop-note-android,
+.desktop-note-generic {
+  display: none;
+}
+
+html.device-desktop.platform-ios .desktop-title-ios,
+html.device-desktop.platform-ios .desktop-note-ios {
+  display: block;
+}
+
+html.device-desktop.platform-android .desktop-title-ios,
+html.device-desktop.platform-android .desktop-note-ios {
+  display: none;
+}
+
+html.device-desktop.platform-android .desktop-title-android,
+html.device-desktop.platform-android .desktop-note-android {
+  display: block;
+}
+
+html.device-desktop.platform-desktop .desktop-title-ios,
+html.device-desktop.platform-desktop .desktop-note-ios {
+  display: none;
+}
+
+html.device-desktop.platform-desktop .desktop-title-generic,
+html.device-desktop.platform-desktop .desktop-note-generic {
+  display: block;
+}
+
+.ob-android {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  min-height: 120px;
+}
+
+.app-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.android-lead {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.55);
+  text-align: center;
+  text-wrap: balance;
+  font-size: var(--text-footnote);
+}
+
+.install-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px 0 0;
+  padding: 12px 22px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 2px 1px -1px rgba(255, 255, 255, 0.25),
+    inset 0 -2px 1px -1px rgba(255, 255, 255, 0.25);
+  color: var(--white);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.install-cta:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.install-cta[hidden] {
+  display: none !important;
+}
+
+.steps-android {
+  width: 100%;
+  gap: 14px;
+}
+
+.steps-android.is-secondary {
+  opacity: 0.72;
+}
+
+.step-android {
+  white-space: normal;
+  text-wrap: balance;
+  max-width: 20rem;
+}
+
+.step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4em;
+  height: 1.4em;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.85em;
+  font-weight: var(--weight-medium);
+}
+
+.chrome-menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5em;
+  padding: 0 0.35em;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--white);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
+}
+
+.android-prompt-hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  text-wrap: balance;
+  font-size: var(--text-footnote);
+}
+
+.android-prompt-hint[hidden] {
+  display: none !important;
 }
 
 .desktop-open {

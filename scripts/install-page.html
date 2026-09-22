@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#0c0b0a" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="{{APP_NAME}}" />
-    <title>Add {{APP_NAME}} to your Home Screen</title>
+    <title>Install {{APP_NAME}}</title>
     <link rel="manifest" href="/__grok/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/__grok/icon-180.png" />
     <link rel="stylesheet" href="/__grok/install/styles.css" />
@@ -34,6 +34,17 @@
         else if (touch > 0 && minSide > 0 && minSide <= 500) type = "phone";
         else if (touch > 0 && minSide > 500 && maxSide <= 1400) type = "tablet";
 
+        var platformHint = "";
+        try {
+          platformHint = (new URLSearchParams(location.search).get("platform") || "").toLowerCase();
+        } catch (_) {}
+
+        var platform = "desktop";
+        if (isIOS) platform = "ios";
+        else if (isAndroid) platform = "android";
+        else if (platformHint === "ios") platform = "ios";
+        else if (platformHint === "android") platform = "android";
+
         var iosMajor = null;
         var osToken = null;
         var safariToken = null;
@@ -48,12 +59,18 @@
         }
 
         var root = document.documentElement;
-        var classes = ["device-" + type];
+        var classes = ["device-" + type, "platform-" + platform];
         if (iosMajor != null) {
           root.dataset.ios = String(iosMajor);
           classes.push(iosMajor >= 27 ? "ios-27-plus" : "ios-below-27");
         }
         root.className = classes.join(" ");
+        root.dataset.platform = platform;
+
+        var titleMatch = document.title.match(/^Install (.+)$/);
+        if (platform === "ios" && titleMatch) {
+          document.title = "Add " + titleMatch[1] + " to your Home Screen";
+        }
       })();
     </script>
   </head>
@@ -73,7 +90,7 @@
         </span>
       </header>
 
-      <main class="content">
+      <main class="content content-ios">
         <div class="ob" aria-hidden="true">
           <img
             class="ob-img ob-phone"
@@ -133,15 +150,113 @@
         </section>
       </main>
 
+      <main class="content content-android">
+        <div class="ob ob-android" aria-hidden="true">
+          <img
+            class="app-icon"
+            src="/__grok/icon-192.png"
+            width="96"
+            height="96"
+            alt=""
+          />
+        </div>
+
+        <section class="copy">
+          <h1>Install {{APP_NAME}}</h1>
+          <p class="android-lead">
+            Add it to your home screen for a full-screen Chrome experience.
+          </p>
+
+          <button type="button" class="install-cta" id="install-cta" hidden>
+            Install {{APP_NAME}}
+          </button>
+
+          <div class="steps steps-android" id="android-fallback">
+            <p class="step step-android">
+              <span class="step-num" aria-hidden="true">1</span>
+              <span class="muted">Tap the menu</span>
+              <span class="chrome-menu" aria-label="Chrome menu">⋮</span>
+              <span class="muted">in Chrome</span>
+            </p>
+            <p class="step step-android">
+              <span class="step-num" aria-hidden="true">2</span>
+              <span class="muted">Select</span>
+              <span class="add-text">Install app</span>
+              <span class="muted">or</span>
+              <span class="add-text">Add to Home screen</span>
+            </p>
+          </div>
+
+          <p class="android-prompt-hint" id="android-prompt-hint" hidden>
+            Chrome can install this app for you — tap the button above.
+          </p>
+        </section>
+      </main>
+
       <main class="content content-desktop">
         <section class="copy">
-          <h1>Open this link on your iPhone&nbsp;or&nbsp;iPad</h1>
-          <p class="desktop-note">
+          <h1 class="desktop-title-ios">Open this link on your iPhone&nbsp;or&nbsp;iPad</h1>
+          <h1 class="desktop-title-android">Open this link in Chrome on Android</h1>
+          <h1 class="desktop-title-generic">Open this link on your phone</h1>
+          <p class="desktop-note desktop-note-ios">
             This page shows how to add {{APP_NAME}} to an iOS Home Screen.
+          </p>
+          <p class="desktop-note desktop-note-android">
+            This page shows how to install {{APP_NAME}} with Chrome on Android.
+          </p>
+          <p class="desktop-note desktop-note-generic">
+            Open {{APP_NAME}} on your phone to install it to your home screen.
           </p>
           <a class="desktop-open" href="{{APP_URL}}">Open {{APP_NAME}}</a>
         </section>
       </main>
     </div>
+
+    <script>
+      (function () {
+        var platform = document.documentElement.dataset.platform || "desktop";
+        if (platform !== "android") return;
+
+        var cta = document.getElementById("install-cta");
+        var hint = document.getElementById("android-prompt-hint");
+        var fallback = document.getElementById("android-fallback");
+        var deferred = null;
+
+        function showPromptUi() {
+          if (!cta) return;
+          cta.hidden = false;
+          if (hint) hint.hidden = false;
+          if (fallback) fallback.classList.add("is-secondary");
+        }
+
+        window.addEventListener("beforeinstallprompt", function (e) {
+          e.preventDefault();
+          deferred = e;
+          showPromptUi();
+        });
+
+        window.addEventListener("appinstalled", function () {
+          deferred = null;
+          if (cta) cta.hidden = true;
+          if (hint) {
+            hint.hidden = false;
+            hint.textContent = "Installed — you can open it from your home screen.";
+          }
+          if (fallback) fallback.hidden = true;
+        });
+
+        if (cta) {
+          cta.addEventListener("click", function () {
+            if (!deferred) return;
+            var promptEvent = deferred;
+            deferred = null;
+            promptEvent.prompt();
+            Promise.resolve(promptEvent.userChoice).then(function () {
+              /* choice settled; keep fallback visible if they dismissed */
+            });
+          });
+        }
+      })();
+    </script>
   </body>
 </html>

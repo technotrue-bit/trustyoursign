@@ -5,11 +5,15 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  PWA_ICON_PATHS,
+  PWA_STATUS_BAR_STYLE,
+  PWA_THEME_COLOR,
+} from "./grok-pwa-chrome.mjs";
 
 export const DEFAULT_APP_NAME = "Grok App";
-/** Match app chrome in `src/routes/__root.tsx` (edge-to-edge / safe-area). */
-export const PWA_THEME_COLOR = "#0c0b0a";
-export const PWA_STATUS_BAR_STYLE = "black-translucent";
+/** Re-export browser-safe chrome constants (also imported by `src/routes/__root.tsx`). */
+export { PWA_ICON_PATHS, PWA_STATUS_BAR_STYLE, PWA_THEME_COLOR };
 export const OG_SERVICE_URL_DEFAULT = "https://og.grok.me";
 export const OG_SITE_REL_PATH = "src/lib/og/site.json";
 
@@ -119,12 +123,18 @@ export function resolvePublicHost(hostHeader) {
   );
 }
 
+/**
+ * Install tutorial query. `platform` is an optional UI hint (ios / android);
+ * it no longer gates serving — Chrome Android must reach the same page.
+ */
 export function isInstallQuery(url) {
   const query = String(url ?? "").split("?", 2)[1] ?? "";
   const params = new URLSearchParams(query);
   const install = params.get("install");
+  if (install !== "1" && install !== "true") return false;
   const platform = (params.get("platform") ?? "").toLowerCase();
-  return (install === "1" || install === "true") && platform === "ios";
+  // Reject unknown platform hints so typos don't swallow the app document.
+  return platform === "" || platform === "ios" || platform === "android";
 }
 
 /** Paths that can carry an app document (vs assets / API / internals). */
@@ -184,9 +194,28 @@ export function renderWebManifest(hostHeader, site) {
       theme_color: PWA_THEME_COLOR,
       icons: [
         {
-          src: "/__grok/icon-180.png",
+          src: PWA_ICON_PATHS.appleTouch,
           sizes: "180x180",
           type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: PWA_ICON_PATHS.any192,
+          sizes: "192x192",
+          type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: PWA_ICON_PATHS.any512,
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: PWA_ICON_PATHS.maskable512,
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "maskable",
         },
       ],
     },
@@ -197,10 +226,15 @@ export function renderWebManifest(hostHeader, site) {
 
 export function grokPwaHeadTags(appName = DEFAULT_APP_NAME) {
   return [
+    // Single source of truth for PWA head chrome (also injected by middleware /
+    // Vite plugin). Do not re-declare these in src/routes/__root.tsx.
     // Standalone display comes from the manifest ("display": "standalone");
     // the legacy *-web-app-capable metas it replaces are deliberately absent.
     ["manifest", '<link rel="manifest" href="/__grok/manifest.webmanifest">'],
-    ["apple-touch-icon", '<link rel="apple-touch-icon" href="/__grok/icon-180.png">'],
+    [
+      "apple-touch-icon",
+      `<link rel="apple-touch-icon" href="${PWA_ICON_PATHS.appleTouch}">`,
+    ],
     [
       "apple-mobile-web-app-title",
       `<meta name="apple-mobile-web-app-title" content="${escapeHtml(appName)}">`,
@@ -450,7 +484,9 @@ export function injectGrokPwaHead(html, ctx = {}) {
   const missing = grokPwaHeadTags(appName)
     .filter(([key]) => {
       if (key === "manifest") return !next.includes('href="/__grok/manifest.webmanifest"');
-      if (key === "apple-touch-icon") return !next.includes('href="/__grok/icon-180.png"');
+      if (key === "apple-touch-icon") {
+        return !next.includes(`href="${PWA_ICON_PATHS.appleTouch}"`);
+      }
       return !next.includes(`name="${key}"`);
     })
     .map(([, tag]) => tag);
