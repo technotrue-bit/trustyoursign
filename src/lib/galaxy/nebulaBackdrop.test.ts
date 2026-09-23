@@ -23,7 +23,9 @@ import {
   makePlateEdgeMaskData,
   nebulaCompositeSize,
   nebulaUrl,
+  nebulaWallpaperGain,
   paintCenterVignette,
+  prebakedNebulaWallpaperUrl,
   paintPinpointStars,
   placementSize,
   plateEdgeAlphaAt,
@@ -189,6 +191,15 @@ describe("nebulaBackdrop", () => {
     assert.equal(nebulaCompositeSize(true), NEBULA_COMPOSITE_SIZE_MODEST);
     assert.equal(nebulaCompositeSize(false), NEBULA_COMPOSITE_SIZE);
     assert.equal(composeNebulaWallpaper(new Map(), 64), null);
+  });
+
+  it("ships static wallpaper URLs for each gain profile", () => {
+    assert.match(prebakedNebulaWallpaperUrl(false, "gl"), /\/sky\/nebula-wallpaper-1536-gl\.webp/);
+    assert.match(prebakedNebulaWallpaperUrl(true, "gl"), /nebula-wallpaper-1024-gl-modest\.webp/);
+    assert.match(prebakedNebulaWallpaperUrl(false, "2d"), /nebula-wallpaper-1536-2d\.webp/);
+    assert.equal(nebulaWallpaperGain("gl", false), NEBULA_GL_LAYER_GAIN);
+    assert.equal(nebulaWallpaperGain("gl", true), NEBULA_GL_LAYER_GAIN_MODEST);
+    assert.equal(nebulaWallpaperGain("2d", false), NEBULA_2D_LAYER_GAIN);
   });
 
   it("vignette keeps a readable charcoal centre", () => {
