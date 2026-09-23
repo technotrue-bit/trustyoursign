@@ -161,6 +161,29 @@ function hash(i: number, salt: number) {
   return x - Math.floor(x);
 }
 
+/** Share of a station cloud spent on the spiral arms and the outer halo. */
+const SPIRAL_FRACTION = 0.14;
+const HALO_FRACTION = 0.2;
+
+/**
+ * bodyN/spiralN/haloN always sum to n — shared by fillStationCloud and
+ * fillMorphCloud so the two never drift out of sync on where each kind
+ * of star starts in the buffer.
+ */
+function splitCloud(n: number) {
+  const spiralN = Math.floor(n * SPIRAL_FRACTION);
+  const haloN = Math.floor(n * HALO_FRACTION);
+  const bodyN = Math.max(1, n - spiralN - haloN);
+  return { bodyN, spiralN, haloN };
+}
+
+/** Inner/outer radius of the halo ring, in the same unit-figure space as signPos. */
+const HALO_R_MIN = 0.34;
+const HALO_R_MAX = 1.15;
+const HALO_R_SPAN = HALO_R_MAX - HALO_R_MIN;
+/** >1 biases sampling toward the inner edge, so density thins outward with no hard rim. */
+const HALO_R_BIAS = 1.7;
+
 export function fillStationCloud(
   geo: BufferGeometry,
   cloud: VolumeStar[],
@@ -168,9 +191,7 @@ export function fillStationCloud(
   count: number,
 ) {
   const n = count;
-  const spiralN = Math.floor(n * 0.16);
-  const haloN = Math.floor(n * 0.12);
-  const bodyN = Math.max(1, n - spiralN - haloN);
+  const { bodyN, spiralN, haloN } = splitCloud(n);
   const sign = new Float32Array(n * 3);
   const scat = new Float32Array(n * 3);
   const mag = new Float32Array(n);
@@ -234,17 +255,24 @@ export function fillStationCloud(
     scat[w * 3 + 2] = (hash(i, 8) - 0.5) * 2.2;
   }
 
+  // A continuous ring generator, biased toward the inner edge, so the
+  // outer fringe thins smoothly into the nebula instead of stopping at a
+  // hard rim — fills the empty band above and below the plate.
   for (let i = 0; i < haloN; i++) {
     const w = bodyN + spiralN + i;
     const a = hash(i, 9) * Math.PI * 2;
-    const r = 0.38 + hash(i, 10) * 0.42;
+    const rn = Math.pow(hash(i, 10), HALO_R_BIAS);
+    const r = HALO_R_MIN + rn * HALO_R_SPAN;
     sign[w * 3] = Math.cos(a) * r;
     sign[w * 3 + 1] = Math.sin(a) * r * 0.62;
     sign[w * 3 + 2] = (hash(i, 11) - 0.5) * 0.12;
-    mag[w] = 0.22 + hash(i, 12) * 0.28;
+    // Dimmer with radius, so the ring fades into the nebula rather than
+    // cutting off.
+    const fadeOuter = 1 - rn;
+    mag[w] = 0.14 + fadeOuter * 0.34 + hash(i, 12) * 0.12;
     kind[w] = 2;
     phase[w] = hash(i, 13) * 6.28;
-    const sr = 6 + hash(i, 14) * 8;
+    const sr = 6 + hash(i, 14) * 10;
     scat[w * 3] = Math.cos(a) * sr;
     scat[w * 3 + 1] = Math.sin(a) * sr * 0.75;
     scat[w * 3 + 2] = (hash(i, 15) - 0.5) * 4;
@@ -284,7 +312,7 @@ export function fillMorphCloud(
   const n = count;
   const glyph = (geo.getAttribute("glyphPos") as BufferAttribute).array as Float32Array;
   const kind = (geo.getAttribute("aKind") as BufferAttribute).array as Float32Array;
-  const bodyN = Math.max(1, n - Math.floor(n * 0.16) - Math.floor(n * 0.12));
+  const { bodyN } = splitCloud(n);
   const body = Math.min(cloud.length, bodyN);
   const plen = Math.max(1, pairs.length);
   for (let i = 0; i < body; i++) {
