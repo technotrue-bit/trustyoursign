@@ -1033,7 +1033,13 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       // starts (the one-plate rule's damping applies here too), and eases
       // back up over ~1s once the camera is settled again.
       const lifeTarget =
-        !held && !exploringHere && !prefersReducedMotion() && cameraSettledOn(index) ? 1 : 0;
+        !held &&
+        !exploringHere &&
+        !prefersReducedMotion() &&
+        !galaxyTravel.paused &&
+        cameraSettledOn(index)
+          ? 1
+          : 0;
       lifeEase.current =
         lifeTarget <= lifeEase.current
           ? lifeTarget
