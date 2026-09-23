@@ -36,6 +36,7 @@ import {
   EXPLORE_ZOOM_MIN,
   INSIDE_LANDING_DISTANCE,
   MAX_FLY_T,
+  PORTAL_CUT,
   SETTLED_VEL,
   aimedIndex,
   capFlightStep,
@@ -62,6 +63,9 @@ import {
   stepShaderTime,
   stepSign,
   stepZoom,
+  portalActive,
+  portalEnvelope,
+  portalTailing,
 } from "@/lib/galaxy/travel";
 import { SETTLE_DIST } from "@/lib/galaxy/dwellClip";
 import {
@@ -93,7 +97,8 @@ import {
   CLOUD_GAIN_IDLE,
   cloudBurstGain,
   fieldGather,
-  plateWeight,
+  parkedBand,
+  plateGeometry,
   signsPastStation,
   signArrive,
   stepArriveBurst,
@@ -161,6 +166,7 @@ const _cam = new Vector3();
 const _look = new Vector3();
 const _chest = new Vector3();
 const _fog = new Color();
+const _fogGoal = new Color();
 const _bg = new Color();
 const _accent = new Color();
 const _up = new Vector3(0, 1, 0);
@@ -386,7 +392,8 @@ function ArriveBurstTicker() {
     if (!TEMPLE_SIGNS[idx]) return;
     stepArriveBurst(signArrive, {
       aimed: idx,
-      dist: Math.abs(galaxyTravel.t - stationT(idx)),
+      // A portal parks t on the target at the cut while the camera is still a half-sign out.
+      dist: Math.abs(galaxyTravel.t - stationT(idx)) + Math.abs(galaxyTravel.portalSigns) / 11,
       dt,
       reduced: prefersReducedMotion(),
       paused: exploringSign() || introPlaying() || enterAnimating(),
@@ -430,7 +437,9 @@ function Dust() {
       dt,
       rate: 4,
     });
-    const vis = introField() * (exploringSign() ? galaxyTravel.worldFade : 1) * calm.current;
+    // Dust is world-anchored: dip it through a portal cut so its dots don't visibly jump.
+    const dip = portalActive() ? smooth(Math.abs(galaxyTravel.portalCamV - PORTAL_CUT) / 0.2) : 1;
+    const vis = introField() * (exploringSign() ? galaxyTravel.worldFade : 1) * calm.current * dip;
     mesh.visible = vis > 0.02;
     const mat = mesh.material;
     if (!Array.isArray(mat) && "opacity" in mat) mat.opacity = 0.35 * vis;
@@ -576,6 +585,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const slideX = useRef(0);
   const slideY = useRef(0);
   const scaleBoost = useRef(1);
+  /** Parked-band weight, eased so a landing never pops the plate to full. */
+  const parkedEase = useRef(eager && index === 0 ? 1 : 0);
   const [artTex, setArtTex] = useState<CanvasTexture | null>(() =>
     eager ? loadSignArt(sign.id) : null,
   );
@@ -758,14 +769,22 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     // One plate owns the frame: the nearest sign, handed to the next near the
     // midpoint, and dissolved before the camera can fly into it.
     const depth = -_sitCam.z;
+    // Parked eases in rather than snapping: a glide can land while the camera is
+    // still catching up, and the plate should not pop to full on that frame.
+    const poseSigns = (t - dest) * (TEMPLE_SIGNS.length - 1) + galaxyTravel.portalSigns;
+    const parkedTarget =
+      galaxyTravel.seek == null && !portalTailing() ? parkedBand(poseSigns) : 0;
+    parkedEase.current =
+      parkedTarget <= parkedEase.current
+        ? parkedTarget
+        : lerpToward({ current: parkedEase.current, target: parkedTarget, dt, rate: 3.5 });
     const fade =
       held || exploringHere
         ? 1
-        : plateWeight(
-            signsPastStation(galaxyTravel.restDist, depth, NAVE),
-            galaxyTravel.restDist,
-            depth,
-            (t - dest) * (TEMPLE_SIGNS.length - 1),
+        : Math.max(
+            plateGeometry(signsPastStation(galaxyTravel.restDist, depth, NAVE), galaxyTravel.restDist, depth) *
+              portalEnvelope(index),
+            parkedEase.current,
           );
     const show = held || exploringHere || fade > 0.004;
     stationWeight[index] = show ? fade : 0;
@@ -1236,6 +1255,9 @@ function TempleRig() {
   const current = useRef(galaxyTravel.t);
   /** The t this rig last published, to tell its own writes from an outside placement. */
   const written = useRef(galaxyTravel.t);
+  const warpSeen = useRef(galaxyTravel.warpSeq);
+  const lastVirtualT = useRef(galaxyTravel.t);
+  const fogReady = useRef(false);
   const lastStation = useRef(0);
   const epoch = useRef(galaxyTravel.epoch);
   const lastPub = useRef(-1);
@@ -1361,12 +1383,19 @@ function TempleRig() {
     }
     current.current = clamp01(current.current + step);
     const t = current.current;
-    galaxyTravel.vel = (t - t0) / d;
+    // Speed along the virtual path (t plus any portal offset), with a portal cut's
+    // jump taken out, so a portal reads as the one-sign glide it looks like.
+    if (prefersReducedMotion() && Math.abs(t - t0) > 0.02) snapPose = true;
+    const warped = galaxyTravel.warpSeq !== warpSeen.current;
+    const vt = t + galaxyTravel.portalSigns / (TEMPLE_SIGNS.length - 1);
+    let dv = snapPose || !booted.current ? 0 : vt - lastVirtualT.current;
+    if (warped) dv -= galaxyTravel.warpT;
+    lastVirtualT.current = vt;
+    galaxyTravel.vel = dv / d;
     galaxyTravel.traveling =
       sought.active ||
       Math.abs(galaxyTravel.tTarget - t) > SETTLE_DIST ||
       Math.abs(galaxyTravel.vel) > SETTLED_VEL;
-    if (prefersReducedMotion() && Math.abs(t - t0) > 0.02) snapPose = true;
     TEMPLE_CURVE.getPointAt(t, _chest);
     const aspect = viewAspect(size);
     const idx = stationFromT(t);
@@ -1392,6 +1421,12 @@ function TempleRig() {
     _look.copy(_chest);
     _look.z -= 1.4 + introCam() * 1.0;
     _look.y += frame.portrait ? 0.05 : 0.15;
+    if (galaxyTravel.portalSigns !== 0) {
+      // Portal glide: the camera travels off its station along the corridor (+ = forward, −z).
+      const off = galaxyTravel.portalSigns * NAVE;
+      _cam.z -= off;
+      _look.z -= off;
+    }
     if (!arriving) {
       // The pointer sway belongs to the corridor aim, so a sign exit can blend into
       // it continuously (below) instead of snapping it on in one frame.
@@ -1522,6 +1557,14 @@ function TempleRig() {
     }
 
     if (!Number.isFinite(_cam.x) || !Number.isFinite(_look.x)) return;
+    if (warped) {
+      // Portal cut: the scene swaps stations under the camera. Shift the lagging
+      // camera by the same amount so its speed and trail carry straight through.
+      warpSeen.current = galaxyTravel.warpSeq;
+      camera.position.x += galaxyTravel.warp.x;
+      camera.position.y += galaxyTravel.warp.y;
+      camera.position.z += galaxyTravel.warp.z;
+    }
     camera.up.copy(_up);
     if (!booted.current || arriving || snapSkipPose || snapPose) {
       camera.position.copy(_cam);
@@ -1537,6 +1580,17 @@ function TempleRig() {
       const ease = exploring ? 1 - Math.exp(-d * 1.6) : k;
       camera.position.lerp(_cam, ease);
       camera.lookAt(_look);
+    }
+    if (portalActive()) {
+      // Where the camera itself has reached on the portal (it trails the pose); the cut waits for it.
+      const lag = (galaxyTravel.portalDir * (camera.position.z - _cam.z)) / NAVE;
+      galaxyTravel.portalCamV = galaxyTravel.portalV - lag;
+      galaxyTravel.portalCamFed = true;
+    } else if (portalTailing()) {
+      // Pose landed; follow the camera home so the arriving plate's fade stays on it.
+      const lag = (galaxyTravel.portalTailDir * (camera.position.z - _cam.z)) / NAVE;
+      galaxyTravel.portalCamV = Math.max(galaxyTravel.portalCamV, 1 - lag);
+      if (galaxyTravel.portalCamV >= 0.99 || exploring) galaxyTravel.portalTailTo = null;
     }
     // The seam-clearance roll lives on the *figure* (SignGalaxyField), not here:
     // the station is billboarded to the camera, so rolling the camera would carry
@@ -1572,7 +1626,11 @@ function TempleRig() {
       camera.updateProjectionMatrix();
     }
     if (scene.fog instanceof FogExp2) {
-      lerpFog(t, _fog);
+      // Eased over time, so a portal cut (or a fast pass) never flips the sky's tint in a frame.
+      lerpFog(t, _fogGoal);
+      if (fogReady.current) _fog.lerp(_fogGoal, 1 - Math.exp(-d * 3));
+      else _fog.copy(_fogGoal);
+      fogReady.current = true;
       const fogMul = exploring ? 0.55 + galaxyTravel.worldFade * 0.45 : 1;
       scene.fog.color.copy(_fog).multiplyScalar(fogMul);
       _bg.copy(_fog).multiplyScalar(0.35 * fogMul);

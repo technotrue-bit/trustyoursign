@@ -4,7 +4,7 @@ import { lonToXZ } from "@/lib/chart/geometry";
 import { CONSTELLATIONS, constellationDust, pairFigures } from "@/lib/galaxy/constellations";
 import { preloadSignArt, signArtImage } from "@/lib/galaxy/signArt";
 import { getSignVolume } from "@/lib/galaxy/signVolume";
-import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, decayWheelGlide, ensureAutoClock, ensureFlyInput, exploringSign, galaxyTravel, gateForm, pinchQuiet, prefersReducedMotion, publishTravel, settleCorridor, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepShaderTime, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
+import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, decayWheelGlide, ensureAutoClock, ensureFlyInput, exploringSign, galaxyTravel, gateForm, pinchQuiet, portalActive, portalEnvelope, prefersReducedMotion, publishTravel, settleCorridor, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepShaderTime, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
 import { plateOwnership } from "@/lib/galaxy/signField";
 import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
@@ -733,6 +733,16 @@ export function FallbackSky({ note }: { note?: string }) {
           const holdIdx = CONSTELLATIONS.findIndex((c) => c.id === picked);
           const hold = holdIdx >= 0 ? CONSTELLATIONS[holdIdx] : undefined;
           if (hold) drawConstellation(hold, 0.42, 1, depth, skyTime, holdIdx, true, true);
+        } else if (portalActive()) {
+          // Portal glide: the leaving sign dissolves, the arriving one rises after the cut.
+          for (const i of [galaxyTravel.portalFrom, galaxyTravel.portalTo]) {
+            if (i == null) continue;
+            const signs = (t - stationT(i)) * 11 + galaxyTravel.portalSigns;
+            const form = 0.95 * plateOwnership(signs) * portalEnvelope(i) * awaken;
+            const sign = CONSTELLATIONS[i];
+            const along = Math.max(0.12, (Math.abs(signs) / 11) * 8 + 0.35);
+            if (sign && form > 0.04) drawConstellation(sign, along, form, depth, skyTime, i, false, true);
+          }
         } else if (galaxyTravel.seekDirect && galaxyTravel.seek != null) {
           const aim = aimedIndex(t);
           const dest = stationT(aim);
