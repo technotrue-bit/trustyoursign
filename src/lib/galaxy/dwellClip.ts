@@ -1,5 +1,4 @@
 import type { SignId } from "@/lib/chart/types";
-import { LAND_DIST } from "./signField";
 import { stationT } from "./temple";
 
 /**
@@ -22,9 +21,15 @@ export function dwellClipFor(id: SignId): string | undefined {
   return DWELL_CLIPS[id];
 }
 
-/** True once travel t is on this station, not still sliding in. */
+/**
+ * Travel t within this of a station counts as on it (≈2% of a sign). Glides land
+ * exactly, so this only absorbs float error — a flight passing through is not "on" it.
+ */
+export const SETTLE_DIST = 0.002;
+
+/** True once travel t is on this station, not still sliding in. Position only. */
 export function settledOnSign(t: number, index: number) {
-  return Math.abs(t - stationT(index)) <= LAND_DIST;
+  return Math.abs(t - stationT(index)) <= SETTLE_DIST;
 }
 
 function harden(video: HTMLVideoElement) {

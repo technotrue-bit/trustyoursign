@@ -2,6 +2,7 @@
 import { CONSTELLATIONS, nearestSign, signStation, signedDelta, wrap12 } from "./constellations";
 import {
   DWELL_STILL_SEC,
+  SETTLE_DIST,
   dwellClipFor,
   pauseDwellClip,
   settledOnSign,
@@ -23,12 +24,14 @@ import {
   type ExplorePhase,
 } from "./signGalaxy";
 import { useGalaxy, currentConstellation } from "./store";
-import { clamp01, stationFromT, stationT } from "./temple";
+import { STATION_N, clamp01, stationFromT, stationT } from "./temple";
 import { introPlaying, skipIntro, introCanSkip, templeIntro } from "./intro";
 
 export { signedDelta, wrap12 };
 export type { ExplorePhase };
 export type EnterSkipPhase = "idle" | "out" | "hold" | "in";
+/** direct = strip / Enter jump; walk = hands-off advance; glide = wheel / keys; settle = hands-off landing. */
+export type SeekKind = "direct" | "walk" | "glide" | "settle";
 
 /** Seconds for the full enter morph (fade → dive → galaxy form). */
 const ENTER_SEC = 4.5;
@@ -46,8 +49,15 @@ export const CRUISE = 0.14;
 /** After a jump, ease through animal → explosion → glyph. Patient so the stars can gather. */
 export const PLAY_CRUISE = 0.48;
 /** Slide or hold the sky to fly — medium, same both ways. */
-export const HOLD_FLY = 0.58;
-export const MAX_FLY = 1.12;
+export const HOLD_FLY = 0.42;
+/** Hard ceiling on corridor speed, same units as HOLD_FLY. Nothing flies faster, flick or not. */
+export const MAX_FLY = 0.72;
+/** Travel t per second for one unit of fly speed in the 3D corridor. */
+export const FLY_T = 0.22;
+/** One station in travel t. */
+export const STATION_GAP_T = 1 / (STATION_N - 1);
+/** Top corridor speed in travel t per second. */
+export const MAX_FLY_T = MAX_FLY * FLY_T;
 /** World units along −Z per t. Signs sit farther apart so the burst can read. */
 export const SPACING = 50;
 /** Sign sits this far ahead of its station. You still fly through it while its name is up. */
@@ -68,8 +78,24 @@ export const SEEK_ARRIVE = 0.55;
 export const SEEK_THROUGH = 0.34;
 /** Never skip more than ~2 frames of birth, even after a load hitch. */
 const BIRTH_DT_CAP = 0.032;
-/** Strip click: fly straight to the sign without station-hopping. */
-const DIRECT_SEEK_SEC = 0.85;
+/** Strip click: fly straight to the sign without station-hopping. Base, per sign crossed, cap. */
+export const DIRECT_SEEK_SEC = 0.95;
+const DIRECT_SEEK_PER_SIGN = 0.05;
+const DIRECT_SEEK_MAX_SEC = 1.5;
+/** Wheel notch or hands-off settle: seconds to glide one sign (scaled by √signs). */
+export const GLIDE_SEC = 1.5;
+/** Hands-off walk to the next sign. Slower than a glide — nobody asked to move. */
+export const WALK_SEC = 2.4;
+/** Hands off past this share of a sign (in the direction of travel) lands the next one; less eases back. */
+export const SETTLE_COMMIT = 0.12;
+/** Camera speed under which it counts as parked, travel t per second. */
+export const SETTLED_VEL = 0.002;
+/** Drag may lead the camera by at most this much t. One sky, not twelve. */
+const DRAG_LEAD_T = 1.2 * STATION_GAP_T;
+/** Drag pixels per unit of corridor t. */
+const DRAG_T_PX = 2600;
+/** Reduced motion drag: pixels that cut to the next sign. */
+const REDUCED_DRAG_STEP_PX = 90;
 /** After a sign click/select, hold the highlight this long before clearing. */
 export const SELECTION_HOLD_MS = 10_000;
 /** First look starts on the ram, before the Aries station. */
@@ -104,16 +130,33 @@ const EXPLORE_LOOK_DRAG_Y = 135;
 const EXPLORE_LOOK_TOUCH_FEEL = 1.05;
 /** Look units per second while WASD / arrows are held. */
 const EXPLORE_LOOK_KEY_RATE = 3.2;
+/**
+ * Wheel pixels per sign of intent. The wheel steers a station aim, not a raw
+ * velocity: impulse = px / WHEEL_STEP_PX, and the camera glides to the aim.
+ */
+export const WHEEL_STEP_PX = 120;
+/** Pixels that commit the first sign of a fresh gesture, so one notch always answers. */
+export const WHEEL_FIRST_PX = 40;
+/** Signs the wheel may queue ahead of the camera. A flick cannot outrun this. */
+export const WHEEL_AHEAD = 2;
+/** A gap this long ends a wheel gesture; the next notch is a first notch again. */
+const WHEEL_GESTURE_GAP_MS = 260;
+/** Reduced motion: one cut per step, never a burst of cuts from a trackpad flick. */
+const WHEEL_REDUCED_COOLDOWN_MS = 650;
+/** Inside a sign galaxy the wheel zooms on the original scale. */
+const INSIDE_WHEEL_PX = 900;
 /** Below this a wheel impulse is trackpad momentum dribble, not a new flick. */
-const WHEEL_ARM_IMPULSE = 0.004;
-/** How fast a wheel-driven glide fades once the fingers stop. */
-export const WHEEL_GLIDE_DECAY = 5;
+const WHEEL_ARM_IMPULSE = 0.03;
+/** How fast the wheel's hands-on latch fades once the fingers stop. */
+export const WHEEL_GLIDE_DECAY = 2.2;
 
 let reduceCache = false;
 let reduceAt = -1e9;
 let autoClock = 0;
 let autoLast = 0;
 let enterSkipWatchdog = 0;
+/** Signs committed by the current wheel gesture. */
+let wheelCommits = 0;
 
 export const galaxyTravel = {
   t: OPEN_T,
@@ -134,6 +177,10 @@ export const galaxyTravel = {
   awaken: 0,
   /** World-units per second along the flight path. */
   speed: 0,
+  /** Travel t per second the camera moved last frame. Written by the 3D rig. */
+  vel: 0,
+  /** World units between the camera and the station it is parked on. Written by the 3D rig. */
+  restDist: 15,
   /** 0 → 1 first-load star birth. 1 means the sky is open. */
   birth: 0,
   /** Pointer in view, −0.5…0.5. */
@@ -162,6 +209,18 @@ export const galaxyTravel = {
   wheelUntil: 0,
   /** True while the wheel is what drives the flight, so its glide can fade. */
   wheelDriven: false,
+  /** Wheel pixels banked toward the next sign in this gesture. */
+  wheelAcc: 0,
+  /** Direction of the current wheel gesture. */
+  wheelDir: 0,
+  /** performance.now() of the last wheel event, to tell gestures apart. */
+  wheelAt: 0,
+  /** Reduced motion: wheel steps are ignored until this time. */
+  wheelCoolUntil: 0,
+  /** Last steering direction, so hands-off lands the sign you were heading for. */
+  flyDir: 0,
+  /** Reduced motion: drag pixels banked toward the next cut. */
+  dragAcc: 0,
   /** Bumped on reset so the camera rig snaps instead of keeping stale t. */
   epoch: 0,
   /** 1 = rest hero. >1 pulls into the current sign. Pinch on mobile. */
@@ -172,6 +231,11 @@ export const galaxyTravel = {
   seekTargetIndex: null as number | null,
   seekStartT: null as number | null,
   seekElapsed: 0,
+  seekKind: "walk" as SeekKind,
+  /** Seconds the current seek takes. Null until its first step knows where it starts. */
+  seekDur: null as number | null,
+  /** Camera speed when the seek began, so the ease picks up the motion instead of braking. */
+  seekV0: 0,
   /** Per-sign galaxy explore — nested inside a corridor station. */
   explorePhase: "idle" as ExplorePhase,
   exploreSignIndex: null as number | null,
@@ -261,6 +325,31 @@ function clearDwellClip() {
   stopDwellClip();
 }
 
+/** Kill the life clip now; the still plate takes the frame back. */
+export function killDwellClip() {
+  clearDwellClip();
+}
+
+/**
+ * Parked on this station: on it, not sliding, nothing queued, nobody steering.
+ * Position alone is not enough — a flight passing through the station is not parked.
+ */
+export function cameraSettledOn(index: number) {
+  if (galaxyTravel.seek != null || galaxyTravel.traveling) return false;
+  if (galaxyTravel.dragging || galaxyTravel.hold !== 0) return false;
+  if (nowMs() < galaxyTravel.wheelUntil) return false;
+  if (Math.abs(galaxyTravel.vel) > SETTLED_VEL) return false;
+  if (Math.abs(galaxyTravel.tTarget - galaxyTravel.t) > SETTLE_DIST) return false;
+  return settledOnSign(galaxyTravel.t, index);
+}
+
+/** The life clip may run on this station right now. Refuses unless the camera is SETTLED. */
+export function dwellClipMayPlay(index: number) {
+  if (prefersReducedMotion() || exploringSign() || introPlaying()) return false;
+  if (galaxyTravel.dwellClipIndex !== index || galaxyTravel.dwellClipDone) return false;
+  return cameraSettledOn(index);
+}
+
 /** Advance the opening birth one display frame. Capped so a hitch never jumps the boom. */
 export function stepBirth(dt?: number) {
   if (galaxyTravel.birth >= 1) return false;
@@ -306,6 +395,14 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.dragging = false;
   galaxyTravel.wheelUntil = 0;
   galaxyTravel.wheelDriven = false;
+  galaxyTravel.wheelAcc = 0;
+  galaxyTravel.wheelDir = 0;
+  galaxyTravel.wheelAt = 0;
+  galaxyTravel.wheelCoolUntil = 0;
+  galaxyTravel.flyDir = 0;
+  galaxyTravel.dragAcc = 0;
+  galaxyTravel.vel = 0;
+  wheelCommits = 0;
   galaxyTravel.epoch += 1;
   galaxyTravel.zoom = 1;
   galaxyTravel.zoomTarget = 1;
@@ -313,6 +410,9 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.seekTargetIndex = null;
   galaxyTravel.seekStartT = null;
   galaxyTravel.seekElapsed = 0;
+  galaxyTravel.seekKind = "walk";
+  galaxyTravel.seekDur = null;
+  galaxyTravel.seekV0 = 0;
   resetExplore(false);
   clearDwellClip();
   restIdle();
@@ -810,6 +910,74 @@ function clearDirectSeek() {
   galaxyTravel.seekTargetIndex = null;
   galaxyTravel.seekStartT = null;
   galaxyTravel.seekElapsed = 0;
+  galaxyTravel.seekDur = null;
+  galaxyTravel.seekV0 = 0;
+}
+
+/**
+ * Cubic ease that leaves `start` at `v0` (t per second) and lands on `dest` at rest
+ * after `dur` seconds. With v0 = 0 it is smoothstep. `u` is elapsed / dur.
+ */
+export function easeArrive(u: number, start: number, dest: number, v0: number, dur: number) {
+  const x = clamp01(u);
+  const x2 = x * x;
+  const x3 = x2 * x;
+  return start + (dest - start) * (3 * x2 - 2 * x3) + v0 * dur * (x3 - 2 * x2 + x);
+}
+
+/** How long a seek of `gapSigns` stations takes. Reduced motion cuts: zero. */
+export function seekSeconds(gapSigns: number, kind: SeekKind, reduced = false) {
+  const g = Math.abs(gapSigns);
+  if (reduced || !(g > 1e-4)) return 0;
+  if (kind === "direct") return Math.min(DIRECT_SEEK_MAX_SEC, DIRECT_SEEK_SEC + DIRECT_SEEK_PER_SIGN * g);
+  const base = (kind === "walk" ? WALK_SEC : GLIDE_SEC) * Math.sqrt(g);
+  // Smoothstep peaks at 1.5× its average speed — keep that peak under MAX_FLY.
+  const capped = (1.5 * g * STATION_GAP_T) / MAX_FLY_T;
+  return Math.max(0.35, base, capped);
+}
+
+/**
+ * Station to land on when hands come off at `t`. Heading forward, anything past
+ * SETTLE_COMMIT of a sign lands the next one; less eases back. No direction: nearest.
+ */
+export function settleStation(t: number, dir: number, commit = SETTLE_COMMIT) {
+  const u = clamp01(t) * (STATION_N - 1);
+  const i = dir > 0 ? Math.ceil(u - commit) : dir < 0 ? Math.floor(u + commit) : Math.round(u);
+  return Math.min(STATION_N - 1, Math.max(0, i));
+}
+
+function beginSeek(i: number, kind: SeekKind) {
+  const dest = stationT(i);
+  galaxyTravel.seek = dest;
+  galaxyTravel.tTarget = dest;
+  galaxyTravel.playUntil = null;
+  galaxyTravel.seekKind = kind;
+  galaxyTravel.seekStartT = null;
+  galaxyTravel.seekElapsed = 0;
+  galaxyTravel.seekDur = null;
+  galaxyTravel.seekV0 = galaxyTravel.vel;
+  galaxyTravel.seekDirect = kind === "direct";
+  galaxyTravel.seekTargetIndex = kind === "direct" ? i : null;
+  return dest;
+}
+
+function primeAround(i: number) {
+  const sign = CONSTELLATIONS[i];
+  if (sign) primeSignArt(sign.id);
+  const nxt = CONSTELLATIONS[(i + 1) % 12];
+  if (nxt) primeSignArt(nxt.id);
+  const prev = CONSTELLATIONS[(i + 11) % 12];
+  if (prev) primeSignArt(prev.id);
+}
+
+/** Wheel, keys, or a hands-off settle: ease to a neighbouring sign without selecting it. */
+function glideToStation(i: number, kind: "glide" | "settle") {
+  clearDwellClip();
+  beginSeek(i, kind);
+  primeAround(i);
+  galaxyTravel.moved = true;
+  galaxyTravel.awaken = 1;
+  restIdle();
 }
 
 /** Jump the flight path to a sign. Arrive as the animal and hold until they fly or rest. */
@@ -823,35 +991,83 @@ export function seekSign(index: number, opts?: SeekOptions) {
     }
   }
   const i = ((Math.round(index) % 12) + 12) % 12;
-  const dest = stationT(i);
-  const direct = opts?.direct ?? false;
+  // A jump across several signs hides the ones in between rather than strobing through them.
+  const far = Math.abs(i - stationFromT(galaxyTravel.tTarget)) > 1;
+  const direct = opts?.direct ?? far;
   const select = !opts?.auto;
-  galaxyTravel.seek = dest;
-  galaxyTravel.tTarget = dest;
-  galaxyTravel.playUntil = null;
+  const dest = beginSeek(i, direct ? "direct" : "walk");
   if (select) {
     galaxyTravel.moved = true;
     galaxyTravel.awaken = 1;
   }
-  if (direct) {
-    galaxyTravel.seekDirect = true;
-    galaxyTravel.seekTargetIndex = i;
-    galaxyTravel.seekStartT = galaxyTravel.t;
-    galaxyTravel.seekElapsed = 0;
-  } else {
-    clearDirectSeek();
-  }
-  const sign = CONSTELLATIONS[i];
-  if (sign) primeSignArt(sign.id);
-  const nxt = CONSTELLATIONS[(i + 1) % 12];
-  if (nxt) primeSignArt(nxt.id);
-  const prev = CONSTELLATIONS[(i + 11) % 12];
-  if (prev) primeSignArt(prev.id);
+  primeAround(i);
   restIdle();
   publishTravel(dest, select ? true : undefined);
   if (select) armSelectionHold();
   primeSignArt(currentConstellation().id);
   return i;
+}
+
+/**
+ * Hands are off and the camera is between signs: glide onto one. Returns true
+ * when a landing started. Safe to call every frame.
+ */
+export function settleCorridor(t: number) {
+  if (galaxyTravel.paused || galaxyTravel.birth < 1 || galaxyTravel.busy) return false;
+  if (galaxyTravel.seek != null || galaxyTravel.dragging || galaxyTravel.hold !== 0) return false;
+  if (exploringSign() || introPlaying() || pinchQuiet()) return false;
+  const i = settleStation(galaxyTravel.tTarget, galaxyTravel.flyDir);
+  const dest = stationT(i);
+  galaxyTravel.flyDir = 0;
+  if (Math.abs(dest - t) <= SETTLE_DIST * 0.5 && Math.abs(galaxyTravel.tTarget - dest) <= SETTLE_DIST) {
+    galaxyTravel.tTarget = dest;
+    return false;
+  }
+  glideToStation(i, "settle");
+  return true;
+}
+
+/** Cancel an easing seek so a finger can steer, keeping the camera's current speed. */
+function yieldSeekToHands() {
+  if (galaxyTravel.seek == null || galaxyTravel.seekDirect) return;
+  galaxyTravel.seek = null;
+  clearDirectSeek();
+  // The rig follows tTarget at ~2.9/s; leading by vel/2.9 keeps the speed it had.
+  galaxyTravel.tTarget = clamp01(galaxyTravel.t + galaxyTravel.vel / 2.9);
+}
+
+/** The station the next wheel / key step starts from: a pending seek's target, else the aim. */
+function stepOrigin() {
+  return (galaxyTravel.seek ?? galaxyTravel.tTarget) * (STATION_N - 1);
+}
+
+/**
+ * Commit one sign in `dir`. Refuses once the camera would be more than
+ * WHEEL_AHEAD signs behind — a flick queues at most that, never a runaway.
+ */
+function commitStep(dir: 1 | -1) {
+  const from = stepOrigin();
+  const next = Math.min(
+    STATION_N - 1,
+    Math.max(0, dir > 0 ? Math.ceil(from + 0.02) : Math.floor(from - 0.02)),
+  );
+  if (next === Math.round(from) && Math.abs(from - next) < 0.02) return false;
+  // Only a glide in flight can build a queue; from rest the step is always one sign.
+  const cam = galaxyTravel.seek != null ? galaxyTravel.t * (STATION_N - 1) : from;
+  if (Math.abs(next - cam) > WHEEL_AHEAD + 0.02) return false;
+  glideToStation(next, "glide");
+  return true;
+}
+
+/** Keys: one press, one sign. Held keys repeat, capped by WHEEL_AHEAD. */
+export function stepSign(dir: 1 | -1) {
+  if (flyLocked() || exploringSign() || galaxyTravel.birth < 1) return false;
+  if (galaxyTravel.seekDirect && galaxyTravel.seek != null) return false;
+  noteControl();
+  galaxyTravel.wheelDriven = false;
+  galaxyTravel.handsOn = true;
+  galaxyTravel.wheelUntil = nowMs() + 220;
+  return commitStep(dir);
 }
 
 /** Publish camera t to React — during a direct seek, signIndex stays on the target. */
@@ -861,10 +1077,11 @@ export function publishTravel(t: number, moved?: boolean) {
   useGalaxy.getState().setTravel(t, moved, override ?? undefined);
 }
 
-/** Hands on the sky — don't auto-advance until they let go. */
+/** Hands on the sky — don't auto-advance until they let go. Any touch kills the life clip. */
 export function noteControl() {
   restIdle();
   galaxyTravel.playUntil = null;
+  clearDwellClip();
 }
 
 function flyLocked() {
@@ -999,13 +1216,67 @@ export function applyFlyDelta(dy: number, dx = 0, touch = false) {
   // Match L/R drag to U/D: same feel coeff, and sustain hold on the dominant axis
   // (hold used to ignore dx, so horizontal fly felt one-shot while vertical cruised).
   galaxyTravel.steer += (dy / 420 - dx / 420) * feel;
-  galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + (dy * feel) / 2200 - (dx * feel) / 2200);
   const useX = Math.abs(dx) > Math.abs(dy);
   const axis = useX ? -dx : dy;
-  if (Math.abs(axis) > 2) galaxyTravel.hold = axis > 0 ? 1 : -1;
+  if (Math.abs(axis) > 2) {
+    galaxyTravel.hold = axis > 0 ? 1 : -1;
+    galaxyTravel.flyDir = galaxyTravel.hold;
+  }
   galaxyTravel.moved = true;
   galaxyTravel.awaken = 1;
   noteControl();
+  if (prefersReducedMotion()) {
+    // No flight under reduced motion: bank the drag and cut one sign per step.
+    galaxyTravel.dragAcc += (dy - dx) * feel;
+    if (Math.abs(galaxyTravel.dragAcc) >= REDUCED_DRAG_STEP_PX) {
+      const dir = galaxyTravel.dragAcc > 0 ? 1 : -1;
+      galaxyTravel.dragAcc = 0;
+      commitStep(dir);
+    }
+    return;
+  }
+  // A strip / Enter jump owns the camera until it lands.
+  if (galaxyTravel.seekDirect && galaxyTravel.seek != null) return;
+  yieldSeekToHands();
+  galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + ((dy - dx) * feel) / DRAG_T_PX);
+}
+
+/**
+ * Bank wheel pixels toward the next sign. From rest a light touch (WHEEL_FIRST_PX)
+ * answers; while the camera is still gliding each further sign costs more, the
+ * further it has fallen behind, so a flick cannot stack speed.
+ */
+function bankWheel(dir: 1 | -1, px: number) {
+  // A strip / Enter jump owns the camera until it lands.
+  if (galaxyTravel.seekDirect && galaxyTravel.seek != null) return;
+  const now = nowMs();
+  const fresh = dir !== galaxyTravel.wheelDir || now - galaxyTravel.wheelAt > WHEEL_GESTURE_GAP_MS;
+  galaxyTravel.wheelAt = now;
+  if (fresh) {
+    galaxyTravel.wheelDir = dir;
+    galaxyTravel.wheelAcc = 0;
+    wheelCommits = 0;
+  }
+  const reduced = prefersReducedMotion();
+  if (reduced && now < galaxyTravel.wheelCoolUntil) return;
+  galaxyTravel.wheelAcc += px;
+  const behind = Math.abs(stepOrigin() - galaxyTravel.t * (STATION_N - 1));
+  const need =
+    wheelCommits === 0 || galaxyTravel.seek == null
+      ? WHEEL_FIRST_PX
+      : WHEEL_STEP_PX * (1 + Math.max(0, behind - 0.5));
+  if (galaxyTravel.wheelAcc < need) return;
+  if (!commitStep(dir)) {
+    // Saturated: extra scrolling is dropped, not queued for later.
+    galaxyTravel.wheelAcc = need;
+    return;
+  }
+  wheelCommits += 1;
+  galaxyTravel.wheelAcc -= need;
+  if (reduced) {
+    galaxyTravel.wheelAcc = 0;
+    galaxyTravel.wheelCoolUntil = now + WHEEL_REDUCED_COOLDOWN_MS;
+  }
 }
 
 export function applyWheel(deltaY: number, deltaX = 0, deltaMode = 0) {
@@ -1018,31 +1289,32 @@ export function applyWheel(deltaY: number, deltaX = 0, deltaMode = 0) {
   // Only the vertical axis flies. A trackpad's two-finger sideways scroll used to
   // sum into this impulse, so a horizontal swipe flew the corridor, and a diagonal
   // one could fly it backwards — `hold` follows the sign of the sum.
-  const impulse = (deltaY * scale) / 900;
+  const px = deltaY * scale;
   if (insideSignGalaxy()) {
     if (galaxyTravel.birth < 1) return;
-    applyPinch(Math.exp(-impulse * 0.55));
+    applyPinch(Math.exp(-(px / INSIDE_WHEEL_PX) * 0.55));
     return;
   }
   if (galaxyTravel.birth < 1) {
     skipBirth();
     return;
   }
-  galaxyTravel.steer += impulse;
-  galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + impulse * 0.085);
-  // A zero or sideways impulse is not a flight command: it must not latch a
-  // direction, arm the window, or claim the wheel.
-  if (Math.abs(impulse) > 0.002) {
-    galaxyTravel.hold = impulse > 0 ? 1 : -1;
-    galaxyTravel.wheelDriven = true;
-    // Trackpad momentum keeps firing events after the fingers lift. Re-arming the
-    // window on every dribble made the sky keep flying with nothing touching it, so
-    // only a real flick re-arms it.
-    if (Math.abs(impulse) >= WHEEL_ARM_IMPULSE) galaxyTravel.wheelUntil = nowMs() + 220;
-  }
+  const impulse = px / WHEEL_STEP_PX;
+  galaxyTravel.steer += px / INSIDE_WHEEL_PX;
   galaxyTravel.moved = true;
   galaxyTravel.awaken = 1;
   noteControl();
+  // A zero or sideways impulse is not a flight command: it must not latch a
+  // direction, arm the window, or claim the wheel.
+  if (Math.abs(impulse) <= 0.015) return;
+  const dir = impulse > 0 ? 1 : -1;
+  galaxyTravel.hold = dir;
+  galaxyTravel.wheelDriven = true;
+  // Trackpad momentum keeps firing events after the fingers lift. Re-arming the
+  // window on every dribble made the sky keep flying with nothing touching it, so
+  // only a real flick re-arms it.
+  if (Math.abs(impulse) >= WHEEL_ARM_IMPULSE) galaxyTravel.wheelUntil = nowMs() + 220;
+  bankWheel(dir, Math.abs(px));
 }
 
 export function applyPinch(ratio: number) {
@@ -1075,7 +1347,30 @@ export function endFly() {
   galaxyTravel.dragging = false;
   galaxyTravel.hold = 0;
   galaxyTravel.wheelDriven = false;
+  galaxyTravel.dragAcc = 0;
   galaxyTravel.handsOn = nowMs() < galaxyTravel.wheelUntil;
+}
+
+/**
+ * Free corridor flight, one 3D frame (no seek, intro, explore, or claim running).
+ * Held drag flies at HOLD_FLY; hands off lands the sign you were heading for.
+ */
+export function stepCorridorFlight(t: number, dt: number) {
+  const hands = galaxyTravel.dragging || nowMs() < galaxyTravel.wheelUntil;
+  galaxyTravel.handsOn = hands;
+  if (galaxyTravel.dragging && galaxyTravel.hold !== 0 && !prefersReducedMotion()) {
+    galaxyTravel.tTarget += galaxyTravel.hold * HOLD_FLY * FLY_T * dt;
+  }
+  galaxyTravel.tTarget = clamp01(clamp(galaxyTravel.tTarget, t - DRAG_LEAD_T, t + DRAG_LEAD_T));
+  decayWheelGlide(dt);
+  galaxyTravel.steer = 0;
+  settleCorridor(t);
+}
+
+/** Clamp one frame of free flight to MAX_FLY. */
+export function capFlightStep(step: number, dt: number) {
+  const cap = MAX_FLY_T * dt;
+  return clamp(step, -cap, cap);
 }
 
 /**
@@ -1162,6 +1457,7 @@ export function ensureFlyInput() {
       mode = "fly";
       galaxyTravel.dragging = true;
       galaxyTravel.hold = 1;
+      galaxyTravel.flyDir = 1;
       galaxyTravel.moved = true;
       galaxyTravel.awaken = 1;
       noteControl();
@@ -1376,34 +1672,43 @@ function finishSeek(dest: number) {
   galaxyTravel.seek = null;
   galaxyTravel.tTarget = dest;
   clearDirectSeek();
+  // The wheel's latch has done its job once the glide lands; the dwell counts from here.
+  if (galaxyTravel.wheelDriven && !galaxyTravel.dragging) galaxyTravel.hold = 0;
 }
 
-/** Cruise toward a strip jump. Fly through the sky — never teleport into a blank. */
+/** Carried-in speed, clamped so the ease never overshoots the sign or doubles back hard. */
+function arrivalV0(v0: number, gap: number, dur: number, kind: SeekKind) {
+  if (!(dur > 0) || !Number.isFinite(v0)) return 0;
+  const v = kind === "direct" ? v0 : clamp(v0, -MAX_FLY_T, MAX_FLY_T);
+  const toward = v === 0 || Math.sign(v) === Math.sign(gap);
+  const room = (Math.abs(gap) * (toward ? 2 : 0.35)) / dur;
+  return clamp(v, -room, room);
+}
+
+/**
+ * Ease toward the seek target. Every kind picks up the camera's current speed and
+ * lands at rest (smoothstep from a standstill). Reduced motion cuts straight there.
+ */
 export function stepSeek(t: number, dt: number) {
   if (galaxyTravel.paused) return { t, active: false };
   const dest = galaxyTravel.seek;
   if (dest == null) return { t, active: false };
-  if (galaxyTravel.seekDirect) {
-    const start = galaxyTravel.seekStartT ?? t;
-    galaxyTravel.seekElapsed += dt;
-    const duration = prefersReducedMotion() ? 0.01 : DIRECT_SEEK_SEC;
-    const u = smooth01(Math.min(1, galaxyTravel.seekElapsed / duration));
-    const next = start + (dest - start) * u;
-    if (u >= 1 || Math.abs(dest - next) < 0.004) {
-      finishSeek(dest);
-      return { t: dest, active: false };
-    }
-    return { t: next, active: true };
+  if (galaxyTravel.seekStartT == null) galaxyTravel.seekStartT = t;
+  const start = galaxyTravel.seekStartT;
+  if (galaxyTravel.seekDur == null) {
+    const kind = galaxyTravel.seekKind;
+    const dur = seekSeconds((dest - start) / STATION_GAP_T, kind, prefersReducedMotion());
+    galaxyTravel.seekDur = dur;
+    galaxyTravel.seekV0 = arrivalV0(galaxyTravel.seekV0, dest - start, dur, kind);
   }
-  const gap = dest - t;
-  const dist = Math.abs(gap);
-  if (dist < 0.004) {
+  const dur = galaxyTravel.seekDur;
+  galaxyTravel.seekElapsed += Math.max(0, dt);
+  if (!(dur > 0) || galaxyTravel.seekElapsed >= dur) {
     finishSeek(dest);
     return { t: dest, active: false };
   }
-  const k = dist > 0.22 ? 2.1 : dist > 0.08 ? 3.4 : 5.2;
-  const u = 1 - Math.exp(-dt * k);
-  return { t: t + gap * u, active: true };
+  const next = easeArrive(galaxyTravel.seekElapsed / dur, start, dest, galaxyTravel.seekV0, dur);
+  return { t: clamp01(next), active: true };
 }
 
 /** Sign the camera should be showing — the seek target, else whoever owns this stretch of sky. */
@@ -1433,7 +1738,7 @@ function handsBlockAuto(handsOn?: boolean) {
 
 /** Clip URL when the camera is actually parked on this station. */
 function parkedDwellClip(index: number): string | undefined {
-  if (!settledOnSign(galaxyTravel.t, index)) return undefined;
+  if (!cameraSettledOn(index)) return undefined;
   const id = CONSTELLATIONS[index]?.id;
   if (!id) return undefined;
   return dwellClipFor(id);
