@@ -483,6 +483,14 @@ function BirthNebula() {
 /** Give up starting a clip that never leaves frame 0, then let the walk continue. */
 const DWELL_START_GIVE_UP_SEC = 4;
 
+/** Fit the clip's own frame inside the plate width. 16:9 clips match the still plate; portrait clips keep their bars for the black key. */
+function lifePlaneSize(plateWide: number, plateAspect: number, video: HTMLVideoElement | null) {
+  const vw = video?.videoWidth ?? 0;
+  const vh = video?.videoHeight ?? 0;
+  const aspect = vw > 2 && vh > 2 ? vw / vh : plateAspect;
+  return { x: plateWide, y: plateWide / aspect };
+}
+
 function bindDwellTexture(video: HTMLVideoElement, prev: VideoTexture | null): VideoTexture {
   if (prev && prev.image === video) return prev;
   if (prev) {
@@ -893,7 +901,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             morphLevel: morphLevel.current,
           }) * (exploringHere ? galaxyTravel.plateFade : 1);
         art.current.visible = plateOp > 0.04;
-        art.current.scale.set(wide * ariesBreath, (wide / aspect) * ariesBreath, 1);
+        const lifeSource =
+          lifeVideo && dwellTex.current ? (dwellTex.current.image as HTMLVideoElement) : null;
+        const plane = lifeVideo ? lifePlaneSize(wide, aspect, lifeSource) : { x: wide, y: wide / aspect };
+        art.current.scale.set(plane.x * ariesBreath, plane.y * ariesBreath, 1);
         mat.opacity =
           plateOp *
           (!lifeVideo && index === 0 && !reducedMotion
