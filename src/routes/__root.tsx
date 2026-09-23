@@ -12,6 +12,7 @@ import {
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Trust Your Sign";
+const GFONTS_LINK_ID = "gfonts-css";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -36,11 +37,31 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: PWA_ICON_PATHS.appleTouch },
+      // Aries is the cold-boot sign for every fresh arrival (deep links to
+      // another sign are the rare case) — starting this fetch from the raw
+      // HTML wins a full round trip over waiting on the 3D scene's JS chunk
+      // to load, check WebGL, and mount before it ever asks for the plate.
+      { rel: "preload", as: "image", href: "/signs/aries.webp", fetchPriority: "high" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      // Loaded non-render-blocking (media=print, swapped to all by the inline
+      // script below once it loads) — the stylesheet only carries @font-face
+      // rules, and font-display: swap already means text paints in the
+      // fallback font immediately either way, so this changes zero pixels
+      // while removing ~800ms of first-paint block on a cold cache. A plain
+      // `onload=".."` HTML attribute isn't reliable here: React treats it as
+      // an (invalid, silently dropped) synthetic-event prop rather than a
+      // literal attribute, so the swap runs from the script tag instead.
       {
+        id: GFONTS_LINK_ID,
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Outfit:wght@300;400;500;600&display=swap",
+        media: "print",
+      },
+    ],
+    scripts: [
+      {
+        children: `(function(){var l=document.getElementById(${JSON.stringify(GFONTS_LINK_ID)});if(!l)return;var go=function(){l.media="all"};if(l.sheet){go();return}l.addEventListener("load",go,{once:true})})();`,
       },
     ],
   }),
