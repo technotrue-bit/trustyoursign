@@ -38,6 +38,13 @@ export type QaState = {
   ignition: number;
   dissolve: number;
   impulse: number;
+  /** Corridor flight: camera speed (t/s), pending seek target, clip armed on. */
+  vel: number;
+  seek: number | null;
+  seekKind: string;
+  dwellClipIndex: number | null;
+  /** Corridor weight each station's plate drew last frame (one owner at a time). */
+  plates: number[];
   probe: Record<string, unknown> | null;
 };
 
@@ -133,6 +140,13 @@ export function installQaHooks() {
         ignition: galaxyTravel.ignition,
         dissolve: galaxyTravel.dissolve,
         impulse: galaxyTravel.burstImpulse,
+        vel: galaxyTravel.vel,
+        seek: galaxyTravel.seek,
+        seekKind: galaxyTravel.seekKind,
+        dwellClipIndex: galaxyTravel.dwellClipIndex,
+        plates: Array.from(
+          (window as unknown as { __tysPlates?: ArrayLike<number> }).__tysPlates ?? [],
+        ),
         probe: (window as unknown as { __tys?: Record<string, unknown> }).__tys ?? null,
       };
     },

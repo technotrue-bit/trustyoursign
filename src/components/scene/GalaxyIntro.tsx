@@ -178,6 +178,9 @@ const DUST_MOTION_DIM = 0.6;
 
 /** Corridor weight each station drew last frame, for the pieces it parents. */
 const stationWeight = new Float32Array(TEMPLE_SIGNS.length).fill(1);
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as { __tysPlates?: Float32Array }).__tysPlates = stationWeight;
+}
 
 let cachedViewW = 1280;
 let cachedViewH = 900;
