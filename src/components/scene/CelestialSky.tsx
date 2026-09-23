@@ -18,7 +18,12 @@ import {
   INSIDE_SKY_FIELD_RESIDUAL,
   INSIDE_SKY_HAZE_RESIDUAL,
 } from "@/lib/galaxy/layers";
-import { exploringSign, galaxyTravel } from "@/lib/galaxy/travel";
+import { PORTAL_CUT, exploringSign, galaxyTravel, portalActive } from "@/lib/galaxy/travel";
+
+function smooth01(x: number) {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+}
 
 function noopRaycast() {
   /* sky never steals picks */
@@ -32,6 +37,7 @@ export function CelestialSky() {
   const armPts = useRef<import("three").Points>(null);
   const fieldPts = useRef<import("three").Points>(null);
   const nearPts = useRef<import("three").Points>(null);
+  const warpSeen = useRef(galaxyTravel.warpSeq);
   const tex = useMemo(() => makeStarSprite(), []);
   const haze = useMemo(() => makeHazeSprite(), []);
   const layers = useMemo(() => buildGalaxy(), []);
@@ -70,7 +76,10 @@ export function CelestialSky() {
     // I5: the shared sky clock — a pause freezes the haze with everything else.
     const t = galaxyTravel.shaderTime;
     for (const m of mats.current) m.uniforms.uTime.value = t;
-    const world = exploringSign() ? galaxyTravel.worldFade : 1;
+    // A portal cut swaps stations under the camera. This galaxy is world-anchored
+    // near Aries, so it dips through the cut instead of jumping across the frame.
+    const dip = portalActive() ? smooth01(Math.abs(galaxyTravel.portalCamV - PORTAL_CUT) / 0.2) : 1;
+    const world = (exploringSign() ? galaxyTravel.worldFade : 1) * dip;
     const inside = galaxyTravel.explorePhase === "inside";
     // Residual floor while parked inside: distant field breathes; dive still
     // uses worldFade alone so the enter blackout stays intentional.
@@ -83,6 +92,13 @@ export function CelestialSky() {
     if (fieldPts.current) fieldPts.current.visible = field > 0.02;
     if (nearPts.current) {
       nearPts.current.visible = field > 0.02;
+      if (warpSeen.current !== galaxyTravel.warpSeq) {
+        warpSeen.current = galaxyTravel.warpSeq;
+        const w = galaxyTravel.warp;
+        nearPts.current.position.x += w.x;
+        nearPts.current.position.y += w.y;
+        nearPts.current.position.z += w.z;
+      }
       const sit = TEMPLE_STATIONS[stationFromT(galaxyTravel.t)] ?? TEMPLE_STATIONS[0]!;
       nearPts.current.position.lerp(sit, 0.07);
     }

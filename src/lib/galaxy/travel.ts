@@ -1,4 +1,5 @@
 /** Shared mutable travel. Written every frame by the camera. Not React state. */
+import { Vector3 } from "three";
 import { CONSTELLATIONS, nearestSign, signStation, signedDelta, wrap12 } from "./constellations";
 import {
   DWELL_STILL_SEC,
@@ -24,14 +25,18 @@ import {
   type ExplorePhase,
 } from "./signGalaxy";
 import { useGalaxy, currentConstellation } from "./store";
-import { STATION_N, clamp01, stationFromT, stationT } from "./temple";
+import { NAVE, STATION_N, TEMPLE_CURVE, clamp01, stationFromT, stationT } from "./temple";
 import { introPlaying, skipIntro, introCanSkip, templeIntro } from "./intro";
 
 export { signedDelta, wrap12 };
 export type { ExplorePhase };
 export type EnterSkipPhase = "idle" | "out" | "hold" | "in";
-/** direct = strip / Enter jump; walk = hands-off advance; glide = wheel / keys; settle = hands-off landing. */
-export type SeekKind = "direct" | "walk" | "glide" | "settle";
+/**
+ * direct = strip / Enter jump to a neighbour; portal = strip / arrow jump across
+ * two or more signs; walk = hands-off advance; glide = wheel / keys;
+ * settle = hands-off landing.
+ */
+export type SeekKind = "direct" | "portal" | "walk" | "glide" | "settle";
 
 /** Seconds for the full enter morph (fade → dive → galaxy form). */
 const ENTER_SEC = 4.5;
@@ -145,6 +150,14 @@ export const WHEEL_AHEAD = 2;
 const WHEEL_GESTURE_GAP_MS = 260;
 /** Reduced motion: one cut per step, never a burst of cuts from a trackpad flick. */
 const WHEEL_REDUCED_COOLDOWN_MS = 650;
+/**
+ * A jump across this many signs or more is a portal glide: it feels like one
+ * sign of travel instead of racing the whole corridor. Aries ↔ Pisces are
+ * calendar neighbours but the two ends of the tropical corridor.
+ */
+export const PORTAL_MIN_SIGNS = 2;
+/** Portal progress (0–1) where the empty sky hides the swap from one station to the other. */
+export const PORTAL_CUT = 0.5;
 /** Inside a sign galaxy the wheel zooms on the original scale. */
 const INSIDE_WHEEL_PX = 900;
 /** Below this a wheel impulse is trackpad momentum dribble, not a new flick. */
@@ -238,6 +251,37 @@ export const galaxyTravel = {
   seekDur: null as number | null,
   /** Camera speed when the seek began, so the ease picks up the motion instead of braking. */
   seekV0: 0,
+  /**
+   * Portal glide: one sign of virtual travel from `portalFrom` toward `portalTo`
+   * in `portalDir`. Travel t sits on `portalFrom` until the cut, then on
+   * `portalTo`; `portalSigns` is the camera's offset from that station along the
+   * corridor (+ = forward). Null when no portal is running.
+   */
+  portalFrom: null as number | null,
+  portalTo: null as number | null,
+  portalDir: 1 as 1 | -1,
+  portalPhase: 1 as 1 | 2,
+  /** Eased virtual progress 0 → 1 of the travel pose. */
+  portalV: 0,
+  /** Where the lagging camera actually is on that 0 → 1, written by the 3D rig. */
+  portalCamV: 0,
+  portalCamFed: false,
+  portalSigns: 0,
+  /**
+   * After the pose lands, the camera is still closing in. The arriving plate keeps
+   * its portal fade until the camera itself arrives (3D rig only).
+   */
+  portalTailTo: null as number | null,
+  portalTailDir: 1 as 1 | -1,
+  /** Offset left by an interrupted portal, folded into the next seek's start. */
+  portalFold: 0,
+  /** Bumped at a portal cut; world-anchored followers shift by `warp`. */
+  warpSeq: 0,
+  warp: { x: 0, y: 0, z: 0 },
+  /** The cut's jump in virtual travel t (t + portal offset), so speed stays continuous. */
+  warpT: 0,
+  /** Enter pressed mid-portal: dive once it lands. */
+  enterAfterSeek: null as number | null,
   /** Per-sign galaxy explore — nested inside a corridor station. */
   explorePhase: "idle" as ExplorePhase,
   exploreSignIndex: null as number | null,
@@ -415,6 +459,9 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.seekKind = "walk";
   galaxyTravel.seekDur = null;
   galaxyTravel.seekV0 = 0;
+  clearPortal();
+  galaxyTravel.portalFold = 0;
+  galaxyTravel.enterAfterSeek = null;
   resetExplore(false);
   clearDwellClip();
   restIdle();
@@ -626,7 +673,12 @@ export function enterSignGalaxy(index?: number) {
         : stationFromT(galaxyTravel.t);
   const sign = CONSTELLATIONS[i];
   if (!sign) return false;
-  seekSign(i, { direct: true });
+  // Mid-portal the camera is between two stations' frames: dive once it lands.
+  if (portalActive()) {
+    galaxyTravel.enterAfterSeek = i;
+    return true;
+  }
+  seekSign(i, { direct: true, portal: false });
   galaxyTravel.explorePhase = "fading";
   galaxyTravel.exploreSignIndex = i;
   galaxyTravel.exploreProgress = 0;
@@ -716,6 +768,7 @@ export function snapToSign(index: number) {
   if (!sign) return false;
   if (exploringSign()) resetExplore(false);
   clearDirectSeek();
+  clearPortal();
   galaxyTravel.t = dest;
   galaxyTravel.tTarget = dest;
   galaxyTravel.seek = null;
@@ -905,7 +958,7 @@ export function starSpark(time: number, i: number, seed: number) {
   return breathe + flash * 0.2;
 }
 
-export type SeekOptions = { direct?: boolean; auto?: boolean };
+export type SeekOptions = { direct?: boolean; auto?: boolean; portal?: boolean };
 
 function clearDirectSeek() {
   galaxyTravel.seekDirect = false;
@@ -948,8 +1001,76 @@ export function settleStation(t: number, dir: number, commit = SETTLE_COMMIT) {
   return Math.min(STATION_N - 1, Math.max(0, i));
 }
 
+/** A portal glide is in flight. */
+export function portalActive() {
+  return galaxyTravel.portalTo != null && galaxyTravel.seek != null;
+}
+
+function clearPortal() {
+  galaxyTravel.portalFrom = null;
+  galaxyTravel.portalTo = null;
+  galaxyTravel.portalPhase = 1;
+  galaxyTravel.portalV = 0;
+  galaxyTravel.portalCamV = 0;
+  galaxyTravel.portalCamFed = false;
+  galaxyTravel.portalSigns = 0;
+  galaxyTravel.portalTailTo = null;
+}
+
+/**
+ * Which way a portal glides: the short way round the wheel, so Aries → Pisces
+ * steps back one sign (as the calendar strip reads) instead of racing forward
+ * through eleven. A dead heat takes the corridor direction.
+ */
+export function portalDirection(from: number, to: number): 1 | -1 {
+  const ahead = (((to - from) % 12) + 12) % 12;
+  if (ahead === 6) return to > from ? 1 : -1;
+  return ahead < 6 ? 1 : -1;
+}
+
+/** A portal's pose has landed but the camera is still closing in on the target. */
+export function portalTailing() {
+  return galaxyTravel.portalTailTo != null && galaxyTravel.seek == null;
+}
+
+/**
+ * Portal dissolve for one station's plate, keyed to where the camera really is
+ * (it trails the pose), so it cannot depend on frame rate. The leaving sign is
+ * gone by the cut; the arriving one rises from zero after it and reaches full as
+ * the camera arrives. 1 for every other station, and whenever no portal runs.
+ */
+export function portalEnvelope(index: number) {
+  const v = galaxyTravel.portalCamFed ? galaxyTravel.portalCamV : galaxyTravel.portalV;
+  const rise = smooth01((v - PORTAL_CUT) / (1 - PORTAL_CUT));
+  if (portalTailing()) return index === galaxyTravel.portalTailTo ? rise : 1;
+  if (!portalActive()) return 1;
+  const { portalFrom: from, portalTo: to } = galaxyTravel;
+  if (galaxyTravel.portalPhase === 1) {
+    if (index !== from) return index === to ? 0 : 1;
+    return 1 - smooth01(v / PORTAL_CUT);
+  }
+  if (index !== to) return index === from ? 0 : 1;
+  return rise;
+}
+
 function beginSeek(i: number, kind: SeekKind) {
   const dest = stationT(i);
+  // A portal that has not cut yet just changes where it lands (a strip swipe
+  // passing Pisces on its way to Aquarius).
+  if (
+    kind === "portal" &&
+    portalActive() &&
+    galaxyTravel.portalPhase === 1 &&
+    i !== galaxyTravel.portalFrom
+  ) {
+    galaxyTravel.portalTo = i;
+    galaxyTravel.portalDir = portalDirection(galaxyTravel.portalFrom ?? i, i);
+    galaxyTravel.seek = dest;
+    galaxyTravel.seekTargetIndex = i;
+    return dest;
+  }
+  galaxyTravel.portalFold = portalActive() ? galaxyTravel.portalSigns : 0;
+  clearPortal();
   galaxyTravel.seek = dest;
   galaxyTravel.tTarget = dest;
   galaxyTravel.playUntil = null;
@@ -958,8 +1079,14 @@ function beginSeek(i: number, kind: SeekKind) {
   galaxyTravel.seekElapsed = 0;
   galaxyTravel.seekDur = null;
   galaxyTravel.seekV0 = galaxyTravel.vel;
-  galaxyTravel.seekDirect = kind === "direct";
-  galaxyTravel.seekTargetIndex = kind === "direct" ? i : null;
+  galaxyTravel.seekDirect = kind === "direct" || kind === "portal";
+  galaxyTravel.seekTargetIndex = galaxyTravel.seekDirect ? i : null;
+  if (kind === "portal") {
+    const from = stationFromT(galaxyTravel.t);
+    galaxyTravel.portalFrom = from;
+    galaxyTravel.portalTo = i;
+    galaxyTravel.portalDir = portalDirection(from, i);
+  }
   return dest;
 }
 
@@ -987,6 +1114,10 @@ function glideToStation(i: number, kind: "glide" | "settle") {
 /** Jump the flight path to a sign. Arrive as the animal and hold until they fly or rest. */
 export function seekSign(index: number, opts?: SeekOptions) {
   clearDwellClip();
+  // A visitor choosing a sign takes over from the opening, as the wheel and a drag
+  // already do. The strip fades in before the intro is marked done; a pick in that
+  // window used to fly with every plate but Aries still hidden and the camera unsmoothed.
+  if (!opts?.auto && introPlaying()) skipIntro();
   if (enterAnimating()) return galaxyTravel.exploreSignIndex ?? 0;
   if (exploringSign() && galaxyTravel.explorePhase !== "fading") {
     // Strip / external seek leaves an open galaxy first.
@@ -999,7 +1130,17 @@ export function seekSign(index: number, opts?: SeekOptions) {
   const far = Math.abs(i - stationFromT(galaxyTravel.tTarget)) > 1;
   const direct = opts?.direct ?? far;
   const select = !opts?.auto;
-  const dest = beginSeek(i, direct ? "direct" : "walk");
+  // Two or more signs away: glide one sign's worth and swap stations in the empty
+  // sky, rather than racing the corridor (Aries → Pisces was all eleven).
+  const here = !portalActive()
+    ? stationFromT(galaxyTravel.t)
+    : galaxyTravel.portalPhase === 1
+      ? (galaxyTravel.portalFrom ?? i)
+      : (galaxyTravel.portalTo ?? i);
+  const span = Math.abs(i - here);
+  const portal =
+    direct && opts?.portal !== false && span >= PORTAL_MIN_SIGNS && !prefersReducedMotion();
+  const dest = beginSeek(i, portal ? "portal" : direct ? "direct" : "walk");
   if (select) {
     galaxyTravel.moved = true;
     galaxyTravel.awaken = 1;
@@ -1688,8 +1829,80 @@ function finishSeek(dest: number) {
   galaxyTravel.seek = null;
   galaxyTravel.tTarget = dest;
   clearDirectSeek();
+  clearPortal();
   // The wheel's latch has done its job once the glide lands; the dwell counts from here.
   if (galaxyTravel.wheelDriven && !galaxyTravel.dragging) galaxyTravel.hold = 0;
+  const enter = galaxyTravel.enterAfterSeek;
+  if (enter != null) {
+    galaxyTravel.enterAfterSeek = null;
+    enterSignGalaxy(enter);
+  }
+}
+
+const _warpFrom = new Vector3();
+const _warpTo = new Vector3();
+
+/**
+ * Swap the portal from the leaving station's frame to the arriving one's. The
+ * virtual camera position is identical on both sides of the cut, so `warp` is
+ * exactly how far every world-anchored follower must shift to stay put.
+ */
+function cutPortal(start: number, to: number, dir: 1 | -1) {
+  TEMPLE_CURVE.getPointAt(clamp01(start), _warpFrom);
+  TEMPLE_CURVE.getPointAt(stationT(to), _warpTo);
+  galaxyTravel.warp.x = _warpTo.x - _warpFrom.x;
+  galaxyTravel.warp.y = _warpTo.y - _warpFrom.y;
+  galaxyTravel.warp.z = _warpTo.z - _warpFrom.z + dir * NAVE;
+  galaxyTravel.warpT = stationT(to) - clamp01(start) - dir * STATION_GAP_T;
+  galaxyTravel.warpSeq += 1;
+  galaxyTravel.portalPhase = 2;
+}
+
+/**
+ * One sign of eased virtual travel. Before the cut t holds the start and the
+ * camera glides `dir · v` signs off it; after, t holds the target and the camera
+ * closes the last `1 − v`. The cut waits for the camera itself to reach
+ * PORTAL_CUT, where both plates are dissolved.
+ */
+function stepPortal(start: number, dt: number) {
+  const to = galaxyTravel.portalTo!;
+  const dir = galaxyTravel.portalDir;
+  const dest = stationT(to);
+  if (galaxyTravel.seekDur == null) {
+    const dur = seekSeconds(1, "glide", prefersReducedMotion());
+    galaxyTravel.seekDur = dur;
+    // Carried speed, in signs per second along the portal.
+    const carried = (galaxyTravel.seekV0 / STATION_GAP_T) * dir;
+    galaxyTravel.seekV0 = dur > 0 ? clamp(carried, -0.35 / dur, Math.min(2 / dur, MAX_FLY_T / STATION_GAP_T)) : 0;
+  }
+  const dur = galaxyTravel.seekDur;
+  galaxyTravel.seekElapsed += Math.max(0, dt);
+  const u = dur > 0 ? Math.min(1, galaxyTravel.seekElapsed / dur) : 1;
+  const v = dur > 0 ? clamp01(easeArrive(u, 0, 1, galaxyTravel.seekV0, dur)) : 1;
+  galaxyTravel.portalV = v;
+  if (galaxyTravel.portalPhase === 1) {
+    const camV = galaxyTravel.portalCamFed ? galaxyTravel.portalCamV : v;
+    if (camV >= PORTAL_CUT || u >= 1) cutPortal(start, to, dir);
+  }
+  if (galaxyTravel.portalPhase === 1) {
+    galaxyTravel.portalSigns = dir * v;
+    return { t: start, active: true };
+  }
+  galaxyTravel.portalSigns = -dir * (1 - v);
+  if (u >= 1) {
+    const fed = galaxyTravel.portalCamFed && galaxyTravel.enterAfterSeek == null;
+    const camV = galaxyTravel.portalCamV;
+    finishSeek(dest);
+    if (fed && camV < 0.99) {
+      // The pose is home; the camera is not. Keep the arrival's fade on the camera.
+      galaxyTravel.portalTailTo = to;
+      galaxyTravel.portalTailDir = dir;
+      galaxyTravel.portalCamFed = true;
+      galaxyTravel.portalCamV = camV;
+    }
+    return { t: dest, active: false };
+  }
+  return { t: dest, active: true };
 }
 
 /** Carried-in speed, clamped so the ease never overshoots the sign or doubles back hard. */
@@ -1709,8 +1922,15 @@ export function stepSeek(t: number, dt: number) {
   if (galaxyTravel.paused) return { t, active: false };
   const dest = galaxyTravel.seek;
   if (dest == null) return { t, active: false };
-  if (galaxyTravel.seekStartT == null) galaxyTravel.seekStartT = t;
+  if (galaxyTravel.seekStartT == null) {
+    // An interrupted portal left the camera off its station: start from where it really is.
+    galaxyTravel.seekStartT = clamp01(t + galaxyTravel.portalFold * STATION_GAP_T);
+    galaxyTravel.portalFold = 0;
+  }
   const start = galaxyTravel.seekStartT;
+  if (galaxyTravel.seekKind === "portal" && galaxyTravel.portalTo != null) {
+    return stepPortal(start, dt);
+  }
   if (galaxyTravel.seekDur == null) {
     const kind = galaxyTravel.seekKind;
     const dur = seekSeconds((dest - start) / STATION_GAP_T, kind, prefersReducedMotion());

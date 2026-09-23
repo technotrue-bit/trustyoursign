@@ -83,8 +83,17 @@ export function plateWeight(
   depth: number,
   parkedSigns = signsAway,
 ) {
-  const parked = 1 - smooth01(Math.abs(parkedSigns) / PARKED_BAND);
-  return Math.max(plateOwnership(signsAway) * plateNearFade(restDist, depth), parked);
+  return Math.max(plateGeometry(signsAway, restDist, depth), parkedBand(parkedSigns));
+}
+
+/** Where the camera is relative to the plate: ownership × near fade, nothing else. */
+export function plateGeometry(signsAway: number, restDist: number, depth: number) {
+  return plateOwnership(signsAway) * plateNearFade(restDist, depth);
+}
+
+/** 1 when travel t is parked on the station, 0 past PARKED_BAND. */
+export function parkedBand(parkedSigns: number) {
+  return 1 - smooth01(Math.abs(parkedSigns) / PARKED_BAND);
 }
 
 /** Signs the camera sits past a station, from its live depth to it. */

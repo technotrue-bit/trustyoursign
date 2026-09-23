@@ -43,6 +43,12 @@ export type QaState = {
   seek: number | null;
   seekKind: string;
   dwellClipIndex: number | null;
+  /** Portal glide: camera offset off its station (signs, + forward), phase, camera progress. */
+  portalSigns: number;
+  portalPhase: number | null;
+  portalCamV: number;
+  introPlaying: boolean;
+  introAsking: boolean;
   /** Corridor weight each station's plate drew last frame (one owner at a time). */
   plates: number[];
   probe: Record<string, unknown> | null;
@@ -144,6 +150,11 @@ export function installQaHooks() {
         seek: galaxyTravel.seek,
         seekKind: galaxyTravel.seekKind,
         dwellClipIndex: galaxyTravel.dwellClipIndex,
+        portalSigns: galaxyTravel.portalSigns,
+        portalPhase: galaxyTravel.portalTo != null ? galaxyTravel.portalPhase : null,
+        portalCamV: galaxyTravel.portalCamV,
+        introPlaying: introPlaying(),
+        introAsking: templeIntro.asking,
         plates: Array.from(
           (window as unknown as { __tysPlates?: ArrayLike<number> }).__tysPlates ?? [],
         ),
