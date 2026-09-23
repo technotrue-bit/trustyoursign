@@ -1114,6 +1114,10 @@ function glideToStation(i: number, kind: "glide" | "settle") {
 /** Jump the flight path to a sign. Arrive as the animal and hold until they fly or rest. */
 export function seekSign(index: number, opts?: SeekOptions) {
   clearDwellClip();
+  // A visitor choosing a sign takes over from the opening, as the wheel and a drag
+  // already do. The strip fades in before the intro is marked done; a pick in that
+  // window used to fly with every plate but Aries still hidden and the camera unsmoothed.
+  if (!opts?.auto && introPlaying()) skipIntro();
   if (enterAnimating()) return galaxyTravel.exploreSignIndex ?? 0;
   if (exploringSign() && galaxyTravel.explorePhase !== "fading") {
     // Strip / external seek leaves an open galaxy first.
