@@ -505,15 +505,18 @@ function Login() {
   })();
 
   return (
-    <main id="main-content" className="vault-page relative bg-bg px-5 text-fg">
-      <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-[max(6.5rem,calc(var(--chrome-bottom)+4.25rem))]">
+    <main
+      id="main-content"
+      className="vault-page relative bg-bg px-5 pb-[var(--hud-bottom)] text-fg md:pb-0"
+    >
+      <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-8 md:pb-[max(6.5rem,calc(var(--chrome-bottom)+4.25rem))]">
         <div className="flex items-center justify-between gap-3">
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">
             Trust Your Sign · {SITE_OWNER.name}
           </p>
           <Link
             to="/"
-            className="chrome-glow back-to-sky shrink-0 px-2 py-2 text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+            className="chrome-glow back-to-sky inline-flex min-h-11 shrink-0 items-center px-2 text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
           >
             Back to the sky
           </Link>
@@ -528,7 +531,10 @@ function Login() {
           </p>
         ) : null}
         <p className="mt-2 text-xs leading-relaxed text-fg-subtle">
-          <Link to="/about" className="underline underline-offset-4 hover:text-fg">
+          <Link
+            to="/about"
+            className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-fg md:min-h-0"
+          >
             Who keeps this house
           </Link>
         </p>
@@ -889,7 +895,7 @@ function Login() {
 
       <Link
         to="/"
-        className="back-to-sky absolute bottom-[max(1.25rem,var(--chrome-bottom))] left-1/2 z-10 -translate-x-1/2 px-5 py-3 font-display text-xl tracking-tight text-fg italic md:text-2xl"
+        className="back-to-sky relative z-10 mx-auto flex min-h-11 w-fit items-center px-5 font-display text-xl tracking-tight text-fg italic md:absolute md:bottom-[max(1.25rem,var(--chrome-bottom))] md:left-1/2 md:-translate-x-1/2 md:py-3 md:text-2xl"
       >
         Back to the sky
       </Link>

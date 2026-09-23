@@ -189,6 +189,19 @@
   .vault-page {
     --page-chrome-bottom: max(5.5rem, calc(var(--chrome-bottom) + 3.75rem));
   }
+
+  /* Document text must not scroll up under the clock / Dynamic Island. */
+  .vault-page::before {
+    content: "";
+    position: fixed;
+    top: var(--app-top, 0px);
+    right: 0;
+    left: 0;
+    z-index: 20;
+    height: calc(var(--safe-top) + 0.75rem);
+    pointer-events: none;
+    background: linear-gradient(to bottom, #0c0b0a calc(100% - 0.75rem), transparent);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
