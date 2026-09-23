@@ -69,6 +69,8 @@ void main() {
     float os = sin(orbitAngle);
     vec2 hb = fig.xy;
     fig.xy = vec2(hb.x * oc - hb.y * os, hb.x * os + hb.y * oc);
+    // Settling on a sign: the halo gathers in a touch as life ramps up.
+    fig.xy *= mix(1.05, 1.0, life);
   }
 
   float chest = 1.0 - min(1.0, length(fig.xy) * 1.55);
@@ -116,6 +118,12 @@ void main() {
     p.y += elemOff.y * life * uTall * 0.04;
   }
 
+  // Pointer hover: a slight lean toward the cursor (uHover already carries
+  // the hover boost), damped along with everything else while moving.
+  float lean = max(0.0, uHover - 1.0) * life;
+  p.x += lean * uWide * 0.01;
+  p.y += lean * uTall * 0.006;
+
   float breathe = 0.96 + 0.04 * sin(uTime * (0.85 + mod(aPhase, 5.0) * 0.12) + aPhase);
   float flash = pow(0.5 + 0.5 * sin(uTime * (1.7 + mod(aPhase, 7.0) * 0.21) + aPhase * 1.3), 18.0);
   float spark = breathe + flash * (kind > 0.5 && kind < 1.5 ? 0.35 : 0.2);
@@ -129,7 +137,9 @@ void main() {
   float shimmer = 0.5 + 0.5 * sin(uTime * (0.05 + mod(aPhase, 4.0) * 0.02) + aPhase * 1.9);
   vec3 shimmerTint = mix(gold, violet, shimmer);
   if (kind > 0.5 && kind < 1.5) vColor = mix(gold, uTint, 0.28) * b * 1.15;
-  else if (kind > 1.5) vColor = mix(mix(uTint, violet, 0.35), shimmerTint, 0.4 * life) * b * 0.7;
+  // Settling on a sign: the halo also brightens a little over the same
+  // ~1-2s life ramp as the gather above.
+  else if (kind > 1.5) vColor = mix(mix(uTint, violet, 0.35), shimmerTint, 0.4 * life) * b * (0.7 + life * 0.22);
   else vColor = mix(uTint, shimmerTint, 0.1 * life) * b;
   // Fade spiral (kind 1) and halo (kind 2) out while glyph is forming
   // so only the clean body-star symbol is visible at full morph.
