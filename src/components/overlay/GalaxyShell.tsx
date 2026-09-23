@@ -84,7 +84,7 @@ export function GalaxyShell() {
         <>
           <p
             data-no-fly
-            className="sky-hud-kicker sky-hud-veil sky-hud-veil--tight pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] max-w-[4.75rem] text-[0.62rem] leading-tight tracking-[0.18em] uppercase md:max-w-none"
+            className="sky-hud-kicker sky-hud-veil sky-hud-veil--tight pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] flex min-h-[var(--hud-row)] max-w-[4.75rem] items-center text-[0.62rem] leading-tight tracking-[0.18em] uppercase md:block md:min-h-0 md:max-w-none"
             style={{ opacity: worldFade }}
             aria-label={versionChrome.ariaLabel}
           >
@@ -92,7 +92,7 @@ export function GalaxyShell() {
           </p>
           <div
             data-no-fly
-            className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-1"
+            className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-2 md:gap-1"
             style={{ opacity: worldFade }}
           >
             <button
@@ -123,7 +123,7 @@ export function GalaxyShell() {
       {!exploring ? (
         <GlossRoot>
           <div
-            className="galaxy-title-slot absolute top-[var(--chrome-top)] right-20 left-16 text-center md:top-[max(2.5rem,var(--safe-top))] md:right-24 md:left-24"
+            className="galaxy-title-slot absolute inset-x-0 top-[var(--hud-below-row)] px-4 text-center md:top-[max(2.5rem,var(--safe-top))] md:right-24 md:left-24 md:px-0"
             onPointerDown={noteControl}
             style={{
               opacity: asking || moved ? undefined : introTitle,
@@ -174,7 +174,7 @@ export function GalaxyShell() {
       ) : null}
 
       <div
-        className="galaxy-chrome pointer-events-none absolute inset-x-0 bottom-[var(--chrome-bottom)] flex flex-col items-center gap-1.5 px-3 pb-[max(0.15rem,env(safe-area-inset-bottom,0px))] md:bottom-8 md:gap-3 md:px-0"
+        className="galaxy-chrome pointer-events-none absolute inset-x-0 bottom-[var(--hud-bottom)] flex flex-col items-center gap-1.5 px-3 pb-[max(0.15rem,env(safe-area-inset-bottom,0px))] md:bottom-8 md:gap-3 md:px-0"
         // Leave the tab order while claim/dive chrome owns the screen.
         inert={asking || exploring ? true : undefined}
         style={{

@@ -63,8 +63,11 @@ export function installQaHooks() {
   if (hook()) return;
 
   const api = {
-    /** The state a visitor reaches by hand: intro done, sky open, hands on the sky. */
-    ready() {
+    /**
+     * The state a visitor reaches by hand: intro done, sky open, hands on the sky.
+     * `moved: false` stops on the "what's your sign?" title instead.
+     */
+    ready({ moved = true }: { moved?: boolean } = {}) {
       skipIntro();
       templeIntro.done = true;
       templeIntro.asking = false;
@@ -80,7 +83,7 @@ export function installQaHooks() {
         introVeil: 0,
       });
       galaxyTravel.birth = 1;
-      galaxyTravel.moved = true;
+      galaxyTravel.moved = moved;
       return { introPlaying: introPlaying() };
     },
     /** Fly to a sign the way the strip does. Returns the t the camera is aiming at. */

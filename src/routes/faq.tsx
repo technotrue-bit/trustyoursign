@@ -18,7 +18,7 @@ function Faq() {
 
         <div className="mt-8 space-y-4">
           <details className="border-b border-border pb-3">
-            <summary className="cursor-pointer font-display text-xl text-fg italic">
+            <summary className="cursor-pointer py-2 font-display text-xl text-fg italic md:py-0">
               Is this entertainment or advice?
             </summary>
             <p className="mt-2">
@@ -33,7 +33,7 @@ function Faq() {
           </details>
 
           <details className="border-b border-border pb-3">
-            <summary className="cursor-pointer font-display text-xl text-fg italic">
+            <summary className="cursor-pointer py-2 font-display text-xl text-fg italic md:py-0">
               Do you sell my data?
             </summary>
             <p className="mt-2">
@@ -47,7 +47,7 @@ function Faq() {
           </details>
 
           <details className="border-b border-border pb-3">
-            <summary className="cursor-pointer font-display text-xl text-fg italic">
+            <summary className="cursor-pointer py-2 font-display text-xl text-fg italic md:py-0">
               Do you train models on my chart?
             </summary>
             <p className="mt-2">
@@ -57,7 +57,7 @@ function Faq() {
           </details>
 
           <details className="border-b border-border pb-3">
-            <summary className="cursor-pointer font-display text-xl text-fg italic">
+            <summary className="cursor-pointer py-2 font-display text-xl text-fg italic md:py-0">
               Can I save someone else’s chart?
             </summary>
             <p className="mt-2">
@@ -68,7 +68,7 @@ function Faq() {
           </details>
 
           <details className="border-b border-border pb-3">
-            <summary className="cursor-pointer font-display text-xl text-fg italic">
+            <summary className="cursor-pointer py-2 font-display text-xl text-fg italic md:py-0">
               How do I delete data?
             </summary>
             <p className="mt-2">
@@ -82,7 +82,7 @@ function Faq() {
           </details>
 
           <details className="border-b border-border pb-3">
-            <summary className="cursor-pointer font-display text-xl text-fg italic">
+            <summary className="cursor-pointer py-2 font-display text-xl text-fg italic md:py-0">
               What does closed beta mean for my data?
             </summary>
             <p className="mt-2">
@@ -92,7 +92,7 @@ function Faq() {
           </details>
 
           <details className="border-b border-border pb-3">
-            <summary className="cursor-pointer font-display text-xl text-fg italic">
+            <summary className="cursor-pointer py-2 font-display text-xl text-fg italic md:py-0">
               Why do you want time and place?
             </summary>
             <p className="mt-2">
@@ -103,7 +103,7 @@ function Faq() {
           </details>
 
           <details className="border-b border-border pb-3">
-            <summary className="cursor-pointer font-display text-xl text-fg italic">
+            <summary className="cursor-pointer py-2 font-display text-xl text-fg italic md:py-0">
               What if I only know the day?
             </summary>
             <p className="mt-2">
@@ -114,7 +114,7 @@ function Faq() {
           </details>
 
           <details className="border-b border-border pb-3">
-            <summary className="cursor-pointer font-display text-xl text-fg italic">
+            <summary className="cursor-pointer py-2 font-display text-xl text-fg italic md:py-0">
               Is there an age rule?
             </summary>
             <p className="mt-2">
@@ -124,7 +124,7 @@ function Faq() {
           </details>
 
           <details className="border-b border-border pb-3">
-            <summary className="cursor-pointer font-display text-xl text-fg italic">
+            <summary className="cursor-pointer py-2 font-display text-xl text-fg italic md:py-0">
               How do I report a problem?
             </summary>
             <p className="mt-2">
