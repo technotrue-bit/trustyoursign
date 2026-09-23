@@ -2,6 +2,7 @@ import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, ShaderMateria
 import type { MorphPair } from "./constellations";
 import type { VolumeStar } from "./signVolume";
 import { STAR_APPEARANCE } from "./starAppearance";
+import type { Element } from "@/lib/chart/types";
 
 /**
  * Station stars — GPU gather, swirl, twinkle.
@@ -27,6 +28,8 @@ uniform float uLife;
 // Small pointer-driven offsets, used only for the halo's depth parallax.
 uniform float uParX;
 uniform float uParY;
+// Fire=0, earth=1, air=2, water=3 — drives the element-motion branch below.
+uniform float uElement;
 uniform vec3 uTint;
 attribute vec3 signPos;
 attribute vec3 glyphPos;
@@ -59,6 +62,8 @@ void main() {
   if (kind > 1.5) {
     float haloR = length(fig.xy);
     float orbitSpeed = mix(0.05, 0.018, clamp((haloR - 0.3) / 0.9, 0.0, 1.0));
+    // Water: the ring is a current, not just a ring — run it a touch quicker.
+    if (uElement > 2.5) orbitSpeed *= 1.7;
     float orbitAngle = uTime * orbitSpeed * life;
     float oc = cos(orbitAngle);
     float os = sin(orbitAngle);
@@ -89,6 +94,26 @@ void main() {
     float ambientDrift = sin(uTime * 0.025 + aPhase * 0.4) * 0.05;
     p.x += depthSel * (uParX * 1.6 + ambientDrift) * life;
     p.y += depthSel * uParY * 1.6 * life;
+  }
+
+  // Element motion (spiral + halo only — the body glyph stays put): fire
+  // embers drift up, earth dust settles, air runs two thin crossing
+  // streams. Water's current is folded into the halo orbit boost above.
+  if (kind > 0.5) {
+    vec2 elemOff = vec2(0.0);
+    if (uElement < 0.5) {
+      float e = sin(uTime * 0.05 + aPhase * 1.3) * 0.5 + 0.5;
+      elemOff = vec2(sin(uTime * 0.03 + aPhase * 2.1) * 0.05, e * 0.5);
+    } else if (uElement < 1.5) {
+      float e = sin(uTime * 0.045 + aPhase * 1.1) * 0.5 - 0.5;
+      elemOff = vec2(0.0, e * 0.35);
+    } else if (uElement < 2.5) {
+      float dir = mod(aPhase, 2.0) < 1.0 ? 1.0 : -1.0;
+      float s = uTime * 0.06 + aPhase * 1.7;
+      elemOff = vec2(sin(s) * 0.5 * dir, cos(s) * 0.22 * dir);
+    }
+    p.x += elemOff.x * life * uWide * 0.04;
+    p.y += elemOff.y * life * uTall * 0.04;
   }
 
   float breathe = 0.96 + 0.04 * sin(uTime * (0.85 + mod(aPhase, 5.0) * 0.12) + aPhase);
@@ -143,6 +168,14 @@ void main() {
 }
 `;
 
+/** Fire=0, earth=1, air=2, water=3 — the vertex shader's element-motion branch. */
+export const ELEMENT_CODE: Record<Element, number> = {
+  fire: 0,
+  earth: 1,
+  air: 2,
+  water: 3,
+};
+
 export function makeSparkMaterial() {
   return new ShaderMaterial({
     uniforms: {
@@ -161,6 +194,7 @@ export function makeSparkMaterial() {
       uLife: { value: 1 },
       uParX: { value: 0 },
       uParY: { value: 0 },
+      uElement: { value: 0 },
       uTint: { value: new Color("#f0d4c6") },
     },
     vertexShader: STAR_VERT,

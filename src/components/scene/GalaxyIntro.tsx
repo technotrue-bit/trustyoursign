@@ -87,7 +87,12 @@ import {
   uBirth,
 } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
-import { fillMorphCloud, makeSparkMaterial, setCloudDrawRange } from "@/lib/galaxy/starRender";
+import {
+  ELEMENT_CODE,
+  fillMorphCloud,
+  makeSparkMaterial,
+  setCloudDrawRange,
+} from "@/lib/galaxy/starRender";
 import {
   computeBirthChatSlide,
   lerpToward,
@@ -1038,6 +1043,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       // life above already damps it while the camera is moving.
       u.uParX.value = galaxyTravel.ptrX;
       u.uParY.value = galaxyTravel.ptrY;
+      // Fire/earth/air/water — see starRender's element-motion branch.
+      u.uElement.value = ELEMENT_CODE[sign.element];
       (u.uTint.value as Color).copy(tint);
     }
 
