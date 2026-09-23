@@ -4,7 +4,8 @@ import { lonToXZ } from "@/lib/chart/geometry";
 import { CONSTELLATIONS, constellationDust, pairFigures } from "@/lib/galaxy/constellations";
 import { preloadSignArt, signArtImage } from "@/lib/galaxy/signArt";
 import { getSignVolume } from "@/lib/galaxy/signVolume";
-import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, decayWheelGlide, ensureAutoClock, ensureFlyInput, exploringSign, galaxyTravel, gateForm, pinchQuiet, publishTravel, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepShaderTime, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
+import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, decayWheelGlide, ensureAutoClock, ensureFlyInput, exploringSign, galaxyTravel, gateForm, pinchQuiet, prefersReducedMotion, publishTravel, settleCorridor, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepShaderTime, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
+import { plateOwnership } from "@/lib/galaxy/signField";
 import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
@@ -586,6 +587,7 @@ export function FallbackSky({ note }: { note?: string }) {
       // the star drift below is skipped entirely (the pause must stop the drift,
       // not just the flight-path advance).
       const flying = !entered && !chatting && !birthing && !exploring && !galaxyTravel.paused;
+      const reduced = prefersReducedMotion();
       const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
       galaxyTravel.handsOn = hands;
       galaxyTravel.busy = chatting || entered || birthing;
@@ -632,7 +634,10 @@ export function FallbackSky({ note }: { note?: string }) {
           vel = Math.max(-HOLD_FLY, Math.min(MAX_FLY, vel));
         } else if (!traveling && galaxyTravel.idle > 0.35) {
           vel *= Math.exp(-dt * 2.8);
-          if (Math.abs(vel) < 0.02) vel = 0;
+          if (Math.abs(vel) < 0.02) {
+            vel = 0;
+            settleCorridor(galaxyTravel.t);
+          }
         } else if (playing) {
           vel += (PLAY_CRUISE - vel) * (1 - Math.exp(-dt * 0.55));
           vel = Math.min(MAX_FLY, Math.max(0, vel));
@@ -640,6 +645,8 @@ export function FallbackSky({ note }: { note?: string }) {
           vel += (CRUISE - vel) * (1 - Math.exp(-dt * (vel > 0.14 ? 0.45 : 0.28)));
           vel = Math.min(MAX_FLY, Math.max(0, vel));
         }
+        // Reduced motion: no drift and no streaming stars; signs change by cuts only.
+        if (reduced) vel = 0;
         galaxyTravel.speed = vel * 38;
         if (!sought.active && !galaxyTravel.paused) {
           galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + vel * dt * 0.045);
@@ -733,13 +740,15 @@ export function FallbackSky({ note }: { note?: string }) {
           const sign = CONSTELLATIONS[aim];
           if (sign) drawConstellation(sign, along, 0.95 * awaken, depth, skyTime, aim, false, true);
         } else {
+          // One sign owns the frame; the next takes it near the midpoint.
           const cur = stationFromT(t);
-          const nxt = Math.min(11, cur + 1);
-          for (const i of [cur, nxt]) {
+          for (const i of [cur - 1, cur, cur + 1]) {
+            if (i < 0 || i > 11) continue;
             const dest = stationT(i);
+            const own = plateOwnership((t - dest) * 11);
             const along = Math.max(0.12, Math.abs(t - dest) * 8 + 0.35);
             const focused = i === aimedIndex(t) || i === cur;
-            const form = (focused ? 0.95 : 0.45) * awaken;
+            const form = 0.95 * own * awaken;
             const sign = CONSTELLATIONS[i];
             if (sign && form > 0.04) drawConstellation(sign, along, form, depth, skyTime, i, false, focused);
           }

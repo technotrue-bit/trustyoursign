@@ -31,6 +31,67 @@ export function fieldFade(gather: number) {
   return Math.min(1, Math.max(0, (gather - FIELD_HIDE_GATHER) / span));
 }
 
+/**
+ * One plate owns the frame. Half-width, in signs, of the dissolve around the
+ * midpoint where the leaving plate hands the frame to the arriving one.
+ */
+export const HANDOFF_HALF = 0.2;
+/** Plate scale (1 = parked) where a plate the camera is closing on starts to dissolve… */
+export const NEAR_FADE_START = 1.18;
+/** …and where it is gone, well before it can fill the lens. */
+export const NEAR_FADE_END = 1.6;
+/** Within this many signs of its station the plate is the parked hero; the near fade eases off. */
+export const PARKED_BAND = 0.08;
+
+function smooth01(x: number) {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * How much of the frame a station's plate owns, from the camera's signed
+ * distance to it in signs. 1 near the station, 0 past the midpoint, with a
+ * short dissolve between — so two plates never stack.
+ */
+export function plateOwnership(signsAway: number) {
+  const a = Math.abs(signsAway);
+  return 1 - smooth01((a - (0.5 - HANDOFF_HALF)) / (2 * HANDOFF_HALF));
+}
+
+/**
+ * Dissolve a plate as the camera closes on it. `restDist` is the parked
+ * camera-to-plate distance, `depth` the live one (≤ 0 = behind the lens).
+ */
+export function plateNearFade(restDist: number, depth: number) {
+  if (!(restDist > 0)) return 1;
+  if (!(depth > 1e-3)) return 0;
+  const scale = restDist / depth;
+  return 1 - smooth01((scale - NEAR_FADE_START) / (NEAR_FADE_END - NEAR_FADE_START));
+}
+
+/**
+ * Corridor weight for one station's plate and star cloud: ownership × near fade.
+ * `signsAway` is where the camera actually is (it trails travel t at speed), so
+ * the hand-off happens where the eye is, not half a sign ahead of it.
+ * `parkedSigns` is travel t's distance: a sign t is parked on (within
+ * PARKED_BAND) owns the frame outright, so a pinch zoom can't dim the hero
+ * while the camera catches up.
+ */
+export function plateWeight(
+  signsAway: number,
+  restDist: number,
+  depth: number,
+  parkedSigns = signsAway,
+) {
+  const parked = 1 - smooth01(Math.abs(parkedSigns) / PARKED_BAND);
+  return Math.max(plateOwnership(signsAway) * plateNearFade(restDist, depth), parked);
+}
+
+/** Signs the camera sits past a station, from its live depth to it. */
+export function signsPastStation(restDist: number, depth: number, nave: number) {
+  return (restDist - depth) / nave;
+}
+
 export type ArriveBurst = {
   aimed: number | null;
   far: boolean;
