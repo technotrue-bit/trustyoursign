@@ -114,7 +114,7 @@ export function MoonSignBriefCard({ signId, signName }: { signId: SignId; signNa
         onClick={enrich}
         disabled={busy}
         className={cn(
-          "mt-2 min-h-9 px-3 text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg",
+          "mt-2 min-h-11 px-3 text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg",
           "disabled:opacity-50",
         )}
       >

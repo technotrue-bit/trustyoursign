@@ -375,6 +375,38 @@
   animation: none;
 }
 
+/* Star copy scrolls inside the room between the top row and the dots, so the
+   dots, "Star N of 10" and the CTA never leave the screen on a short phone. */
+.sign-galaxy-scroll {
+  align-self: stretch;
+  min-height: 0;
+  margin-inline: -1rem;
+  padding: 0.75rem 1rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 0.75rem,
+    #000 calc(100% - 0.75rem),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 0.75rem,
+    #000 calc(100% - 0.75rem),
+    transparent
+  );
+}
+
+.sign-galaxy-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* Sign-galaxy explore copy — lower stack, readable over dense starfield */
 .sign-galaxy-copy {
   position: relative;
@@ -680,6 +712,13 @@ html.sky-paused .stagger-in > * {
     box-shadow 0.22s ease-out;
   animation: sign-galaxy-dot-float 5.2s ease-in-out infinite;
   animation-delay: calc(var(--i) * -0.42s);
+}
+
+@media (max-width: 767px) {
+  .sign-galaxy-dot {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
 }
 
 .sign-galaxy-dot--hub {

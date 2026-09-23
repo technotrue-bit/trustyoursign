@@ -1,3 +1,4 @@
+import { useLayoutEffect, useState, type CSSProperties } from "react";
 import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { insightToneLabel } from "@/lib/galaxy/signInsights";
@@ -14,17 +15,39 @@ import { Gloss } from "./Gloss";
 import { AuthSlot } from "./AuthSlot";
 import { MoonSignBriefCard } from "./MoonSignBriefCard";
 import { cn } from "@/lib/utils";
-import type { CSSProperties } from "react";
 
 /** Genre label that tolerates the hub kind (TS cannot prove non-hub points never carry it). */
 function kindLabel(kind: PointPurposeKind): string {
   return kind === "hub" ? "Star" : insightToneLabel(kind);
 }
 
+/**
+ * True while the box is taller than the room it was given. Only then does the
+ * star copy take touches for scrolling; otherwise drags fall through to look.
+ */
+function useOverflows<T extends HTMLElement>() {
+  const [el, setEl] = useState<T | null>(null);
+  const [overflows, setOverflows] = useState(false);
+  useLayoutEffect(() => {
+    if (!el || typeof ResizeObserver === "undefined") {
+      setOverflows(false);
+      return;
+    }
+    const check = () => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    for (const child of el.children) ro.observe(child);
+    check();
+    return () => ro.disconnect();
+  }, [el]);
+  return [setEl, overflows] as const;
+}
+
 /** HUD while diving into / exploring a selected sign’s animal-star galaxy. */
 export function SignGalaxyHud() {
   const explore = useGalaxy((s) => s.explore);
   const openClaim = useSessionStore((s) => s.openClaim);
+  const [copyRef, copyScrolls] = useOverflows<HTMLDivElement>();
 
   const sign = explore.signIndex != null ? (CONSTELLATIONS[explore.signIndex] ?? null) : null;
   const galaxy = sign ? getSignGalaxy(sign.id) : null;
@@ -68,7 +91,7 @@ export function SignGalaxyHud() {
       {entering ? (
         <div
           data-no-fly
-          className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-1"
+          className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-2 md:gap-1"
         >
           {phaseEntering && explore.skipPhase === "idle" ? (
             <button
@@ -87,7 +110,7 @@ export function SignGalaxyHud() {
         // inert alone — never combine aria-hidden with Back / AuthSlot / CTAs.
         inert={!inside ? true : undefined}
         className={cn(
-          "absolute inset-0 flex flex-col px-4 pt-[max(1.25rem,var(--safe-top))] pb-[max(1.25rem,var(--safe-bottom))] transition-opacity duration-[350ms]",
+          "absolute inset-0 flex flex-col px-4 pt-[var(--chrome-top)] pb-[var(--hud-bottom)] transition-opacity duration-[350ms] md:pt-[max(1.25rem,var(--safe-top))] md:pb-[max(1.25rem,var(--safe-bottom))]",
           inside ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       >
@@ -124,56 +147,63 @@ export function SignGalaxyHud() {
 
         <div
           className={cn(
-            "sign-galaxy-lower flex shrink-0 flex-col items-center gap-4 transition-[transform,opacity] duration-500 ease-out",
+            "sign-galaxy-lower flex min-h-0 flex-col items-center gap-4 transition-[transform,opacity] duration-500 ease-out",
             inside ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0",
           )}
         >
           {inside && point ? (
-            <div className="sign-galaxy-copy mx-auto w-full max-w-md text-center">
-              <p className="sign-galaxy-copy-kicker text-[0.65rem] tracking-[0.28em] uppercase">
-                {point.isHub
-                  ? hubTone
-                  : lockedPoint
-                    ? "Sealed"
-                    : point.purpose.kind === "hub"
-                      ? "Star"
-                      : insightToneLabel(point.purpose.kind)}
-              </p>
-              <h3 className="sign-galaxy-copy-title font-display mt-1 text-xl leading-snug font-medium tracking-tight italic md:text-2xl">
-                {point.isHub ? hubTitle : lockedPoint ? "Still sealed" : point.purpose.title}
-              </h3>
-              <p className="sign-galaxy-copy-body mt-2 text-sm leading-relaxed md:text-base">
-                <Gloss card={false}>
-                  {point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}
-                </Gloss>
-              </p>
-              {point.isHub && offerBirthChart && !signedIn ? (
-                <ul className="mt-3 space-y-1 text-xs text-fg-subtle">
-                  <li>We don&apos;t sell your data.</li>
-                  <li>Your charts don&apos;t train public models.</li>
-                  <li>Birth dates stay on your account and can be deleted.</li>
-                  <li>An account exists to save your sky and continue on another device.</li>
-                </ul>
-              ) : null}
-              {point.isHub ? (
-                <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
-                  Drag to look around. Tap a star to move.
+            <div
+              ref={copyRef}
+              className={cn("sign-galaxy-scroll", copyScrolls && "pointer-events-auto")}
+              data-no-fly={copyScrolls ? true : undefined}
+            >
+              <div className="sign-galaxy-copy mx-auto w-full max-w-md text-center">
+                <p className="sign-galaxy-copy-kicker text-[0.65rem] tracking-[0.28em] uppercase">
+                  {point.isHub
+                    ? hubTone
+                    : lockedPoint
+                      ? "Sealed"
+                      : point.purpose.kind === "hub"
+                        ? "Star"
+                        : insightToneLabel(point.purpose.kind)}
                 </p>
-              ) : null}
-              {!lockedPoint && !point.isHub ? (
-                <p className="mt-3 text-[0.6rem] leading-snug text-fg-subtle">
-                  Readings are cultural entertainment, not medical, legal, or psychological advice.{" "}
-                  <Link to="/terms" className="underline hover:text-fg">
-                    Terms
-                  </Link>
-                  . {MIN_AGE}+.
+                <h3 className="sign-galaxy-copy-title font-display mt-1 text-xl leading-snug font-medium tracking-tight italic md:text-2xl">
+                  {point.isHub ? hubTitle : lockedPoint ? "Still sealed" : point.purpose.title}
+                </h3>
+                <p className="sign-galaxy-copy-body mt-2 text-sm leading-relaxed md:text-base">
+                  <Gloss card={false}>
+                    {point.isHub ? hubBody : lockedPoint ? sealedCopy : point.purpose.body}
+                  </Gloss>
                 </p>
-              ) : null}
-              {point.isHub ? <MoonSignBriefCard signId={sign.id} signName={sign.name} /> : null}
+                {point.isHub && offerBirthChart && !signedIn ? (
+                  <ul className="mt-3 space-y-1 text-xs text-fg-subtle">
+                    <li>We don&apos;t sell your data.</li>
+                    <li>Your charts don&apos;t train public models.</li>
+                    <li>Birth dates stay on your account and can be deleted.</li>
+                    <li>An account exists to save your sky and continue on another device.</li>
+                  </ul>
+                ) : null}
+                {point.isHub ? (
+                  <p className="mt-3 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase">
+                    Drag to look around. Tap a star to move.
+                  </p>
+                ) : null}
+                {!lockedPoint && !point.isHub ? (
+                  <p className="mt-3 text-[0.6rem] leading-snug text-fg-subtle">
+                    Readings are cultural entertainment, not medical, legal, or psychological
+                    advice.{" "}
+                    <Link to="/terms" className="underline hover:text-fg">
+                      Terms
+                    </Link>
+                    . {MIN_AGE}+.
+                  </p>
+                ) : null}
+                {point.isHub ? <MoonSignBriefCard signId={sign.id} signName={sign.name} /> : null}
+              </div>
             </div>
           ) : null}
 
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex shrink-0 flex-col items-center gap-3">
             {inside ? (
               <div className="sign-galaxy-dots pointer-events-auto" role="group" aria-label="Star points">
                 {galaxy.points.map((p, i) => {
