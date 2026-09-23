@@ -58,7 +58,7 @@ export function LegalFooter() {
       </p>
       <button
         type="button"
-        className="min-h-9 shrink-0 px-2 text-fg underline"
+        className="min-h-11 min-w-11 shrink-0 px-2 text-fg underline"
         onClick={() => {
           try {
             sessionStorage.setItem(KEY, "1");

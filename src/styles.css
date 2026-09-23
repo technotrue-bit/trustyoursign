@@ -48,6 +48,11 @@
     --chrome-bottom: max(0.5rem, calc(var(--safe-bottom) + var(--vv-bottom)));
     --page-chrome-bottom: max(2.5rem, var(--chrome-bottom));
     --dock-h: 4.35rem;
+    /* Sky HUD: one 44px control row, the title stack below it, and a bottom
+       stack that keeps clear of the home indicator / Safari bar edge. */
+    --hud-row: 2.75rem;
+    --hud-below-row: calc(var(--chrome-top) + var(--hud-row) + 0.75rem);
+    --hud-bottom: calc(var(--safe-bottom) + var(--vv-bottom) + 0.875rem);
   }
 
   html,
@@ -521,6 +526,37 @@
 .sky-hud-footer a:hover,
 .sky-hud-footer a:focus-visible {
   color: #f5efe3;
+}
+
+@media (max-width: 767px) {
+  /* The line stays compact over the plate; each link still gets a 44px-tall
+     tap cell that stops short of its neighbours and of the strip below. */
+  .sky-hud-footer {
+    margin-bottom: 0.25rem;
+  }
+
+  .sky-hud-footer a {
+    position: relative;
+    display: inline-flex;
+    min-height: 1.75rem;
+    align-items: center;
+  }
+
+  .sky-hud-footer a::after {
+    content: "";
+    position: absolute;
+    inset: -0.5rem -0.15rem;
+  }
+
+  .galaxy-title .gloss-word {
+    position: relative;
+  }
+
+  .galaxy-title .gloss-word::after {
+    content: "";
+    position: absolute;
+    inset: -0.45rem 0;
+  }
 }
 
 .galaxy-chrome::before {

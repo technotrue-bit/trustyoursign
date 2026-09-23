@@ -183,13 +183,29 @@ function measure(p) {
     }
   }
 
+  /** Box plus any absolutely positioned ::after tap cell drawn around it. */
+  const hitBox = (el, r) => {
+    const a = getComputedStyle(el, "::after");
+    if (a.content === "none" || a.position !== "absolute") return r;
+    const px = (v) => (v.endsWith("px") ? Number.parseFloat(v) : 0);
+    const left = r.left + Math.min(0, px(a.left));
+    const right = r.right - Math.min(0, px(a.right));
+    const topY = r.top + Math.min(0, px(a.top));
+    const bottomY = r.bottom - Math.min(0, px(a.bottom));
+    return new DOMRect(left, topY, right - left, bottomY - topY);
+  };
   const small = [];
   const covered = [];
   for (const it of items) {
     if (it.kind !== "control") continue;
     const r = it.rect;
-    if (r.width < 44 || r.height < 44) {
-      small.push({ item: it.label, size: `${Math.round(r.width)}×${Math.round(r.height)}`, inline: it.inline });
+    const hb = hitBox(it.el, r);
+    if (hb.width < 44 || hb.height < 44) {
+      small.push({
+        item: it.label,
+        size: `${Math.round(hb.width)}×${Math.round(hb.height)}`,
+        inline: it.inline,
+      });
     }
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
@@ -351,6 +367,20 @@ async function phoneComposite(png, p, out) {
   await page.close();
 }
 
+/** One sign-in for the whole run — the auth rate limit trips on repeats. */
+let authState = null;
+if (viewNames.some((v) => VIEWS[v].auth)) {
+  const ctx = await browser.newContext();
+  // Dev-database QA account; sign-up is a no-op once it exists.
+  const creds = { email: "hud-audit@example.com", password: "hud-audit-pass-123", name: "Hud Audit" };
+  const headers = { origin: BASE };
+  await ctx.request.post(`${BASE}/api/auth/sign-up/email`, { data: creds, headers }).catch(() => {});
+  const res = await ctx.request.post(`${BASE}/api/auth/sign-in/email`, { data: creds, headers });
+  if (!res.ok()) process.stderr.write(`[auth] sign-in ${res.status()}\n`);
+  authState = await ctx.storageState();
+  await ctx.close();
+}
+
 const report = {};
 for (const pName of profileNames) {
   const p = PROFILES[pName];
@@ -363,6 +393,7 @@ for (const pName of profileNames) {
       deviceScaleFactor: p.mobile ? 2 : 1,
       isMobile: p.mobile,
       hasTouch: p.mobile,
+      storageState: view.auth && authState ? authState : undefined,
     });
     if (!view.cookie) {
       await context.addInitScript(() => {
@@ -372,13 +403,6 @@ for (const pName of profileNames) {
           /* ignore */
         }
       });
-    }
-    if (view.auth) {
-      // Dev-database QA account; sign-up is a no-op once it exists.
-      const creds = { email: "hud-audit@example.com", password: "hud-audit-pass-123", name: "Hud Audit" };
-      const headers = { origin: BASE };
-      await context.request.post(`${BASE}/api/auth/sign-up/email`, { data: creds, headers }).catch(() => {});
-      await context.request.post(`${BASE}/api/auth/sign-in/email`, { data: creds, headers }).catch(() => {});
     }
     const page = await context.newPage();
     const errors = [];
