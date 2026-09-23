@@ -176,7 +176,7 @@ export function SignGalaxyHud() {
                   </Gloss>
                 </p>
                 {point.isHub && offerBirthChart && !signedIn ? (
-                  <ul className="mt-3 space-y-1 text-xs text-fg-subtle">
+                  <ul className="sign-galaxy-trust mt-3 space-y-1 text-xs text-fg-subtle">
                     <li>We don&apos;t sell your data.</li>
                     <li>Your charts don&apos;t train public models.</li>
                     <li>Birth dates stay on your account and can be deleted.</li>

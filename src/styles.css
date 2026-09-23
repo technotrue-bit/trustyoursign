@@ -458,6 +458,32 @@
     0 0 22px rgba(8, 7, 6, 0.5);
 }
 
+/* Privacy lines sit where the home star's glow blooms — veil + halo as on the sky HUD. */
+.sign-galaxy-trust {
+  position: relative;
+  isolation: isolate;
+  text-shadow:
+    0 0 6px rgba(8, 7, 6, 0.96),
+    0 1px 2px rgba(8, 7, 6, 0.94),
+    0 0 14px rgba(8, 7, 6, 0.8);
+}
+
+.sign-galaxy-trust::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+  inset: -1.25rem -2.25rem;
+  /* Falls to nothing inside its own box, so the veil has no edge to see. */
+  background: radial-gradient(
+    closest-side,
+    rgba(8, 7, 6, 0.9),
+    rgba(8, 7, 6, 0.82) 55%,
+    rgba(8, 7, 6, 0.4) 80%,
+    rgba(8, 7, 6, 0)
+  );
+}
+
 .sign-galaxy-copy-body {
   color: color-mix(in oklab, #efe8dc 86%, var(--color-fg-muted));
   text-shadow:
