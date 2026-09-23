@@ -20,6 +20,10 @@ uniform float uPxScale;
 uniform float uBaseSize;
 uniform float uMorph;
 uniform float uGlyphBiasX;
+// 1 when parked and free to animate, 0 while steering/wheeling/dragging/
+// seeking (or reduced motion) — the single kill switch for the halo's
+// new-in-this-pass motion, so the one-plate rule's damping covers it too.
+uniform float uLife;
 uniform vec3 uTint;
 attribute vec3 signPos;
 attribute vec3 glyphPos;
@@ -33,6 +37,7 @@ varying float vSpike;
 void main() {
   float gath = clamp(uGather, 0.0, 1.0);
   float kind = aKind;
+  float life = clamp(uLife, 0.0, 1.0);
   if (kind > 1.5) gath = mix(0.2, 0.85, gath);
   // Morph only body stars (kind 0) into the glyph; spiral/halo stay ambient.
   float isBody = kind < 0.5 ? 1.0 : 0.0;
@@ -42,6 +47,22 @@ void main() {
   float bias = uGlyphBiasX * isBody;
   vec3 biasedGlyph = vec3(glyphPos.x + bias, glyphPos.y, glyphPos.z);
   vec3 fig = mix(signPos, biasedGlyph, morphAmt);
+
+  // Halo orbit: the ring slowly turns like a galaxy on its own flattened
+  // oval, inner stars a little faster than outer ones. Rotating in
+  // fig-space (before the uWide/uTall scale) keeps the orbit on the
+  // sign's own ellipse. Damped to a stop by life while the camera is
+  // moving — the one-plate rule's damping covers this too.
+  if (kind > 1.5) {
+    float haloR = length(fig.xy);
+    float orbitSpeed = mix(0.05, 0.018, clamp((haloR - 0.3) / 0.9, 0.0, 1.0));
+    float orbitAngle = uTime * orbitSpeed * life;
+    float oc = cos(orbitAngle);
+    float os = sin(orbitAngle);
+    vec2 hb = fig.xy;
+    fig.xy = vec2(hb.x * oc - hb.y * os, hb.x * os + hb.y * oc);
+  }
+
   float chest = 1.0 - min(1.0, length(fig.xy) * 1.55);
   float spin = uSwirl * (1.0 - morphAmt * 0.85) * (kind > 0.5 && kind < 1.5 ? 0.2 + chest * 0.12 : chest * 0.055);
   float phase = uTime * (0.35 + mod(aPhase, 5.0) * 0.02) + aPhase;
@@ -120,6 +141,7 @@ export function makeSparkMaterial() {
       uBaseSize: { value: 2.05 },
       uMorph: { value: 0 },
       uGlyphBiasX: { value: 0 },
+      uLife: { value: 1 },
       uTint: { value: new Color("#f0d4c6") },
     },
     vertexShader: STAR_VERT,
