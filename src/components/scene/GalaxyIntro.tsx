@@ -1034,6 +1034,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           ? lifeTarget
           : lerpToward({ current: lifeEase.current, target: lifeTarget, dt, rate: 1.4 });
       u.uLife.value = lifeEase.current;
+      // Pointer position drives the halo's depth parallax (see starRender);
+      // life above already damps it while the camera is moving.
+      u.uParX.value = galaxyTravel.ptrX;
+      u.uParY.value = galaxyTravel.ptrY;
       (u.uTint.value as Color).copy(tint);
     }
 

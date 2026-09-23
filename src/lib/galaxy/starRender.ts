@@ -24,6 +24,9 @@ uniform float uGlyphBiasX;
 // seeking (or reduced motion) — the single kill switch for the halo's
 // new-in-this-pass motion, so the one-plate rule's damping covers it too.
 uniform float uLife;
+// Small pointer-driven offsets, used only for the halo's depth parallax.
+uniform float uParX;
+uniform float uParY;
 uniform vec3 uTint;
 attribute vec3 signPos;
 attribute vec3 glyphPos;
@@ -76,6 +79,16 @@ void main() {
     float cr = 0.35 + chest * 0.4;
     p.x += cos(ang) * cr * chest * 0.15;
     p.y += sin(ang) * cr * chest * 0.11;
+  }
+
+  // Depth parallax: halo stars keep their bake depth (fig.z) as a
+  // near/far cue, so layers slide at different speeds as the camera
+  // drifts (a slow ambient sway) or the pointer moves (uParX/uParY).
+  if (kind > 1.5) {
+    float depthSel = fig.z;
+    float ambientDrift = sin(uTime * 0.025 + aPhase * 0.4) * 0.05;
+    p.x += depthSel * (uParX * 1.6 + ambientDrift) * life;
+    p.y += depthSel * uParY * 1.6 * life;
   }
 
   float breathe = 0.96 + 0.04 * sin(uTime * (0.85 + mod(aPhase, 5.0) * 0.12) + aPhase);
@@ -142,6 +155,8 @@ export function makeSparkMaterial() {
       uMorph: { value: 0 },
       uGlyphBiasX: { value: 0 },
       uLife: { value: 1 },
+      uParX: { value: 0 },
+      uParY: { value: 0 },
       uTint: { value: new Color("#f0d4c6") },
     },
     vertexShader: STAR_VERT,
@@ -265,7 +280,9 @@ export function fillStationCloud(
     const r = HALO_R_MIN + rn * HALO_R_SPAN;
     sign[w * 3] = Math.cos(a) * r;
     sign[w * 3 + 1] = Math.sin(a) * r * 0.62;
-    sign[w * 3 + 2] = (hash(i, 11) - 0.5) * 0.12;
+    // Wider than a plain jitter on purpose: the vertex shader reads this
+    // as a near/far depth cue for parallax (see uParX/uParY below).
+    sign[w * 3 + 2] = (hash(i, 11) - 0.5) * 0.9;
     // Dimmer with radius, so the ring fades into the nebula rather than
     // cutting off.
     const fadeOuter = 1 - rn;
