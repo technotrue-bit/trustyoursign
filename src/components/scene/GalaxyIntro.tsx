@@ -34,30 +34,36 @@ import type { SignId } from "@/lib/chart/types";
 import {
   EXPLORE_ZOOM_MAX,
   EXPLORE_ZOOM_MIN,
-  HOLD_FLY,
   INSIDE_LANDING_DISTANCE,
+  MAX_FLY_T,
+  SETTLED_VEL,
   aimedIndex,
+  capFlightStep,
+  dwellClipMayPlay,
   ensureAutoClock,
   stopAutoClock,
-  decayWheelGlide,
   ensureFlyInput,
   enterAnimating,
   enterSignGalaxy,
   exitSignGalaxy,
   exploringSign,
   galaxyTravel,
+  killDwellClip,
   noteControl,
   prefersReducedMotion,
   publishTravel,
   skipBirth,
   skipEnterGalaxy,
   stepBirth,
+  stepCorridorFlight,
   stepExplore,
   stepSelectionHold,
   stepSeek,
   stepShaderTime,
+  stepSign,
   stepZoom,
 } from "@/lib/galaxy/travel";
+import { SETTLE_DIST } from "@/lib/galaxy/dwellClip";
 import {
   enterHubSettle,
   getSignGalaxy,
@@ -86,9 +92,8 @@ import { galaxyLayerName } from "@/lib/galaxy/layers";
 import {
   CLOUD_GAIN_IDLE,
   cloudBurstGain,
-  fieldFade,
   fieldGather,
-  fieldVisible,
+  plateWeight,
   signArrive,
   stepArriveBurst,
 } from "@/lib/galaxy/signField";
@@ -166,6 +171,12 @@ const _hubNdc = new Vector3();
 
 /** Enter flythrough: where the inside camera comes to rest relative to the hub star. */
 export const HUB_STANDOFF = INSIDE_LANDING_DISTANCE;
+
+/** Share of the corridor dust hidden at top speed: less streaming past the eyes. */
+const DUST_MOTION_DIM = 0.6;
+
+/** Corridor weight each station drew last frame, for the pieces it parents. */
+const stationWeight = new Float32Array(TEMPLE_SIGNS.length).fill(1);
 
 let cachedViewW = 1280;
 let cachedViewH = 900;
@@ -404,10 +415,18 @@ function Dust() {
     },
     [tex, geo],
   );
+  const calm = useRef(1);
   useFrame(({ clock }, dt) => {
     const mesh = points.current;
     if (!mesh) return;
-    const vis = introField() * (exploringSign() ? galaxyTravel.worldFade : 1);
+    const rush = exploringSign() ? 0 : Math.min(1, Math.abs(galaxyTravel.vel) / MAX_FLY_T);
+    calm.current = lerpToward({
+      current: calm.current,
+      target: 1 - DUST_MOTION_DIM * rush,
+      dt,
+      rate: 4,
+    });
+    const vis = introField() * (exploringSign() ? galaxyTravel.worldFade : 1) * calm.current;
     mesh.visible = vis > 0.02;
     const mat = mesh.material;
     if (!Array.isArray(mat) && "opacity" in mat) mat.opacity = 0.35 * vis;
@@ -708,35 +727,39 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       wantArt.current = true;
       queueMicrotask(() => setArtTex(loadSignArt(sign.id)));
     }
+    stationWeight[index] = 0;
     if (introPlaying() && index !== 0 && !held) {
       g.visible = false;
       releaseLife();
       return;
     }
-    if (direct && !held && index !== aimedIndex()) {
+    // A strip / Enter jump shows only where it left and where it lands, never the signs between.
+    const departing = direct && index === stationFromT(galaxyTravel.seekStartT ?? t);
+    if (direct && !held && index !== aimedIndex() && !departing) {
       g.visible = false;
       releaseLife();
       return;
     }
     const exploringHere =
       galaxyTravel.exploreSignIndex === index && galaxyTravel.explorePhase !== "idle";
-    const worldFade = exploringSign() ? galaxyTravel.worldFade : 1;
     if (exploringSign() && !exploringHere && !held) {
       g.visible = false;
       releaseLife();
       return;
     }
+    const sit = TEMPLE_STATIONS[index]!;
+    const cam = camera as PerspectiveCamera;
+    _sitCam.copy(sit);
+    cam.worldToLocal(_sitCam);
+    // One plate owns the frame: the nearest sign, handed to the next near the
+    // midpoint, and dissolved before the camera can fly into it.
+    const depth = -_sitCam.z;
     const fade =
       held || exploringHere
         ? 1
-        : direct && index === aimedIndex()
-          ? Math.max(0.35, smooth(fieldGather(dist, 0.22)))
-          : fieldFade(fieldGather(dist)) * worldFade;
-    const show =
-      held ||
-      exploringHere ||
-      fieldVisible(fieldGather(dist)) ||
-      (direct && index === aimedIndex());
+        : plateWeight((t - dest) * (TEMPLE_SIGNS.length - 1), galaxyTravel.restDist, depth);
+    const show = held || exploringHere || fade > 0.004;
+    stationWeight[index] = show ? fade : 0;
     g.visible = show;
     if (!show) {
       mesh.visible = false;
@@ -746,10 +769,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     }
     if (hydrated.current) setCloudDrawRange(starGeo, true);
 
-    const sit = TEMPLE_STATIONS[index]!;
-    const cam = camera as PerspectiveCamera;
-    _sitCam.copy(sit);
-    cam.worldToLocal(_sitCam);
     const volEarly = getSignVolume(sign.id);
     const plateAspect = volEarly?.aspect ?? (artTex ? artAspect(artTex) : 16 / 9) ?? 16 / 9;
     const slide = computeBirthChatSlide({
@@ -839,21 +858,15 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           galaxyTravel.dwellClipIndex === index &&
           !galaxyTravel.dwellClipDone &&
           Boolean(dwellClipFor(sign.id));
-        const lifeBlocked =
-          reducedMotion ||
-          exploringHere ||
-          exploringSign() ||
-          galaxyTravel.dragging ||
-          galaxyTravel.handsOn ||
-          galaxyTravel.hold !== 0;
         let lifeVideo = false;
-        if (!lifeOwns || lifeBlocked) {
-          if (lifeOwns) pauseDwellClip(sign.id);
-          dwellStall.current = 0;
-          releaseDwellTexture(mat, artTex, dwellTex);
-        } else if (galaxyTravel.paused) {
+        if (lifeOwns && galaxyTravel.paused) {
           pauseDwellClip(sign.id);
           lifeVideo = Boolean(dwellTex.current);
+        } else if (!lifeOwns || !dwellClipMayPlay(index)) {
+          // Not parked, or someone is steering: the clip dies and the still plate rides.
+          if (lifeOwns) killDwellClip();
+          dwellStall.current = 0;
+          releaseDwellTexture(mat, artTex, dwellTex);
         } else {
           const video = playDwellClip(sign.id);
           if (video && !video.ended && !video.error && video.paused && video.currentTime === 0) {
@@ -879,16 +892,21 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           !lifeVideo && index === 0 && !reducedMotion
             ? 1 + Math.sin(galaxyTravel.shaderTime * 0.72) * 0.012
             : 1;
-        // Plate opacity via tested helper — fully opaque during BirthChat, no plateMorphFade.
-        const plateOp =
-          computePlateOpacity({
-            plateOn,
-            held,
-            focused,
-            fade,
-            bornIn,
-            morphLevel: morphLevel.current,
-          }) * (exploringHere ? galaxyTravel.plateFade : 1);
+        // Corridor plates follow the one-owner weight alone (no floor, so no stack).
+        // BirthChat, the enter dive, and the intro keep the tested helper.
+        const corridorPlate = !held && !exploringHere && !(introPlaying() && index === 0);
+        const plateOp = corridorPlate
+          ? plateOn
+            ? fade
+            : 0
+          : computePlateOpacity({
+              plateOn,
+              held,
+              focused,
+              fade,
+              bornIn,
+              morphLevel: morphLevel.current,
+            }) * (exploringHere ? galaxyTravel.plateFade : 1);
         art.current.visible = plateOp > 0.04;
         art.current.scale.set(wide * ariesBreath, (wide / aspect) * ariesBreath, 1);
         mat.opacity =
@@ -928,7 +946,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         }
       }
 
-      if (!focused && !incoming && !held && !exploringHere) {
+      if (!held && !exploringHere && fade < 0.01) {
         mesh.visible = false;
         return;
       }
@@ -1053,6 +1071,8 @@ function AriesAtmosphere() {
     const t = galaxyTravel.shaderTime;
     const breathe = 1 + Math.sin(t * 0.72) * 0.025;
     const hover = galaxyTravel.ptrOn ? 1 : 0;
+    // The rings belong to the Aries plate: they leave the frame with it.
+    const own = stationWeight[0] ?? 1;
     const shimmer = 0.5 + 0.5 * Math.sin(t * 1.15 + 0.8) + hover * 0.18;
 
     if (halo.current) {
@@ -1063,7 +1083,7 @@ function AriesAtmosphere() {
       );
       halo.current.rotation.z = t * 0.035;
       const material = halo.current.material as MeshBasicMaterial;
-      material.opacity = 0.035 + shimmer * 0.018;
+      material.opacity = (0.035 + shimmer * 0.018) * own;
     }
     if (orbit.current) {
       orbit.current.scale.set(
@@ -1073,11 +1093,11 @@ function AriesAtmosphere() {
       );
       orbit.current.rotation.z = -t * 0.055;
       const material = orbit.current.material as MeshBasicMaterial;
-      material.opacity = 0.14 + shimmer * 0.06;
+      material.opacity = (0.14 + shimmer * 0.06) * own;
     }
     if (core.current) {
       const material = core.current.material as MeshBasicMaterial;
-      material.opacity = 0.025 + shimmer * 0.018;
+      material.opacity = (0.025 + shimmer * 0.018) * own;
     }
   });
 
@@ -1205,6 +1225,8 @@ function ChartRing() {
 function TempleRig() {
   const { camera, scene, size } = useThree();
   const current = useRef(galaxyTravel.t);
+  /** The t this rig last published, to tell its own writes from an outside placement. */
+  const written = useRef(galaxyTravel.t);
   const lastStation = useRef(0);
   const epoch = useRef(galaxyTravel.epoch);
   const lastPub = useRef(-1);
@@ -1256,21 +1278,9 @@ function TempleRig() {
         return;
       }
       if (e.key === "ArrowDown" || e.key === "s" || e.key === "S" || e.key === "ArrowRight") {
-        galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget + 0.045);
-        galaxyTravel.hold = 1;
-        galaxyTravel.wheelUntil = performance.now() + 220;
-        galaxyTravel.wheelDriven = false;
-        galaxyTravel.moved = true;
-        galaxyTravel.handsOn = true;
-        noteControl();
+        stepSign(1);
       } else if (e.key === "ArrowUp" || e.key === "w" || e.key === "W" || e.key === "ArrowLeft") {
-        galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget - 0.045);
-        galaxyTravel.hold = -1;
-        galaxyTravel.wheelUntil = performance.now() + 220;
-        galaxyTravel.wheelDriven = false;
-        galaxyTravel.moved = true;
-        galaxyTravel.handsOn = true;
-        noteControl();
+        stepSign(-1);
       } else if (e.key === "Enter" && galaxyTravel.birth < 1) {
         skipBirth();
         useGalaxy.getState().markBorn();
@@ -1285,12 +1295,19 @@ function TempleRig() {
   useFrame((_, delta) => {
     syncFrameSession();
     const d = Math.min(0.05, Math.max(0.001, delta));
+    let snapPose = false;
     if (epoch.current !== galaxyTravel.epoch) {
       epoch.current = galaxyTravel.epoch;
       current.current = galaxyTravel.t;
       galaxyTravel.tTarget = galaxyTravel.t;
       booted.current = false;
+    } else if (galaxyTravel.t !== written.current) {
+      // Someone placed the camera (refresh restore, deep link): take it as a cut,
+      // not a capped crawl across the corridor.
+      current.current = galaxyTravel.t;
+      snapPose = true;
     }
+    const t0 = current.current;
     // I5: one shared sky clock — a pause freezes every shader below together.
     stepShaderTime(d);
     if (stepBirth(d)) {
@@ -1310,29 +1327,31 @@ function TempleRig() {
     galaxyTravel.busy = chatting || state.session !== null || arriving;
     galaxyTravel.claiming = chatting;
     const sought = exploring ? { active: false, t: current.current } : stepSeek(current.current, d);
-    if (sought.active) {
+    // A seek landing this frame (or a reduced-motion cut) places t exactly.
+    if (sought.active || sought.t !== current.current) {
       current.current = sought.t;
       galaxyTravel.tTarget = sought.t;
     }
+    const free = !chatting && !arriving && !sought.active && !exploring;
     if (chatting) {
       const i = CONSTELLATIONS.findIndex((c) => c.id === state.claim?.signId);
       if (i >= 0) galaxyTravel.tTarget = stationT(i);
-    } else if (!arriving && !sought.active && !exploring) {
-      const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
-      galaxyTravel.handsOn = hands;
-      if (hands && galaxyTravel.hold !== 0) {
-        galaxyTravel.tTarget = clamp01(
-          galaxyTravel.tTarget + galaxyTravel.hold * HOLD_FLY * d * 0.22,
-        );
-      }
-      decayWheelGlide(d);
-      galaxyTravel.steer = 0;
+    } else if (free) {
+      stepCorridorFlight(current.current, d);
     }
     galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget);
     const k = arriving ? 1 : 1 - Math.exp(-d * (sought.active ? 2.6 : 2.9));
-    current.current += (galaxyTravel.tTarget - current.current) * (arriving ? 1 : k);
-    current.current = clamp01(current.current);
+    let step = (galaxyTravel.tTarget - current.current) * (arriving ? 1 : k);
+    // Free flight never outruns MAX_FLY; a landing that just began waits for its first eased frame.
+    if (free) step = galaxyTravel.seek != null ? 0 : capFlightStep(step, d);
+    current.current = clamp01(current.current + step);
     const t = current.current;
+    galaxyTravel.vel = (t - t0) / d;
+    galaxyTravel.traveling =
+      sought.active ||
+      Math.abs(galaxyTravel.tTarget - t) > SETTLE_DIST ||
+      Math.abs(galaxyTravel.vel) > SETTLED_VEL;
+    if (prefersReducedMotion() && Math.abs(t - t0) > 0.02) snapPose = true;
     TEMPLE_CURVE.getPointAt(t, _chest);
     const aspect = viewAspect(size);
     const idx = stationFromT(t);
@@ -1353,6 +1372,7 @@ function TempleRig() {
     const pull = 1 - introCam();
     _cam.copy(_chest);
     _cam.z += frame.z / zoom;
+    galaxyTravel.restDist = frame.z / zoom;
     _cam.y += frame.y / (0.72 + zoom * 0.28) + pull * 0.35;
     _look.copy(_chest);
     _look.z -= 1.4 + introCam() * 1.0;
@@ -1488,7 +1508,7 @@ function TempleRig() {
 
     if (!Number.isFinite(_cam.x) || !Number.isFinite(_look.x)) return;
     camera.up.copy(_up);
-    if (!booted.current || arriving || snapSkipPose) {
+    if (!booted.current || arriving || snapSkipPose || snapPose) {
       camera.position.copy(_cam);
       camera.lookAt(_look);
       booted.current = true;
@@ -1552,6 +1572,7 @@ function TempleRig() {
       prefersReducedMotion() || exploringSign() ? null : (TEMPLE_SIGNS[aimedIndex()]?.id ?? null),
     );
     galaxyTravel.t = t;
+    written.current = t;
     if (galaxyTravel.moved) galaxyTravel.awaken = 1;
     stepSelectionHold();
     if (
