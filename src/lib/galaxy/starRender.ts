@@ -99,9 +99,13 @@ void main() {
   float b = min(1.35, spark * (0.5 + mag * 0.55) * (0.78 + visibility * 0.22));
   vec3 gold = vec3(1.0, 0.9, 0.72);
   vec3 violet = vec3(0.62, 0.55, 0.82);
+  // Richer twinkle: a slow, per-star shimmer between gold and violet, on
+  // top of the plain breathe above — damped by life like the rest.
+  float shimmer = 0.5 + 0.5 * sin(uTime * (0.05 + mod(aPhase, 4.0) * 0.02) + aPhase * 1.9);
+  vec3 shimmerTint = mix(gold, violet, shimmer);
   if (kind > 0.5 && kind < 1.5) vColor = mix(gold, uTint, 0.28) * b * 1.15;
-  else if (kind > 1.5) vColor = mix(uTint, violet, 0.35) * b * 0.7;
-  else vColor = uTint * b;
+  else if (kind > 1.5) vColor = mix(mix(uTint, violet, 0.35), shimmerTint, 0.4 * life) * b * 0.7;
+  else vColor = mix(uTint, shimmerTint, 0.1 * life) * b;
   // Fade spiral (kind 1) and halo (kind 2) out while glyph is forming
   // so only the clean body-star symbol is visible at full morph.
   float ambientFade = kind < 0.5 ? 1.0 : max(0.0, 1.0 - uMorph * 1.4);
@@ -284,9 +288,13 @@ export function fillStationCloud(
     // as a near/far depth cue for parallax (see uParX/uParY below).
     sign[w * 3 + 2] = (hash(i, 11) - 0.5) * 0.9;
     // Dimmer with radius, so the ring fades into the nebula rather than
-    // cutting off.
+    // cutting off. A small slice is promoted past 0.7 so it catches the
+    // existing cross-spike glint (vSpike in the vertex shader).
     const fadeOuter = 1 - rn;
-    mag[w] = 0.14 + fadeOuter * 0.34 + hash(i, 12) * 0.12;
+    const glint = hash(i, 20) > 0.91;
+    mag[w] = glint
+      ? 0.74 + hash(i, 21) * 0.22
+      : 0.14 + fadeOuter * 0.34 + hash(i, 12) * 0.12;
     kind[w] = 2;
     phase[w] = hash(i, 13) * 6.28;
     const sr = 6 + hash(i, 14) * 10;
