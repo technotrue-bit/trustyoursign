@@ -166,9 +166,42 @@ export function nebulaCompositeSize(modest: boolean): number {
  */
 const NEBULA_CHUNK_REV = "2";
 
+/** Bumps when the build-time nebula wallpaper assets change (see `scripts/bake-nebula-wallpaper.mjs`). */
+export const NEBULA_WALLPAPER_REV = "1";
+
+export type NebulaWallpaperPath = "gl" | "2d";
+
 export function nebulaUrl(id: string, modest: boolean): string {
   const file = modest ? `${id}-sm.jpg` : `${id}.jpg`;
   return `/sky/${file}${id ? "" : NEBULA_CHUNK_REV}`;
+}
+
+/** Immutable pre-baked composite matching `composeNebulaWallpaper` at the given gain profile. */
+export function prebakedNebulaWallpaperUrl(modest: boolean, path: NebulaWallpaperPath): string {
+  const size = nebulaCompositeSize(modest);
+  const tag = path === "gl" ? "gl" : "2d";
+  const modestTag = modest ? "-modest" : "";
+  return `/sky/nebula-wallpaper-${size}-${tag}${modestTag}.webp?v=${NEBULA_WALLPAPER_REV}`;
+}
+
+export function nebulaWallpaperGain(path: NebulaWallpaperPath, modest: boolean): number {
+  if (path === "2d") return NEBULA_2D_LAYER_GAIN;
+  return modest ? NEBULA_GL_LAYER_GAIN_MODEST : NEBULA_GL_LAYER_GAIN;
+}
+
+/** Load the static bake; resolves null when the asset is missing or decode fails. */
+export function loadPrebakedNebulaWallpaper(
+  modest: boolean,
+  path: NebulaWallpaperPath,
+): Promise<HTMLImageElement | null> {
+  if (typeof Image === "undefined") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = prebakedNebulaWallpaperUrl(modest, path);
+  });
 }
 
 function clamp01(v: number) {
@@ -588,7 +621,7 @@ export function paintNebulaWallpaper(
   skyTime: number,
   lookX = 0,
   lookY = 0,
-  composite: HTMLCanvasElement | null = null,
+  composite: CanvasImageSource | null = null,
 ) {
   if (w < 2 || h < 2) return;
   const baked =

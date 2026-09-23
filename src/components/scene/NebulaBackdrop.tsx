@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFrame, useLoader, useThree } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import {
   CanvasTexture,
   DataTexture,
@@ -11,7 +11,7 @@ import {
   PerspectiveCamera,
   RGBAFormat,
   SRGBColorSpace,
-  TextureLoader,
+  Texture,
   UnsignedByteType,
   type MeshBasicMaterial,
 } from "three";
@@ -20,11 +20,11 @@ import {
   NEBULA_COMPOSITE_DRIFT,
   NEBULA_GL_LAYER_GAIN,
   NEBULA_GL_LAYER_GAIN_MODEST,
-  NEBULA_LAYERS,
   composeNebulaWallpaper,
+  loadNebulaImages,
+  loadPrebakedNebulaWallpaper,
   makeCenterWellData,
   nebulaCompositeSize,
-  nebulaUrl,
   type NebulaImageMap,
 } from "@/lib/galaxy/nebulaBackdrop";
 import { exploringSign, galaxyTravel } from "@/lib/galaxy/travel";
@@ -57,6 +57,16 @@ function makeDataTexture(data: Uint8ClampedArray, srgb: boolean) {
   return tex;
 }
 
+function configureWallpaperTexture(tex: Texture, modest: boolean, maxAnisotropy: number) {
+  tex.colorSpace = SRGBColorSpace;
+  tex.minFilter = LinearFilter;
+  tex.magFilter = LinearFilter;
+  tex.generateMipmaps = false;
+  tex.anisotropy = modest ? 1 : Math.min(8, maxAnisotropy);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 /**
  * Camera-locked nebula sky. A single full-bleed plate stays opaque through
  * the middle. Split left/right wings (offset by ±0.95 of the view width and
@@ -72,38 +82,40 @@ export function NebulaBackdrop() {
   const maxAnisotropy = gl.capabilities.getMaxAnisotropy();
   const modest = typeof window !== "undefined" && isSmallGpu();
   const gain = modest ? NEBULA_GL_LAYER_GAIN_MODEST : NEBULA_GL_LAYER_GAIN;
-  const urls = useMemo(
-    () => NEBULA_LAYERS.map((l) => nebulaUrl(l.id, modest)),
-    [modest],
-  );
-  const textures = useLoader(TextureLoader, urls);
-  const [compositeMap, setCompositeMap] = useState<CanvasTexture | null>(null);
+  const [compositeMap, setCompositeMap] = useState<Texture | null>(null);
 
   useEffect(() => {
-    const list = Array.isArray(textures) ? textures : [textures];
-    const images: NebulaImageMap = new Map();
-    for (let i = 0; i < NEBULA_LAYERS.length; i++) {
-      const layer = NEBULA_LAYERS[i]!;
-      const img = list[i]?.image as CanvasImageSource | undefined;
-      if (img) images.set(layer.id, img as HTMLImageElement);
-    }
-    const baked = composeNebulaWallpaper(images, nebulaCompositeSize(modest), gain);
-    if (!baked) {
-      setCompositeMap(null);
-      return;
-    }
-    const tex = new CanvasTexture(baked);
-    tex.colorSpace = SRGBColorSpace;
-    tex.minFilter = LinearFilter;
-    tex.magFilter = LinearFilter;
-    tex.generateMipmaps = false;
-    tex.anisotropy = modest ? 1 : Math.min(8, maxAnisotropy);
-    tex.needsUpdate = true;
-    setCompositeMap(tex);
+    let disposed = false;
+    let owned: Texture | null = null;
+
+    void (async () => {
+      const prebaked = await loadPrebakedNebulaWallpaper(modest, "gl");
+      if (disposed) return;
+      if (prebaked) {
+        const tex = new Texture(prebaked);
+        owned = tex;
+        configureWallpaperTexture(tex, modest, maxAnisotropy);
+        setCompositeMap(tex);
+        return;
+      }
+      const images: NebulaImageMap = await loadNebulaImages(modest);
+      if (disposed) return;
+      const baked = composeNebulaWallpaper(images, nebulaCompositeSize(modest), gain);
+      if (!baked) {
+        setCompositeMap(null);
+        return;
+      }
+      const tex = new CanvasTexture(baked);
+      owned = tex;
+      configureWallpaperTexture(tex, modest, maxAnisotropy);
+      setCompositeMap(tex);
+    })();
+
     return () => {
-      tex.dispose();
+      disposed = true;
+      owned?.dispose();
     };
-  }, [textures, modest, gain, maxAnisotropy]);
+  }, [modest, gain, maxAnisotropy]);
 
   const wellMap = useMemo(
     () => makeDataTexture(makeCenterWellData(MASK_SIZE), true),

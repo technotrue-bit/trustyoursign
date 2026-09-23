@@ -14,6 +14,7 @@ import {
   NEBULA_2D_LAYER_GAIN,
   composeNebulaWallpaper,
   loadNebulaImages,
+  loadPrebakedNebulaWallpaper,
   nebulaCompositeSize,
   paintNebulaWallpaper,
   type NebulaImageMap,
@@ -161,16 +162,22 @@ export function FallbackSky({ note }: { note?: string }) {
     let gy = 0.48;
     let glow = 0;
     let nebulae: NebulaImageMap = new Map();
-    let nebulaComposite: HTMLCanvasElement | null = null;
+    let nebulaComposite: CanvasImageSource | null = null;
     const modestGpu = typeof window !== "undefined" && isSmallGpu();
-    void loadNebulaImages(modest).then((map) => {
+    void (async () => {
+      const prebaked = await loadPrebakedNebulaWallpaper(modestGpu, "2d");
+      if (prebaked) {
+        nebulaComposite = prebaked;
+        return;
+      }
+      const map = await loadNebulaImages(modest);
       nebulae = map;
       nebulaComposite = composeNebulaWallpaper(
         map,
         nebulaCompositeSize(modestGpu),
         NEBULA_2D_LAYER_GAIN,
       );
-    });
+    })();
 
     const resize = () => {
       w = canvas.clientWidth;
