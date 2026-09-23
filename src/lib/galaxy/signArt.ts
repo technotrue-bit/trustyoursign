@@ -2,19 +2,22 @@ import { CanvasTexture, ClampToEdgeWrapping, LinearFilter, SRGBColorSpace } from
 import type { SignId } from "@/lib/chart/types";
 import { isSmallGpu } from "@/lib/gpu";
 
+// WebP re-encodes of the same source art (see scripts/convert-sign-plates-to-webp.mjs)
+// — same pixels, ~60-70% fewer bytes. Every evergreen browser this app supports
+// (Chrome/Edge/Firefox/Safari 14+) decodes WebP natively.
 export const SIGN_ART: Record<SignId, string> = {
-  aries: "/signs/aries.png",
-  taurus: "/signs/taurus.png",
-  gemini: "/signs/gemini.png",
-  cancer: "/signs/cancer.png",
-  leo: "/signs/leo.png",
-  virgo: "/signs/virgo.png",
-  libra: "/signs/libra.png",
-  scorpio: "/signs/scorpio.png",
-  sagittarius: "/signs/sagittarius.png",
-  capricorn: "/signs/capricorn.png",
-  aquarius: "/signs/aquarius.png",
-  pisces: "/signs/pisces.png",
+  aries: "/signs/aries.webp",
+  taurus: "/signs/taurus.webp",
+  gemini: "/signs/gemini.webp",
+  cancer: "/signs/cancer.webp",
+  leo: "/signs/leo.webp",
+  virgo: "/signs/virgo.webp",
+  libra: "/signs/libra.webp",
+  scorpio: "/signs/scorpio.webp",
+  sagittarius: "/signs/sagittarius.webp",
+  capricorn: "/signs/capricorn.webp",
+  aquarius: "/signs/aquarius.webp",
+  pisces: "/signs/pisces.webp",
 };
 
 export function getSignArtUrl(id: SignId): string {
@@ -73,12 +76,15 @@ function rasterAll(id: SignId) {
   for (const tex of set) raster(id, tex);
 }
 
-function ensureImage(id: SignId) {
+function ensureImage(id: SignId, priority?: "low") {
   const url = SIGN_ART[id];
   let img = images.get(url);
   if (img) return img;
   img = new Image();
   img.decoding = "async";
+  // The current/near plates must win the connection; far-corridor plates that
+  // are only warmed for a later drive-by should never steal their bandwidth.
+  if (priority === "low" && "fetchPriority" in img) img.fetchPriority = "low";
   img.onload = () => {
     const paint = () => rasterAll(id);
     if (typeof img.decode === "function") img.decode().then(paint).catch(paint);
@@ -87,7 +93,7 @@ function ensureImage(id: SignId) {
   img.onerror = () => {
     window.setTimeout(() => {
       images.delete(url);
-      ensureImage(id);
+      ensureImage(id, priority);
     }, 700);
   };
   img.src = url;
@@ -141,12 +147,17 @@ export function hydrateSignArt(id: SignId, tex: CanvasTexture) {
   return raster(id, tex);
 }
 
-/** Fresh canvas per call. Release with `releaseSignArt` when the mesh unmounts. */
-export function loadSignArt(id: SignId): CanvasTexture {
+/**
+ * Fresh canvas per call. Release with `releaseSignArt` when the mesh unmounts.
+ * `priority: "low"` marks a plate that is only being warmed for a later
+ * drive-by (not the sign the viewer is on or about to reach) — same request,
+ * lower network priority, so it never competes with the current plate.
+ */
+export function loadSignArt(id: SignId, priority?: "low"): CanvasTexture {
   const tex = new CanvasTexture(blankCanvas());
   style(tex);
   register(SIGN_ART[id], tex);
-  ensureImage(id);
+  ensureImage(id, priority);
   hydrateSignArt(id, tex);
   return tex;
 }
