@@ -634,7 +634,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
 
   useEffect(() => {
     if (artTex) return;
-    const id = window.setTimeout(() => setArtTex(loadSignArt(sign.id)), 420 + index * 85);
+    // Background warm for a station the viewer isn't near yet — low priority
+    // so it never competes with the current plate's bytes on a slow link.
+    const id = window.setTimeout(
+      () => setArtTex(loadSignArt(sign.id, "low")),
+      420 + index * 85,
+    );
     return () => window.clearTimeout(id);
   }, [artTex, index, sign.id]);
 
