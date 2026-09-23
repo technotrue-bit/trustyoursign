@@ -200,12 +200,19 @@ function measure(p) {
   }
 
   const island = { left: w / 2 - 63, right: w / 2 + 63, bottom: 48 };
+  // A fixed scrim over the status-bar band hides document text scrolling under it.
+  const page = document.querySelector("main.vault-page");
+  const scrimCss = page ? getComputedStyle(page, "::before") : null;
+  const scrim =
+    scrimCss && scrimCss.content !== "none" && scrimCss.position === "fixed"
+      ? Number.parseFloat(scrimCss.height) || 0
+      : 0;
   const underTop = [];
   const underBottom = [];
   const hugBar = [];
   for (const it of items) {
     const r = it.rect;
-    if (top > 0 && r.top < top) {
+    if (top > 0 && r.top < top && scrim < top) {
       const inIsland =
         r.bottom > 11 && r.top < island.bottom && r.right > island.left && r.left < island.right;
       underTop.push({
@@ -237,9 +244,14 @@ function measure(p) {
   const covered = [];
   for (const it of items) {
     if (it.kind !== "control") continue;
-    const r = it.rect;
-    const hb = hitBox(it.el, r);
-    if (hb.width < 43.5 || hb.height < 43.5) {
+    const full = it.el.getBoundingClientRect();
+    // Size is judged on controls fully on screen; a half-scrolled one is not small.
+    const whole = it.rect.width >= full.width - 1 && it.rect.height >= full.height - 1;
+    // A wrapped inline link: aim at its first line, not the gap between lines.
+    const lines = it.el.getClientRects();
+    const r = lines.length > 1 ? clipped(it.el, lines[0]) : it.rect;
+    const hb = hitBox(it.el, full);
+    if (whole && (hb.width < 43.5 || hb.height < 43.5)) {
       small.push({
         item: it.label,
         size: `${Math.round(hb.width)}×${Math.round(hb.height)}`,
@@ -343,6 +355,7 @@ function measure(p) {
     named,
     hits,
     scroll,
+    scrim: Math.round(scrim),
     marks: {
       overlap: [...new Set(overlaps.flatMap((o) => [o.a, o.b]))],
       small: small.filter((s) => !s.inline).map((s) => s.item),
