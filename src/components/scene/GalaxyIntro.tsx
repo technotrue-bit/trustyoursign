@@ -39,6 +39,7 @@ import {
   PORTAL_CUT,
   SETTLED_VEL,
   aimedIndex,
+  cameraSettledOn,
   capFlightStep,
   dwellClipMayPlay,
   ensureAutoClock,
@@ -86,7 +87,12 @@ import {
   uBirth,
 } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
-import { fillMorphCloud, makeSparkMaterial, setCloudDrawRange } from "@/lib/galaxy/starRender";
+import {
+  ELEMENT_CODE,
+  fillMorphCloud,
+  makeSparkMaterial,
+  setCloudDrawRange,
+} from "@/lib/galaxy/starRender";
 import {
   computeBirthChatSlide,
   lerpToward,
@@ -587,6 +593,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const scaleBoost = useRef(1);
   /** Parked-band weight, eased so a landing never pops the plate to full. */
   const parkedEase = useRef(eager && index === 0 ? 1 : 0);
+  /** Halo aliveness: 0 while steering/wheeling/dragging/seeking, eased to
+   * 1 over ~1s once the camera settles on this station (cameraSettledOn). */
+  const lifeEase = useRef(0);
   const [artTex, setArtTex] = useState<CanvasTexture | null>(() =>
     eager ? loadSignArt(sign.id) : null,
   );
@@ -1020,6 +1029,28 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           : Math.max(0, (1 - ml * 0.9) * (1 - galaxyTravel.galaxyForm * 0.85));
         u.uMorph.value = ml * (1 - galaxyTravel.galaxyForm);
       }
+      // Halo aliveness snaps off the instant steering/held/exploring
+      // starts (the one-plate rule's damping applies here too), and eases
+      // back up over ~1s once the camera is settled again.
+      const lifeTarget =
+        !held &&
+        !exploringHere &&
+        !prefersReducedMotion() &&
+        !galaxyTravel.paused &&
+        cameraSettledOn(index)
+          ? 1
+          : 0;
+      lifeEase.current =
+        lifeTarget <= lifeEase.current
+          ? lifeTarget
+          : lerpToward({ current: lifeEase.current, target: lifeTarget, dt, rate: 1.4 });
+      u.uLife.value = lifeEase.current;
+      // Pointer position drives the halo's depth parallax (see starRender);
+      // life above already damps it while the camera is moving.
+      u.uParX.value = galaxyTravel.ptrX;
+      u.uParY.value = galaxyTravel.ptrY;
+      // Fire/earth/air/water — see starRender's element-motion branch.
+      u.uElement.value = ELEMENT_CODE[sign.element];
       (u.uTint.value as Color).copy(tint);
     }
 
@@ -1034,6 +1065,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       u.uMorph.value = 0;
       u.uTime.value = clock.elapsedTime;
       u.uHover.value = 1;
+      // Inside the sign, the corridor-only halo life effects stay off.
+      u.uLife.value = 0;
+      lifeEase.current = 0;
     }
   });
 
