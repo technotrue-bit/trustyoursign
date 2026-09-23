@@ -93,7 +93,9 @@ export const SETTLED_VEL = 0.002;
 /** Drag may lead the camera by at most this much t. One sky, not twelve. */
 const DRAG_LEAD_T = 1.2 * STATION_GAP_T;
 /** Drag pixels per unit of corridor t. */
-const DRAG_T_PX = 2600;
+const DRAG_T_PX = 3200;
+/** Free flight speeds up no faster than this (t per second²). Slowing down is never limited. */
+export const FLY_ACCEL_T = 2.5 * STATION_GAP_T;
 /** Reduced motion drag: pixels that cut to the next sign. */
 const REDUCED_DRAG_STEP_PX = 90;
 /** After a sign click/select, hold the highlight this long before clearing. */
@@ -977,6 +979,8 @@ function glideToStation(i: number, kind: "glide" | "settle") {
   primeAround(i);
   galaxyTravel.moved = true;
   galaxyTravel.awaken = 1;
+  // Steering away from a clicked sign ends its hold; the HUD keeps naming signs.
+  galaxyTravel.selectionHoldLeft = null;
   restIdle();
 }
 
@@ -1367,10 +1371,22 @@ export function stepCorridorFlight(t: number, dt: number) {
   settleCorridor(t);
 }
 
-/** Clamp one frame of free flight to MAX_FLY. */
-export function capFlightStep(step: number, dt: number) {
+/**
+ * One frame of free flight: never faster than MAX_FLY, and never gaining speed
+ * faster than FLY_ACCEL_T — a drag eases the sky into motion instead of yanking it.
+ */
+export function capFlightStep(step: number, dt: number, prevVel = galaxyTravel.vel) {
   const cap = MAX_FLY_T * dt;
-  return clamp(step, -cap, cap);
+  const prev = prevVel * dt;
+  const slew = FLY_ACCEL_T * dt * dt;
+  let s = step;
+  if (prev === 0 || Math.sign(s) === Math.sign(prev)) {
+    if (Math.abs(s) > Math.abs(prev) + slew) s = Math.sign(s) * (Math.abs(prev) + slew);
+  } else if (Math.abs(s) > slew) {
+    // Reversing: stop, then gather speed the other way.
+    s = Math.sign(s) * slew;
+  }
+  return clamp(s, -cap, cap);
 }
 
 /**

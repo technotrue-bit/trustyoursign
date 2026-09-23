@@ -94,6 +94,7 @@ import {
   cloudBurstGain,
   fieldGather,
   plateWeight,
+  signsPastStation,
   signArrive,
   stepArriveBurst,
 } from "@/lib/galaxy/signField";
@@ -757,7 +758,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const fade =
       held || exploringHere
         ? 1
-        : plateWeight((t - dest) * (TEMPLE_SIGNS.length - 1), galaxyTravel.restDist, depth);
+        : plateWeight(
+            signsPastStation(galaxyTravel.restDist, depth, NAVE),
+            galaxyTravel.restDist,
+            depth,
+            (t - dest) * (TEMPLE_SIGNS.length - 1),
+          );
     const show = held || exploringHere || fade > 0.004;
     stationWeight[index] = show ? fade : 0;
     g.visible = show;
@@ -1342,8 +1348,14 @@ function TempleRig() {
     galaxyTravel.tTarget = clamp01(galaxyTravel.tTarget);
     const k = arriving ? 1 : 1 - Math.exp(-d * (sought.active ? 2.6 : 2.9));
     let step = (galaxyTravel.tTarget - current.current) * (arriving ? 1 : k);
-    // Free flight never outruns MAX_FLY; a landing that just began waits for its first eased frame.
-    if (free) step = galaxyTravel.seek != null ? 0 : capFlightStep(step, d);
+    if (free && galaxyTravel.seek != null) {
+      // Hands just came off: the landing takes its first eased step now, so the motion never stalls.
+      const first = stepSeek(current.current, d);
+      galaxyTravel.tTarget = first.t;
+      step = first.t - current.current;
+    } else if (free) {
+      step = capFlightStep(step, d);
+    }
     current.current = clamp01(current.current + step);
     const t = current.current;
     galaxyTravel.vel = (t - t0) / d;

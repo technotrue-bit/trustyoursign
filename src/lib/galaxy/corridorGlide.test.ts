@@ -10,6 +10,7 @@ import {
   plateWeight,
 } from "./signField.ts";
 import {
+  FLY_ACCEL_T,
   GLIDE_SEC,
   MAX_FLY_T,
   STATION_GAP_T,
@@ -17,6 +18,7 @@ import {
   applyFlyDelta,
   applyWheel,
   cameraSettledOn,
+  capFlightStep,
   dwellClipMayPlay,
   easeArrive,
   endFly,
@@ -184,6 +186,18 @@ describe("hands-off landing", () => {
     assert.equal(galaxyTravel.seek, stationT(4));
     fly();
     assert.equal(galaxyTravel.t, stationT(4));
+  });
+});
+
+describe("free flight", () => {
+  it("gathers speed gently, never past MAX_FLY, and can always slow down", () => {
+    const dt = 1 / 60;
+    let vel = 0;
+    for (let i = 0; i < 6; i += 1) vel = capFlightStep(1, dt, vel) / dt;
+    assert.ok(vel <= FLY_ACCEL_T * 6 * dt + 1e-9, `0.1 s in, already at ${vel}`);
+    for (let i = 0; i < 600; i += 1) vel = capFlightStep(1, dt, vel) / dt;
+    assert.ok(Math.abs(vel - MAX_FLY_T) < 1e-9, "tops out at the cap");
+    assert.equal(capFlightStep(0, dt, vel), 0, "letting go is never slew-limited");
   });
 });
 

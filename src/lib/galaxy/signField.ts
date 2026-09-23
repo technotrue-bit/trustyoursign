@@ -35,7 +35,7 @@ export function fieldFade(gather: number) {
  * One plate owns the frame. Half-width, in signs, of the dissolve around the
  * midpoint where the leaving plate hands the frame to the arriving one.
  */
-export const HANDOFF_HALF = 0.14;
+export const HANDOFF_HALF = 0.2;
 /** Plate scale (1 = parked) where a plate the camera is closing on starts to dissolve… */
 export const NEAR_FADE_START = 1.18;
 /** …and where it is gone, well before it can fill the lens. */
@@ -71,15 +71,25 @@ export function plateNearFade(restDist: number, depth: number) {
 
 /**
  * Corridor weight for one station's plate and star cloud: ownership × near fade.
- * The near fade relaxes inside PARKED_BAND so a pinch zoom-out can't dim the
- * parked hero while the camera catches up.
+ * `signsAway` is where the camera actually is (it trails travel t at speed), so
+ * the hand-off happens where the eye is, not half a sign ahead of it.
+ * `parkedSigns` is travel t's distance: a sign t is parked on (within
+ * PARKED_BAND) owns the frame outright, so a pinch zoom can't dim the hero
+ * while the camera catches up.
  */
-export function plateWeight(signsAway: number, restDist: number, depth: number) {
-  const own = plateOwnership(signsAway);
-  if (own <= 0) return 0;
-  const parked = 1 - smooth01(Math.abs(signsAway) / PARKED_BAND);
-  const near = plateNearFade(restDist, depth);
-  return own * (near + (1 - near) * parked);
+export function plateWeight(
+  signsAway: number,
+  restDist: number,
+  depth: number,
+  parkedSigns = signsAway,
+) {
+  const parked = 1 - smooth01(Math.abs(parkedSigns) / PARKED_BAND);
+  return Math.max(plateOwnership(signsAway) * plateNearFade(restDist, depth), parked);
+}
+
+/** Signs the camera sits past a station, from its live depth to it. */
+export function signsPastStation(restDist: number, depth: number, nave: number) {
+  return (restDist - depth) / nave;
 }
 
 export type ArriveBurst = {
