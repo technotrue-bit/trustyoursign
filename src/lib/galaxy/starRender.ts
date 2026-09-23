@@ -44,6 +44,7 @@ void main() {
   float gath = clamp(uGather, 0.0, 1.0);
   float kind = aKind;
   float life = clamp(uLife, 0.0, 1.0);
+  float shootStreak = 0.0;
   if (kind > 1.5) gath = mix(0.2, 0.85, gath);
   // Morph only body stars (kind 0) into the glyph; spiral/halo stay ambient.
   float isBody = kind < 0.5 ? 1.0 : 0.0;
@@ -147,11 +148,36 @@ void main() {
   vAlpha = uOpacity * visibility * (kind > 1.5 ? 0.55 : 1.0) * ambientFade * (1.0 + max(0.0, uHover - 1.0) * 0.35);
   vSpike = mag > 0.7 ? (mag - 0.7) * 2.2 : 0.0;
 
+  // Rare shooting star: kind 3 is one particle per cloud, invisible
+  // almost all the time. Every 20-40s (its own hashed period) it streaks
+  // across the halo band once, but only while life says the camera is
+  // parked — never mid-flight. Fully overrides this particle's position
+  // and color while it fires.
+  if (kind > 2.5) {
+    float period = 20.0 + fract(sin(aPhase * 12.9898) * 43758.5453) * 20.0;
+    float cyc = mod(uTime + aPhase * 71.0, period);
+    float dur = 0.55;
+    float tt = clamp(cyc / dur, 0.0, 1.0);
+    float armed = step(0.6, life);
+    shootStreak = armed * step(cyc, dur) * (1.0 - tt);
+    vec2 dir2 = normalize(vec2(cos(aPhase * 3.1 + 0.6), sin(aPhase * 1.7 + 1.1) * 0.55));
+    vec2 startP = -dir2 * 1.05;
+    vec2 endP = dir2 * 1.05;
+    vec2 streakPos = mix(startP, endP, tt);
+    p.x = streakPos.x * uWide;
+    p.y = streakPos.y * uTall;
+    p.z = 0.3;
+    vColor = mix(vec3(1.0, 0.95, 0.85), violet, 0.12) * shootStreak * 2.6;
+    vAlpha = uOpacity * shootStreak;
+    vSpike = shootStreak > 0.25 ? (shootStreak - 0.25) * 2.4 : 0.0;
+  }
+
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
   float base = uBaseSize + mag * mag * 7.4;
   if (kind > 0.5 && kind < 1.5) base *= 1.25;
   if (kind > 1.5) base *= 1.8;
+  if (kind > 2.5) base *= mix(1.0, 2.4, shootStreak);
   gl_PointSize = max(1.2, base * uPxScale * mix(1.0, uHover, ${STAR_APPEARANCE.hoverSizeMix}) * (0.55 + gath * 0.5));
 }
 `;
@@ -228,16 +254,22 @@ function hash(i: number, salt: number) {
 const SPIRAL_FRACTION = 0.14;
 const HALO_FRACTION = 0.2;
 
+/** One rare shooting-star candidate per cloud, carved out of the halo budget. */
+const SHOOTING_STARS_PER_CLOUD = 1;
+
 /**
- * bodyN/spiralN/haloN always sum to n — shared by fillStationCloud and
- * fillMorphCloud so the two never drift out of sync on where each kind
- * of star starts in the buffer.
+ * bodyN/spiralN/haloN/shootN always sum to n — shared by fillStationCloud
+ * and fillMorphCloud so the two never drift out of sync on where each
+ * kind of star starts in the buffer. haloTotal is haloN + shootN: the
+ * ring generator below walks it as one continuous pass.
  */
 function splitCloud(n: number) {
   const spiralN = Math.floor(n * SPIRAL_FRACTION);
-  const haloN = Math.floor(n * HALO_FRACTION);
-  const bodyN = Math.max(1, n - spiralN - haloN);
-  return { bodyN, spiralN, haloN };
+  const haloTotal = Math.floor(n * HALO_FRACTION);
+  const shootN = Math.min(SHOOTING_STARS_PER_CLOUD, haloTotal);
+  const haloN = haloTotal - shootN;
+  const bodyN = Math.max(1, n - spiralN - haloTotal);
+  return { bodyN, spiralN, haloN, shootN, haloTotal };
 }
 
 /** Inner/outer radius of the halo ring, in the same unit-figure space as signPos. */
@@ -254,7 +286,7 @@ export function fillStationCloud(
   count: number,
 ) {
   const n = count;
-  const { bodyN, spiralN, haloN } = splitCloud(n);
+  const { bodyN, spiralN, haloN, shootN, haloTotal } = splitCloud(n);
   const sign = new Float32Array(n * 3);
   const scat = new Float32Array(n * 3);
   const mag = new Float32Array(n);
@@ -320,9 +352,13 @@ export function fillStationCloud(
 
   // A continuous ring generator, biased toward the inner edge, so the
   // outer fringe thins smoothly into the nebula instead of stopping at a
-  // hard rim — fills the empty band above and below the plate.
-  for (let i = 0; i < haloN; i++) {
+  // hard rim — fills the empty band above and below the plate. The last
+  // `shootN` slots are the rare shooting star (kind 3): the vertex shader
+  // fully overrides their position and color, so they only need to look
+  // like an ordinary halo star while idle.
+  for (let i = 0; i < haloTotal; i++) {
     const w = bodyN + spiralN + i;
+    const isShootingStar = i >= haloN;
     const a = hash(i, 9) * Math.PI * 2;
     const rn = Math.pow(hash(i, 10), HALO_R_BIAS);
     const r = HALO_R_MIN + rn * HALO_R_SPAN;
@@ -339,7 +375,7 @@ export function fillStationCloud(
     mag[w] = glint
       ? 0.74 + hash(i, 21) * 0.22
       : 0.14 + fadeOuter * 0.34 + hash(i, 12) * 0.12;
-    kind[w] = 2;
+    kind[w] = isShootingStar ? 3 : 2;
     phase[w] = hash(i, 13) * 6.28;
     const sr = 6 + hash(i, 14) * 10;
     scat[w * 3] = Math.cos(a) * sr;
