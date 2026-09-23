@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import sharp from "sharp";
+import { installNebulaBakeHarness, nebulaBakeHarnessUrl } from "./nebula-bake-harness.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const skyDir = join(root, "public", "sky");
@@ -73,7 +74,8 @@ await withDevServer(async (base) => {
     args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
   });
   const page = await browser.newPage();
-  await page.goto(`${base}/__nebula-bake.html`, { waitUntil: "networkidle", timeout: 120_000 });
+  await installNebulaBakeHarness(page);
+  await page.goto(nebulaBakeHarnessUrl(base), { waitUntil: "networkidle", timeout: 120_000 });
   await page.waitForFunction(() => Boolean(window.__nebulaMod), null, { timeout: 60_000 });
 
   const report = [];

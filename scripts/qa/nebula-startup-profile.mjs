@@ -3,6 +3,7 @@
  *   node scripts/qa/nebula-startup-profile.mjs <base-url>
  */
 import { chromium } from "playwright";
+import { installNebulaBakeHarness, nebulaBakeHarnessUrl } from "../nebula-bake-harness.mjs";
 
 const base = (process.argv[2] ?? "http://127.0.0.1:8080").replace(/\/$/, "");
 
@@ -15,7 +16,8 @@ if (cpuRate > 1) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpuRate });
 }
-await page.goto(`${base}/__nebula-bake.html`, { waitUntil: "networkidle" });
+await installNebulaBakeHarness(page);
+await page.goto(nebulaBakeHarnessUrl(base), { waitUntil: "networkidle" });
 await page.waitForFunction(() => Boolean(window.__nebulaMod));
 
 const stats = await page.evaluate(async () => {
