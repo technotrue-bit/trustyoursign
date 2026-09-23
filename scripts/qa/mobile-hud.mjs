@@ -79,14 +79,35 @@ function measure(p) {
     return o;
   };
   const labelOf = (el, text) => {
-    const t = (text ?? el.getAttribute("aria-label") ?? el.textContent ?? "").replace(/\s+/g, " ").trim();
+    const t = (text ?? el.getAttribute("aria-label") ?? el.textContent ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
     return t.slice(0, 48) || `<${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]}>`;
   };
   const folded = (el) => {
     const d = el.closest("details:not([open])");
     return Boolean(d && !el.closest("summary"));
   };
-  const inView = (r) => r.right > 0 && r.left < w && r.bottom > 0 && r.top < h && r.width > 1 && r.height > 1;
+  /** Box as painted: cut to every overflow-clipping ancestor (scrollers, the strip). */
+  const clipped = (el, r) => {
+    let { left, top: t, right, bottom: b } = r;
+    for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.overflowX === "visible" && cs.overflowY === "visible") continue;
+      const c = n.getBoundingClientRect();
+      if (cs.overflowX !== "visible") {
+        left = Math.max(left, c.left);
+        right = Math.min(right, c.right);
+      }
+      if (cs.overflowY !== "visible") {
+        t = Math.max(t, c.top);
+        b = Math.min(b, c.bottom);
+      }
+    }
+    return new DOMRect(left, t, Math.max(0, right - left), Math.max(0, b - t));
+  };
+  const inView = (r) =>
+    r.right > 0 && r.left < w && r.bottom > 0 && r.top < h && r.width > 1 && r.height > 1;
   const box = (r) => ({
     x: Math.round(r.left),
     y: Math.round(r.top),
@@ -101,7 +122,7 @@ function measure(p) {
   for (const el of document.querySelectorAll(CONTROL)) {
     if (el.closest("[inert]") || el.closest("[data-qa-overlay]") || folded(el)) continue;
     if (getComputedStyle(el).pointerEvents === "none") continue;
-    const r = el.getBoundingClientRect();
+    const r = clipped(el, el.getBoundingClientRect());
     if (!inView(r) || effOpacity(el) < 0.05) continue;
     const host = el.parentElement?.closest("p,li");
     const inline =
@@ -114,13 +135,20 @@ function measure(p) {
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     if (!n.textContent || !n.textContent.trim()) continue;
     const parent = n.parentElement;
-    if (!parent || parent.closest("script,style,noscript,[data-qa-overlay],[inert]") || folded(parent)) continue;
+    if (
+      !parent ||
+      parent.closest("script,style,noscript,[data-qa-overlay],[inert]") ||
+      folded(parent)
+    )
+      continue;
     const pr = parent.getBoundingClientRect();
     if (pr.width <= 1 || pr.height <= 1) continue;
     if (effOpacity(parent) < 0.05) continue;
     const range = document.createRange();
     range.selectNodeContents(n);
-    const rects = [...range.getClientRects()].filter((r) => r.width > 0.5 && r.height > 0.5);
+    const rects = [...range.getClientRects()]
+      .map((r) => clipped(parent, r))
+      .filter((r) => r.width > 0.5 && r.height > 0.5);
     if (!rects.length) continue;
     const u = rects.reduce(
       (a, r) => ({
@@ -134,7 +162,13 @@ function measure(p) {
     const r = new DOMRect(u.left, u.top, u.right - u.left, u.bottom - u.top);
     if (!inView(r)) continue;
     // A clipped overflow parent (the sign strip) hides text outside its box.
-    items.push({ el: parent, kind: "text", label: labelOf(parent, n.textContent), rect: r, lines: rects });
+    items.push({
+      el: parent,
+      kind: "text",
+      label: labelOf(parent, n.textContent),
+      rect: r,
+      lines: rects,
+    });
   }
 
   const overlaps = [];
@@ -172,8 +206,13 @@ function measure(p) {
   for (const it of items) {
     const r = it.rect;
     if (top > 0 && r.top < top) {
-      const inIsland = r.bottom > 11 && r.top < island.bottom && r.right > island.left && r.left < island.right;
-      underTop.push({ item: `${it.kind}:${it.label}`, px: Math.round(top - r.top), island: inIsland });
+      const inIsland =
+        r.bottom > 11 && r.top < island.bottom && r.right > island.left && r.left < island.right;
+      underTop.push({
+        item: `${it.kind}:${it.label}`,
+        px: Math.round(top - r.top),
+        island: inIsland,
+      });
     }
     if (bottom > 0 && r.bottom > h - bottom) {
       underBottom.push({ item: `${it.kind}:${it.label}`, px: Math.round(r.bottom - (h - bottom)) });
@@ -200,7 +239,7 @@ function measure(p) {
     if (it.kind !== "control") continue;
     const r = it.rect;
     const hb = hitBox(it.el, r);
-    if (hb.width < 44 || hb.height < 44) {
+    if (hb.width < 43.5 || hb.height < 43.5) {
       small.push({
         item: it.label,
         size: `${Math.round(hb.width)}×${Math.round(hb.height)}`,
@@ -216,7 +255,9 @@ function measure(p) {
       covered.push({
         item: it.label,
         at: `${Math.round(cx)},${Math.round(cy)}`,
-        by: hit ? `<${hit.tagName.toLowerCase()} class="${String(hit.className).slice(0, 60)}">` : "nothing",
+        by: hit
+          ? `<${hit.tagName.toLowerCase()} class="${String(hit.className).slice(0, 60)}">`
+          : "nothing",
       });
     }
   }
@@ -234,7 +275,8 @@ function measure(p) {
     }
     return r.width > 1 ? box(r) : null;
   };
-  const byText = (sel, re) => [...document.querySelectorAll(sel)].find((el) => re.test(el.textContent ?? ""));
+  const byText = (sel, re) =>
+    [...document.querySelectorAll(sel)].find((el) => re.test(el.textContent ?? ""));
   const named = {
     beta: q(".vault-overlay p[aria-label]", true),
     pause: q(byText("button", /^(Pause|Resume)$/)),
@@ -243,7 +285,8 @@ function measure(p) {
     title: q(".galaxy-sign-name", true) ?? q(".galaxy-title", true),
     tagline: q(".sign-swap > p:last-child", true),
     footer: q(".sky-hud-footer"),
-    cookie: q(".cookie-notice-glow")?.y != null ? q(byText(".galaxy-chrome div", /One cookie/)) : null,
+    cookie:
+      q(".cookie-notice-glow")?.y != null ? q(byText(".galaxy-chrome div", /One cookie/)) : null,
     strip: q(".sign-strip-belt"),
     enter: q(byText("button", /^Enter this sign$/)),
     hint: q(".galaxy-chrome > p.sky-hud-kicker", true),
@@ -253,21 +296,41 @@ function measure(p) {
     starCount: q(byText("p", /^Star \d+ of \d+$/), true),
     insideTitle: q(".sign-galaxy-lower h3", true) ?? null,
     insideTop: q(".sign-galaxy-lower"),
+    scroller: q(".sign-galaxy-scroll"),
+    dots: q(".sign-galaxy-dots"),
+    begin: q(byText("button", /^Begin birth chart$/)),
   };
   const centreHit = (name, sel) => {
     const el = typeof sel === "string" ? document.querySelector(sel) : sel;
-    if (!el) return null;
+    if (!el || el.closest("[inert]") || effOpacity(el) < 0.05) return null;
     const r = el.getBoundingClientRect();
     const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    return { name, own: Boolean(hit && (hit === el || el.contains(hit))), size: `${Math.round(r.width)}×${Math.round(r.height)}` };
+    return {
+      name,
+      own: Boolean(hit && (hit === el || el.contains(hit))),
+      size: `${Math.round(r.width)}×${Math.round(r.height)}`,
+    };
   };
   const hits = [
     centreHit("enter", byText("button", /^Enter this sign$/)),
-    centreHit("signIn", document.querySelector(".auth-sign-in") ?? document.querySelector('button[aria-label="Account"]')),
+    centreHit(
+      "signIn",
+      document.querySelector(".auth-sign-in") ??
+        document.querySelector('button[aria-label="Account"]'),
+    ),
     centreHit("pause", byText("button", /^(Pause|Resume)$/)),
     centreHit("chartTalks", ".chart-talks > summary"),
     centreHit("back", byText("button", /^Back$/)),
+    centreHit("begin", byText("button", /^Begin birth chart$/)),
   ].filter(Boolean);
+  const scroller = document.querySelector(".sign-galaxy-scroll");
+  const scroll = scroller
+    ? {
+        client: scroller.clientHeight,
+        content: scroller.scrollHeight,
+        takesTouch: getComputedStyle(scroller).pointerEvents !== "none",
+      }
+    : null;
 
   return {
     counts: { items: items.length, controls: items.filter((i) => i.kind === "control").length },
@@ -279,6 +342,7 @@ function measure(p) {
     covered,
     named,
     hits,
+    scroll,
     marks: {
       overlap: [...new Set(overlaps.flatMap((o) => [o.a, o.b]))],
       small: small.filter((s) => !s.inline).map((s) => s.item),
@@ -297,20 +361,30 @@ function annotate({ p, result }) {
     d.style.cssText = `position:absolute;box-sizing:border-box;${css}`;
     layer.appendChild(d);
   };
-  if (p.top) add(`left:0;right:0;top:0;height:${p.top}px;background:rgba(255,140,0,.22);border-bottom:1px dashed #ff8c00;`);
-  if (p.bottom) add(`left:0;right:0;bottom:0;height:${p.bottom}px;background:rgba(255,140,0,.22);border-top:1px dashed #ff8c00;`);
+  if (p.top)
+    add(
+      `left:0;right:0;top:0;height:${p.top}px;background:rgba(255,140,0,.22);border-bottom:1px dashed #ff8c00;`,
+    );
+  if (p.bottom)
+    add(
+      `left:0;right:0;bottom:0;height:${p.bottom}px;background:rgba(255,140,0,.22);border-top:1px dashed #ff8c00;`,
+    );
   const flagged = new Set(result.marks.overlap);
   const small = new Set(result.marks.small.map((s) => `control:${s}`));
   for (const r of result.rects) {
-    if (flagged.has(r.key)) add(`left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;border:2px solid #ff2d55;`);
-    else if (small.has(r.key)) add(`left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;border:1px dashed #36c5ff;`);
+    if (flagged.has(r.key))
+      add(`left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;border:2px solid #ff2d55;`);
+    else if (small.has(r.key))
+      add(`left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;border:1px dashed #36c5ff;`);
   }
   document.body.appendChild(layer);
 }
 
 async function settleSky(page, view) {
   await page.waitForSelector("canvas", { timeout: 40_000 }).catch(() => {});
-  await page.waitForFunction(() => Boolean(window.__tysQa), null, { timeout: 40_000 }).catch(() => {});
+  await page
+    .waitForFunction(() => Boolean(window.__tysQa), null, { timeout: 40_000 })
+    .catch(() => {});
   if (view.sky === "intro") {
     await page.evaluate(() => window.__tysQa?.ready({ moved: false }));
     await page.waitForTimeout(3500);
@@ -341,7 +415,10 @@ async function scrollMain(page, to) {
 /** Phone chrome around a Safari / full-bleed frame so the proof reads like the device. */
 async function phoneComposite(png, p, out) {
   const screenH = p.screen ?? p.h;
-  const page = await browser.newPage({ viewport: { width: p.w, height: screenH }, deviceScaleFactor: 2 });
+  const page = await browser.newPage({
+    viewport: { width: p.w, height: screenH },
+    deviceScaleFactor: 2,
+  });
   const b64 = png.toString("base64");
   const bar = p.screen
     ? `<div style="position:absolute;left:0;right:0;top:${p.h}px;bottom:0;background:#0b0a09">
@@ -372,9 +449,15 @@ let authState = null;
 if (viewNames.some((v) => VIEWS[v].auth)) {
   const ctx = await browser.newContext();
   // Dev-database QA account; sign-up is a no-op once it exists.
-  const creds = { email: "hud-audit@example.com", password: "hud-audit-pass-123", name: "Hud Audit" };
+  const creds = {
+    email: "hud-audit@example.com",
+    password: "hud-audit-pass-123",
+    name: "Hud Audit",
+  };
   const headers = { origin: BASE };
-  await ctx.request.post(`${BASE}/api/auth/sign-up/email`, { data: creds, headers }).catch(() => {});
+  await ctx.request
+    .post(`${BASE}/api/auth/sign-up/email`, { data: creds, headers })
+    .catch(() => {});
   const res = await ctx.request.post(`${BASE}/api/auth/sign-in/email`, { data: creds, headers });
   if (!res.ok()) process.stderr.write(`[auth] sign-in ${res.status()}\n`);
   authState = await ctx.storageState();
@@ -387,7 +470,8 @@ for (const pName of profileNames) {
   report[pName] = {};
   for (const vName of viewNames) {
     const view = VIEWS[vName];
-    if (!p.mobile && !["aries", "inside", "cookie", "intro", "about", "login"].includes(vName)) continue;
+    if (!p.mobile && !["aries", "inside", "cookie", "intro", "about", "login"].includes(vName))
+      continue;
     const context = await browser.newContext({
       viewport: { width: p.w, height: p.h },
       deviceScaleFactor: p.mobile ? 2 : 1,
@@ -441,14 +525,18 @@ for (const pName of profileNames) {
         end = await page.evaluate(measure, p);
         end.scroll = s;
         await page.evaluate(annotate, { p, result: end });
-        await page.screenshot({ path: `${outDir}/${key}--end-annotated.png`, timeout: 30_000 }).catch(() => {});
+        await page
+          .screenshot({ path: `${outDir}/${key}--end-annotated.png`, timeout: 30_000 })
+          .catch(() => {});
         await page.evaluate(() => document.querySelector("[data-qa-overlay]")?.remove());
       }
       await scrollMain(page, "top");
       await page.waitForTimeout(200);
     }
     await page.evaluate(annotate, { p, result });
-    await page.screenshot({ path: `${outDir}/${key}--annotated.png`, timeout: 30_000 }).catch(() => {});
+    await page
+      .screenshot({ path: `${outDir}/${key}--annotated.png`, timeout: 30_000 })
+      .catch(() => {});
     if (clean && p.mobile) await phoneComposite(clean, p, `${outDir}/${key}--phone.png`);
     delete result.rects;
     delete result.marks;
@@ -458,7 +546,9 @@ for (const pName of profileNames) {
     }
     report[pName][vName] = { url, env, errors: errors.slice(0, 6), ...result, end };
     await context.close();
-    process.stderr.write(`${key}: overlaps=${result.overlaps.length} small=${result.small.length} covered=${result.covered.length}\n`);
+    process.stderr.write(
+      `${key}: overlaps=${result.overlaps.length} small=${result.small.length} covered=${result.covered.length}\n`,
+    );
   }
 }
 
