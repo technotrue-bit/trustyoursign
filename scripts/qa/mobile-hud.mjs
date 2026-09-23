@@ -35,6 +35,7 @@ const PROFILES = {
   "island-390": { w: 390, h: 844, top: 59, bottom: 34, mobile: true },
   "safari-430": { w: 430, h: 834, top: 59, bottom: 0, screen: 932, mobile: true },
   "bleed-430": { w: 430, h: 932, top: 59, bottom: 34, mobile: true },
+  ipad: { w: 820, h: 1180, top: 24, bottom: 20, mobile: true },
   desktop: { w: 1440, h: 900, top: 0, bottom: 0, mobile: false },
 };
 
