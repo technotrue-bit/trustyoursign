@@ -635,7 +635,14 @@
   pointer-events: none;
   position: absolute;
   z-index: -1;
-  inset: -2.5rem -0.75rem 0;
+  top: -2.5rem;
+  right: -0.75rem;
+  left: -0.75rem;
+  /* .galaxy-chrome floats above the viewport edge by --hud-bottom (phone) /
+     2rem (desktop, md:bottom-8 below). Stretch the scrim past that gap so
+     its darkest stop lands on the true screen edge instead of stopping
+     short and leaving a hard line above the brighter sky. */
+  bottom: calc(-1 * var(--hud-bottom));
   background: linear-gradient(
     to top,
     rgba(8, 7, 6, 0.78) 0%,
@@ -1314,6 +1321,12 @@ html.sky-paused .stagger-in > * {
   .galaxy-sign-name {
     margin-top: 0.5rem;
     font-size: 4.5rem;
+  }
+
+  /* Matches .galaxy-chrome's md:bottom-8 offset so the scrim still reaches
+     the viewport edge once the HUD switches to its fixed desktop gap. */
+  .galaxy-chrome::before {
+    bottom: -2rem;
   }
 }
 
