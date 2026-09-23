@@ -345,6 +345,59 @@ function measure(p) {
       }
     : null;
 
+  // Cookie notice: is anything else rendered, painted or tappable inside its box?
+  const chrome = document.querySelector(".galaxy-chrome");
+  const banner = chrome
+    ? [...chrome.querySelectorAll("div")].find(
+        (el) => /One cookie/.test(el.textContent ?? "") && el.querySelector("button"),
+      )
+    : null;
+  let cookieCheck = null;
+  if (banner && (banner.closest("[inert]") || effOpacity(banner) < 0.05)) {
+    cookieCheck = {
+      hidden: true,
+      inert: Boolean(banner.closest("[inert]")),
+      opacity: Math.round(effOpacity(banner) * 100) / 100,
+    };
+  } else if (chrome && banner) {
+    const br = banner.getBoundingClientRect();
+    const under = [...chrome.querySelectorAll("*")]
+      .filter((el) => !banner.contains(el) && !el.contains(banner))
+      // Laid out but not painted (e.g. a closed <details> body) is not "under" anything.
+      .filter((el) => typeof el.checkVisibility !== "function" || el.checkVisibility())
+      .filter((el) => {
+        const r = el.getBoundingClientRect();
+        return (
+          r.width > 0 &&
+          r.height > 0 &&
+          Math.min(r.right, br.right) - Math.max(r.left, br.left) > 0.5 &&
+          Math.min(r.bottom, br.bottom) - Math.max(r.top, br.top) > 0.5
+        );
+      })
+      .map((el) => `<${el.tagName.toLowerCase()} class="${String(el.className).slice(0, 40)}">`);
+    let own = 0;
+    let total = 0;
+    const strays = new Set();
+    for (let x = br.left + 4; x < br.right - 4; x += 8) {
+      for (let y = br.top + 3; y < br.bottom - 3; y += 6) {
+        total += 1;
+        const hit = document.elementFromPoint(x, y);
+        if (hit && banner.contains(hit)) own += 1;
+        else strays.add(hit ? `${hit.tagName}.${String(hit.className).split(" ")[0]}` : "none");
+      }
+    }
+    cookieCheck = {
+      banner: box(br),
+      footerRowsInDom: document.querySelectorAll(".sky-hud-footer").length,
+      linksOutsideBanner: [...chrome.querySelectorAll("a")]
+        .filter((a) => !banner.contains(a))
+        .map((a) => a.getAttribute("href")),
+      renderedUnderBanner: under,
+      tapSweep: `${own}/${total} points hit the banner`,
+      strays: [...strays],
+    };
+  }
+
   return {
     counts: { items: items.length, controls: items.filter((i) => i.kind === "control").length },
     overlaps,
@@ -357,6 +410,7 @@ function measure(p) {
     hits,
     scroll,
     scrim: Math.round(scrim),
+    cookieCheck,
     marks: {
       overlap: [...new Set(overlaps.flatMap((o) => [o.a, o.b]))],
       small: small.filter((s) => !s.inline).map((s) => s.item),
@@ -424,6 +478,111 @@ async function scrollMain(page, to) {
     main.scrollTop = where === "end" ? main.scrollHeight : 0;
     return { max: main.scrollHeight - main.clientHeight, at: main.scrollTop };
   }, to);
+}
+
+/**
+ * Per-word contrast of a text block against what is actually painted under its
+ * glyphs (sky, veil and text-shadow halo). Two shots: as drawn, and with the
+ * text colour made transparent (shadows still paint). Pixels that differ are
+ * glyph pixels; their colour in the second shot is the local background.
+ */
+async function glyphContrast(page, selector) {
+  const layout = await page.evaluate((sel) => {
+    const root = document.querySelector(sel);
+    if (!root) return null;
+    const words = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const re = /\S+/g;
+      for (let m = re.exec(n.textContent); m; m = re.exec(n.textContent)) {
+        const range = document.createRange();
+        range.setStart(n, m.index);
+        range.setEnd(n, m.index + m[0].length);
+        const r = range.getBoundingClientRect();
+        if (r.width > 0) words.push({ word: m[0], x: r.left, y: r.top, w: r.width, h: r.height });
+      }
+    }
+    const rr = root.getBoundingClientRect();
+    const text = root.querySelector("li") ?? root;
+    return {
+      words,
+      box: { x: rr.left, y: rr.top, w: rr.width, h: rr.height },
+      color: getComputedStyle(text).color,
+    };
+  }, selector);
+  if (!layout || !layout.words.length) return null;
+  const clip = {
+    x: Math.max(0, Math.floor(layout.box.x - 8)),
+    y: Math.max(0, Math.floor(layout.box.y - 8)),
+    width: Math.ceil(layout.box.w + 16),
+    height: Math.ceil(layout.box.h + 16),
+  };
+  const drawn = await page.screenshot({ clip, animations: "allow" });
+  await page.evaluate((sel) => {
+    const s = document.createElement("style");
+    s.dataset.qaContrast = "1";
+    s.textContent = `${sel}, ${sel} * { color: transparent !important; }`;
+    document.head.appendChild(s);
+  }, selector);
+  const bare = await page.screenshot({ clip, animations: "allow" });
+  await page.evaluate(() => document.querySelector("style[data-qa-contrast]")?.remove());
+  return page.evaluate(
+    async ({ a, b, layout, clip }) => {
+      const load = async (src) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${src}`;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = img.width;
+        c.height = img.height;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        return ctx.getImageData(0, 0, c.width, c.height);
+      };
+      const A = await load(a);
+      const B = await load(b);
+      const s = A.width / clip.width;
+      const lin = (v) => {
+        const c = v / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      };
+      const lum = (r, g, bl) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(bl);
+      const [tr, tg, tb] = layout.color.match(/[\d.]+/g).map(Number);
+      const lt = lum(tr, tg, tb);
+      const out = layout.words.map((wd) => {
+        const x0 = Math.floor((wd.x - clip.x) * s);
+        const y0 = Math.floor((wd.y - clip.y) * s);
+        const x1 = Math.ceil((wd.x + wd.w - clip.x) * s);
+        const y1 = Math.ceil((wd.y + wd.h - clip.y) * s);
+        const ratios = [];
+        for (let y = Math.max(0, y0); y < Math.min(A.height, y1); y++) {
+          for (let x = Math.max(0, x0); x < Math.min(A.width, x1); x++) {
+            const i = (y * A.width + x) * 4;
+            const d = Math.hypot(
+              A.data[i] - B.data[i],
+              A.data[i + 1] - B.data[i + 1],
+              A.data[i + 2] - B.data[i + 2],
+            );
+            if (d < 48) continue;
+            const lb = lum(B.data[i], B.data[i + 1], B.data[i + 2]);
+            ratios.push((Math.max(lt, lb) + 0.05) / (Math.min(lt, lb) + 0.05));
+          }
+        }
+        ratios.sort((p, q) => p - q);
+        const pct = (q) => (ratios.length ? ratios[Math.floor(q * (ratios.length - 1))] : null);
+        return {
+          word: wd.word,
+          glyphPx: ratios.length,
+          p10: pct(0.1) && Math.round(pct(0.1) * 100) / 100,
+          median: pct(0.5) && Math.round(pct(0.5) * 100) / 100,
+        };
+      });
+      const scored = out.filter((w) => w.p10 != null);
+      const worst = scored.reduce((m, w) => (w.p10 < m.p10 ? w : m), scored[0]);
+      return { color: layout.color, words: out, worst };
+    },
+    { a: drawn.toString("base64"), b: bare.toString("base64"), layout, clip },
+  );
 }
 
 /** Phone chrome around a Safari / full-bleed frame so the proof reads like the device. */
@@ -531,6 +690,8 @@ for (const pName of profileNames) {
     const clean = await page.screenshot({ animations: "allow", timeout: 30_000 }).catch(() => null);
     if (clean) await writeFile(`${outDir}/${key}.png`, clean);
     const result = await page.evaluate(measure, p);
+    if (view.sky === "inside")
+      result.trustContrast = await glyphContrast(page, ".sign-galaxy-copy ul");
     let end = null;
     if (view.scroll) {
       const s = await scrollMain(page, "end");
@@ -552,6 +713,31 @@ for (const pName of profileNames) {
       .screenshot({ path: `${outDir}/${key}--annotated.png`, timeout: 30_000 })
       .catch(() => {});
     if (clean && p.mobile) await phoneComposite(clean, p, `${outDir}/${key}--phone.png`);
+    if (result.cookieCheck?.banner) {
+      // Dismiss the notice the way a visitor does; the footer row takes its place.
+      await page.evaluate(() => document.querySelector("[data-qa-overlay]")?.remove());
+      await page.getByRole("button", { name: "OK", exact: true }).click();
+      await page.waitForTimeout(300);
+      result.afterOk = await page.evaluate(() => {
+        const b = (sel) => {
+          const el = document.querySelector(sel);
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { y: Math.round(r.top), b: Math.round(r.bottom) };
+        };
+        const footer = b(".sky-hud-footer");
+        const strip = b(".sign-strip-belt");
+        const banner = [...document.querySelectorAll(".galaxy-chrome div")].some((el) =>
+          /One cookie/.test(el.textContent ?? ""),
+        );
+        return {
+          bannerInDom: banner,
+          footer,
+          strip,
+          gap: footer && strip ? strip.y - footer.b : null,
+        };
+      });
+    }
     delete result.rects;
     delete result.marks;
     if (end) {
