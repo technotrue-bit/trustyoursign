@@ -16,10 +16,30 @@ export const DWELL_CLIPS: Partial<Record<SignId, string>> = {
 };
 
 const videos = new Map<SignId, HTMLVideoElement>();
+/** When each sign's clip is allowed to actually start fetching (ms, `performance.now()` clock). */
+const primeArmedAt = new Map<SignId, number>();
 
 export function dwellClipFor(id: SignId): string | undefined {
   return DWELL_CLIPS[id];
 }
+
+/**
+ * Beat to let first paint and the critical-path bytes (fonts, current plate,
+ * app JS) clear the connection before a clip's full multi-MB body starts
+ * downloading — `syncDwellPrefetch` calls `primeDwellClip` every frame once a
+ * sign is aimed at, so without this it started fetching on literally the
+ * first frame. `DWELL_STILL_SEC` (2.5s) is still most of the way off, so the
+ * clip has plenty of time left to buffer before playback is ever due — this
+ * changes nothing the viewer can see.
+ *
+ * A `preload="metadata"` first stage was tried and reverted: these clips are
+ * remuxed "faststart" (moov before mdat) so metadata IS cheap today, but
+ * relying on that meant a clip exported without faststart later would make
+ * "metadata" fetch nearly the whole file anyway, then a second full fetch on
+ * top when this upgrades to "auto" — a silent regression nothing here would
+ * catch. Delaying the one `preload="auto"` fetch has no such trap.
+ */
+const FULL_PRELOAD_DELAY_MS = 1000;
 
 /**
  * Travel t within this of a station counts as on it (≈2% of a sign). Glides land
@@ -48,30 +68,44 @@ function harden(video: HTMLVideoElement) {
   video.tabIndex = -1;
 }
 
-/** Buffer this sign's clip. Does not play. No-op when the sign has no clip. */
+/**
+ * Buffer this sign's clip. Does not play. No-op when the sign has no clip,
+ * and no-op for `FULL_PRELOAD_DELAY_MS` after the sign is first aimed at
+ * (returns `null`) — `syncDwellPrefetch` calls this every frame, so that
+ * window is exactly how long the fetch is held off.
+ */
 export function primeDwellClip(id: SignId): HTMLVideoElement | null {
   const url = DWELL_CLIPS[id];
   if (!url || typeof document === "undefined") return null;
-  let video = videos.get(id);
-  if (!video) {
-    video = document.createElement("video");
-    video.dataset.dwellClip = id;
-    video.setAttribute("aria-hidden", "true");
-    video.style.cssText =
-      "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none";
-    harden(video);
-    document.body.appendChild(video);
-    videos.set(id, video);
+  const existing = videos.get(id);
+  if (existing) {
+    harden(existing);
+    if (!existing.src.endsWith(url)) existing.src = url;
+    return existing;
   }
+  let armedAt = primeArmedAt.get(id);
+  if (armedAt === undefined) {
+    armedAt = performance.now() + FULL_PRELOAD_DELAY_MS;
+    primeArmedAt.set(id, armedAt);
+  }
+  if (performance.now() < armedAt) return null;
+  const video = document.createElement("video");
+  video.dataset.dwellClip = id;
+  video.setAttribute("aria-hidden", "true");
+  video.style.cssText =
+    "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none";
   harden(video);
-  if (!video.src.endsWith(url)) video.src = url;
+  video.src = url;
+  document.body.appendChild(video);
+  videos.set(id, video);
   return video;
 }
 
 /** Keep a paused element only for the aimed sign. Drops every other clip. */
 export function syncDwellPrefetch(id: SignId | null) {
   if (typeof document === "undefined") return;
-  for (const key of [...videos.keys()]) {
+  const tracked = new Set([...videos.keys(), ...primeArmedAt.keys()]);
+  for (const key of tracked) {
     if (key !== id) stopDwellClip(key);
   }
   if (id && DWELL_CLIPS[id]) primeDwellClip(id);
@@ -100,6 +134,7 @@ export function stopDwellClip(id?: SignId) {
   if (typeof document === "undefined") return;
   const keys = id ? [id] : [...videos.keys()];
   for (const key of keys) {
+    primeArmedAt.delete(key);
     const video = videos.get(key);
     if (!video) continue;
     video.pause();
