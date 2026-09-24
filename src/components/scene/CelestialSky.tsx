@@ -83,15 +83,21 @@ export function CelestialSky() {
     const inside = galaxyTravel.explorePhase === "inside";
     // Residual floor while parked inside: distant field breathes; dive still
     // uses worldFade alone so the enter blackout stays intentional.
-    const field = Math.max(introField() * world, inside ? INSIDE_SKY_FIELD_RESIDUAL : 0);
-    const haze = Math.max(introHaze() * world, inside ? INSIDE_SKY_HAZE_RESIDUAL : 0);
-    const arms = Math.max(introArms() * world, inside ? INSIDE_SKY_ARMS_RESIDUAL : 0);
-    matField.uniforms.uOpacity.value = 0.7 * field;
-    matNear.uniforms.uOpacity.value = 0.5 * field;
-    matArms.uniforms.uOpacity.value = 0.78 * arms;
-    if (fieldPts.current) fieldPts.current.visible = field > 0.02;
+    const fieldIntro = introField();
+    const celestialDraw = fieldIntro > 0.02 || inside;
+    const field = Math.max(fieldIntro * world, inside ? INSIDE_SKY_FIELD_RESIDUAL : 0);
+    const haze = celestialDraw
+      ? Math.max(introHaze() * world, inside ? INSIDE_SKY_HAZE_RESIDUAL : 0)
+      : 0;
+    const arms = celestialDraw
+      ? Math.max(introArms() * world, inside ? INSIDE_SKY_ARMS_RESIDUAL : 0)
+      : 0;
+    matField.uniforms.uOpacity.value = celestialDraw ? 0.7 * field : 0;
+    matNear.uniforms.uOpacity.value = celestialDraw ? 0.5 * field : 0;
+    matArms.uniforms.uOpacity.value = celestialDraw ? 0.78 * arms : 0;
+    if (fieldPts.current) fieldPts.current.visible = celestialDraw && field > 0.02;
     if (nearPts.current) {
-      nearPts.current.visible = field > 0.02;
+      nearPts.current.visible = celestialDraw && field > 0.02;
       if (warpSeen.current !== galaxyTravel.warpSeq) {
         warpSeen.current = galaxyTravel.warpSeq;
         const w = galaxyTravel.warp;
@@ -103,14 +109,14 @@ export function CelestialSky() {
       nearPts.current.position.lerp(sit, 0.07);
     }
     if (armPts.current) {
-      armPts.current.visible = arms > 0.02;
+      armPts.current.visible = celestialDraw && arms > 0.02;
       const s = 0.78 + arms * 0.22;
       armPts.current.scale.setScalar(s);
     }
     if (hazeMesh.current) {
       const mat = hazeMesh.current.material as import("three").MeshBasicMaterial;
       mat.opacity = 0.1 * haze;
-      hazeMesh.current.visible = haze > 0.02;
+      hazeMesh.current.visible = celestialDraw && haze > 0.02;
       const hs = 180 + haze * 40;
       hazeMesh.current.scale.set(hs, hs, 1);
     }
