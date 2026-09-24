@@ -42,10 +42,6 @@ export function CornerGalaxies() {
   useFrame(() => {
     const mesh = ref.current;
     if (!mesh) return;
-    if (introPlaying() && introChrome() < 0.02) {
-      mesh.visible = false;
-      return;
-    }
     mesh.position.copy(camera.position);
     mesh.quaternion.copy(camera.quaternion);
     if (camera instanceof PerspectiveCamera) {

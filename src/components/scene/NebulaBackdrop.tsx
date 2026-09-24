@@ -27,7 +27,6 @@ import {
   nebulaCompositeSize,
   type NebulaImageMap,
 } from "@/lib/galaxy/nebulaBackdrop";
-import { introChrome, introPlaying } from "@/lib/galaxy/intro";
 import { exploringSign, galaxyTravel } from "@/lib/galaxy/travel";
 
 function noopRaycast() {
@@ -169,9 +168,7 @@ export function NebulaBackdrop() {
       const portrait = aspect < 1;
       w.scale.set(wellW, wellH * (portrait ? 1.12 : 1), 1);
       w.position.set(0, wellH * 0.06, -WELL_DISTANCE);
-      // Center well only reads once chrome is up; before that it is a fullscreen
-      // invisible multiply the intro never shows (same gate as corner galaxies).
-      w.visible = !(introPlaying() && introChrome() < 0.02);
+      w.visible = true;
     }
   });
 

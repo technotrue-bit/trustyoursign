@@ -1,4 +1,3 @@
-import { tickInvisibleOpeningProfile } from "./openingInvisibleProfile";
 import { useGalaxy } from "./store";
 import { prefersReducedMotion } from "./travel";
 
