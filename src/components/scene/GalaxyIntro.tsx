@@ -118,7 +118,6 @@ import {
   dwellVideoFrameReady,
   pauseDwellClip,
   primeDwellClip,
-  ensureDwellClip,
   stopDwellClip,
   syncDwellPrefetch,
 } from "@/lib/galaxy/dwellClip";
