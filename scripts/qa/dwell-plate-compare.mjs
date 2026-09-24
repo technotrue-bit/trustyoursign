@@ -157,6 +157,12 @@ async function captureViewport(label, viewport) {
       }
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     }, mode);
+    if (mode === "lifeLast") {
+      await page.waitForFunction(
+        () => (window.__tysQa.dwellClipFrame("aries").videoCurrentTime ?? 0) > 4.5,
+        { timeout: 20_000 },
+      );
+    }
     await page.waitForFunction(
       () => {
         const s = window.__tysQa.state();

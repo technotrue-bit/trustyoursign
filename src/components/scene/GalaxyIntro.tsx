@@ -582,7 +582,7 @@ function fitDwellCoverUv(
   }
   const nudge = DWELL_LIFE_PLATE_NUDGE_PX[signId];
   if (nudge) {
-    tex.offset.x -= nudge.x / DWELL_PLATE_REF.w;
+    tex.offset.x += nudge.x / DWELL_PLATE_REF.w;
     tex.offset.y -= nudge.y / DWELL_PLATE_REF.h;
   }
 }
