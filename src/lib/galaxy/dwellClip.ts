@@ -9,10 +9,11 @@ export const DWELL_STILL_SEC = 2.5;
 
 /**
  * Optional life clip per sign. Absent = still plate and the 7s auto-walk.
- * Aries is the pioneer. Prefetch only the station the camera is aimed at.
+ * Prefetch only the station the camera is aimed at.
  */
 export const DWELL_CLIPS: Partial<Record<SignId, string>> = {
   aries: "/signs/aries-life.mp4",
+  leo: "/signs/leo-life.mp4",
 };
 
 const videos = new Map<SignId, HTMLVideoElement>();
