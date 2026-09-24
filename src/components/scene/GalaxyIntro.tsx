@@ -86,7 +86,6 @@ import {
   uAssemble,
   uBirth,
 } from "@/lib/galaxy/intro";
-import { noteOpeningMs } from "@/lib/galaxy/openingProfile";
 import { useGalaxy } from "@/lib/galaxy/store";
 import {
   ELEMENT_CODE,
@@ -435,12 +434,8 @@ function Dust() {
   );
   const calm = useRef(1);
   useFrame(({ clock }, dt) => {
-    const t0 = import.meta.env.DEV ? performance.now() : 0;
     const mesh = points.current;
-    if (!mesh) {
-      if (import.meta.env.DEV) noteOpeningMs("dust", performance.now() - t0);
-      return;
-    }
+    if (!mesh) return;
     const rush = exploringSign() ? 0 : Math.min(1, Math.abs(galaxyTravel.vel) / MAX_FLY_T);
     calm.current = lerpToward({
       current: calm.current,
@@ -454,7 +449,6 @@ function Dust() {
     mesh.visible = vis > 0.02;
     const mat = mesh.material;
     if (!Array.isArray(mat) && "opacity" in mat) mat.opacity = 0.35 * vis;
-    if (import.meta.env.DEV) noteOpeningMs("dust", performance.now() - t0);
   });
   return (
     <points
@@ -495,28 +489,20 @@ function BirthNebula() {
     [tex, geo, mat],
   );
   useFrame(({ clock }) => {
-    const t0 = import.meta.env.DEV ? performance.now() : 0;
     const mesh = points.current;
-    if (!mesh) {
-      if (import.meta.env.DEV) noteOpeningMs("birthNebula", performance.now() - t0);
-      return;
-    }
+    if (!mesh) return;
     const assemble = uAssemble();
     const playing = introPlaying();
     const hold = playing ? 1 : Math.max(0, 1 - assemble);
     const fade = playing ? 1 - Math.max(0, (assemble - 0.7) / 0.3) : hold;
     const fieldOn = introField() > 0.02;
     mesh.visible = fade > 0.02 && fieldOn;
-    if (!mesh.visible) {
-      if (import.meta.env.DEV) noteOpeningMs("birthNebula", performance.now() - t0);
-      return;
-    }
+    if (!mesh.visible) return;
     mesh.position.copy(TEMPLE_STATIONS[0]!);
     mat.uniforms.uTime.value = galaxyTravel.shaderTime;
     mat.uniforms.uBirth.value = uBirth();
     mat.uniforms.uAssemble.value = assemble;
     mat.uniforms.uOpacity.value = fade;
-    if (import.meta.env.DEV) noteOpeningMs("birthNebula", performance.now() - t0);
   });
   return (
     <points
@@ -750,16 +736,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   }, [sign.id, sign.palette]);
 
   useFrame(({ clock, camera }, dt) => {
-    const t0 = import.meta.env.DEV ? performance.now() : 0;
     const g = group.current;
     const mesh = cores.current;
-    if (!g || !mesh) {
-      if (import.meta.env.DEV) noteOpeningMs("stationStars", performance.now() - t0);
-      return;
-    }
-    const finishStationFrame = () => {
-      if (import.meta.env.DEV) noteOpeningMs("stationStars", performance.now() - t0);
-    };
+    if (!g || !mesh) return;
     const releaseLife = () => {
       if (galaxyTravel.dwellClipIndex === index) pauseDwellClip(sign.id);
       releaseDwellTexture(plateMat.current, artTex, dwellTex);
@@ -794,7 +773,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     if (introPlaying() && index !== 0 && !held) {
       g.visible = false;
       releaseLife();
-      finishStationFrame();
       return;
     }
     // A strip / Enter jump shows only where it left and where it lands, never the signs between.
@@ -802,7 +780,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     if (direct && !held && index !== aimedIndex() && !departing) {
       g.visible = false;
       releaseLife();
-      finishStationFrame();
       return;
     }
     const exploringHere =
@@ -810,7 +787,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     if (exploringSign() && !exploringHere && !held) {
       g.visible = false;
       releaseLife();
-      finishStationFrame();
       return;
     }
     const sit = TEMPLE_STATIONS[index]!;
@@ -844,7 +820,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       mesh.visible = false;
       setCloudDrawRange(starGeo, false);
       releaseLife();
-      finishStationFrame();
       return;
     }
     const fieldDraw = introField() > 0.02;
@@ -1031,19 +1006,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
 
       if (!held && !exploringHere && fade < 0.01) {
         mesh.visible = false;
-        finishStationFrame();
         return;
       }
       if (introPlaying() && index === 0 && introAries() < 0.1) {
         mesh.visible = false;
         setCloudDrawRange(starGeo, false);
-        finishStationFrame();
         return;
       }
       if (introPlaying() && !fieldDraw) {
         mesh.visible = false;
         setCloudDrawRange(starGeo, false);
-        finishStationFrame();
         return;
       }
       mesh.visible = true;
@@ -1120,7 +1092,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       u.uLife.value = 0;
       lifeEase.current = 0;
     }
-    finishStationFrame();
   });
 
   const stationName = `${galaxyLayerName("station-cloud")}-${sign.id}`;
@@ -1415,7 +1386,6 @@ function TempleRig() {
   }, []);
 
   useFrame((_, delta) => {
-    const profT0 = import.meta.env.DEV ? performance.now() : 0;
     syncFrameSession();
     const d = Math.min(0.05, Math.max(0.001, delta));
     let snapPose = false;
@@ -1648,10 +1618,7 @@ function TempleRig() {
       }
     }
 
-    if (!Number.isFinite(_cam.x) || !Number.isFinite(_look.x)) {
-      if (import.meta.env.DEV) noteOpeningMs("templeRigFrame", performance.now() - profT0);
-      return;
-    }
+    if (!Number.isFinite(_cam.x) || !Number.isFinite(_look.x)) return;
     if (warped) {
       // Portal cut: the scene swaps stations under the camera. Shift the lagging
       // camera by the same amount so its speed and trail carry straight through.
@@ -1750,7 +1717,6 @@ function TempleRig() {
       lastPub.current = t;
       publishTravel(t, galaxyTravel.moved);
     }
-    if (import.meta.env.DEV) noteOpeningMs("templeRigFrame", performance.now() - profT0);
   });
 
   return null;

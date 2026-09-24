@@ -21,7 +21,7 @@ const INTERVAL_CAP = 180;
  * at priority 0 still run every rAF for correct dt maths.
  */
 export function FrameGovernor() {
-  const { gl, scene, camera, invalidate, setFrameloop } = useThree();
+  const { gl, scene, camera, size, invalidate, setFrameloop } = useThree();
   const intervals = useRef<number[]>([]);
   const last = useRef(0);
   const half = useRef<HalfRateState>({ active: false, sinceMs: 0 });
@@ -104,7 +104,9 @@ export function FrameGovernor() {
     if (hidden.current) return;
 
     tick.current += 1;
-    const renderNth = openingHudWindowActive() ? 2 : everyNth.current;
+    const introHalfRender =
+      openingHudWindowActive() && size.width >= 1000 && size.height >= 700;
+    const renderNth = introHalfRender ? 2 : everyNth.current;
     if (tick.current % renderNth !== 0) return;
     const r0 = import.meta.env.DEV ? performance.now() : 0;
     gl.render(scene, camera);

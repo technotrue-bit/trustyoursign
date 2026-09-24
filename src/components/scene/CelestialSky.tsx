@@ -18,7 +18,6 @@ import {
   INSIDE_SKY_FIELD_RESIDUAL,
   INSIDE_SKY_HAZE_RESIDUAL,
 } from "@/lib/galaxy/layers";
-import { noteOpeningMs } from "@/lib/galaxy/openingProfile";
 import { PORTAL_CUT, exploringSign, galaxyTravel, portalActive } from "@/lib/galaxy/travel";
 
 function smooth01(x: number) {
@@ -70,7 +69,6 @@ export function CelestialSky() {
   }, [camera, tex, haze, layers, nearGeo, matArms, matField, matNear]);
 
   useFrame(() => {
-    const t0 = import.meta.env.DEV ? performance.now() : 0;
     if (camera instanceof PerspectiveCamera && camera.far !== 2500) {
       camera.far = 2500;
       camera.updateProjectionMatrix();
@@ -125,7 +123,6 @@ export function CelestialSky() {
     if (discMesh.current) {
       discMesh.current.visible = false;
     }
-    if (import.meta.env.DEV) noteOpeningMs("celestialSky", performance.now() - t0);
   });
 
   return (

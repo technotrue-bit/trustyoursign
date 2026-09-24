@@ -1,4 +1,4 @@
-import { noteOpeningMs, tickOpeningProfile } from "./openingProfile";
+import { tickOpeningProfile } from "./openingProfile";
 import { useGalaxy } from "./store";
 import { prefersReducedMotion } from "./travel";
 
@@ -140,7 +140,6 @@ function publish() {
   ) {
     return;
   }
-  const t0 = import.meta.env.DEV ? performance.now() : 0;
   useGalaxy.setState({
     introTitle: title,
     introChrome: chrome,
@@ -149,7 +148,6 @@ function publish() {
     introSkip: skip,
     introDone: templeIntro.done,
   });
-  if (import.meta.env.DEV) noteOpeningMs("reactPublish", performance.now() - t0);
   tickOpeningProfile();
 }
 
