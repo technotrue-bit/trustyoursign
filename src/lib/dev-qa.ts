@@ -10,6 +10,7 @@ import { loadSignArt, artAspect, primeSignArt } from "./galaxy/signArt";
 import {
   DWELL_ASPECT_MATCH_EPS,
   dwellVideoFrameReady,
+  ensureDwellClip,
   primeDwellClip,
   stopDwellClip,
 } from "./galaxy/dwellClip";

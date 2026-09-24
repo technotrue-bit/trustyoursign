@@ -116,6 +116,7 @@ import {
   DWELL_PLATE_REF,
   dwellClipFor,
   dwellVideoFrameReady,
+  ensureDwellClip,
   pauseDwellClip,
   primeDwellClip,
   stopDwellClip,
