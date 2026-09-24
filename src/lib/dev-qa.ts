@@ -11,7 +11,6 @@ import {
   DWELL_ASPECT_MATCH_EPS,
   dwellVideoFrameReady,
   primeDwellClip,
-  ensureDwellClip,
   stopDwellClip,
 } from "./galaxy/dwellClip";
 import { galaxyFigureBox, getFigureMatch, paintedFigureBox } from "./galaxy/signAlign";
