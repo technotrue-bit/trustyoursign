@@ -68,14 +68,25 @@ async function captureViewport(label, viewport) {
   async function settleAndShot(mode, file) {
     await page.evaluate(async (m) => {
       window.__tysQa.dwellPlateShot(m);
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const video = document.querySelector('video[data-dwell-clip="aries"]');
       if (video && m !== "still") {
         await new Promise((resolve) => {
-          if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) resolve(undefined);
-          else video.addEventListener("seeked", () => resolve(undefined), { once: true });
+          if (video.readyState >= 1) resolve();
+          else video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+        });
+        if (m === "life0") video.currentTime = 0;
+        else {
+          const end =
+            Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 6.041667;
+          video.currentTime = Math.max(0, end - 1 / 30);
+        }
+        video.pause();
+        await new Promise((resolve) => {
+          if (video.readyState >= 2) resolve();
+          else video.addEventListener("seeked", () => resolve(), { once: true });
         });
       }
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     }, mode);
     await page.waitForFunction(
       () => {

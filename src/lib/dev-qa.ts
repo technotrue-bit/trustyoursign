@@ -195,7 +195,8 @@ export function installQaHooks() {
       if (mode === "life0") {
         video.currentTime = 0;
       } else {
-        const end = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 6.04;
+        const end =
+          Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 6.041667;
         video.currentTime = Math.max(0, end - 1 / 30);
       }
       return {
