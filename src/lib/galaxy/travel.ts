@@ -23,6 +23,7 @@ import {
   enterRush,
   enterWorldFade,
   getSignGalaxy,
+  capricornSkipsEnterDissolve,
   type ExplorePhase,
 } from "./signGalaxy";
 import { useGalaxy, currentConstellation } from "./store";
@@ -530,18 +531,28 @@ function applyEnterCurves(p: number, reduced = prefersReducedMotion(), withBurst
   const q = clamp01(p);
   galaxyTravel.exploreProgress = q;
   galaxyTravel.worldFade = enterWorldFade(q);
-  galaxyTravel.plateFade = enterPlateFade(q);
+  const signId =
+    galaxyTravel.exploreSignIndex != null
+      ? (CONSTELLATIONS[galaxyTravel.exploreSignIndex]?.id ?? null)
+      : null;
+  const capricornPlate = signId != null && capricornSkipsEnterDissolve(signId);
+  if (capricornPlate && withBurst) {
+    galaxyTravel.plateFade = 1;
+    galaxyTravel.dissolve = 0;
+    galaxyTravel.burst = 0;
+    galaxyTravel.ignition = 0;
+    galaxyTravel.burstImpulse = 0;
+  } else {
+    galaxyTravel.plateFade = enterPlateFade(q);
+    galaxyTravel.burst = withBurst ? enterBurst(q, reduced) : 0;
+    galaxyTravel.ignition = withBurst ? enterBurstIgnition(q, reduced) : 0;
+    galaxyTravel.dissolve = withBurst ? enterBurstDissolve(q) : 0;
+    galaxyTravel.burstImpulse = withBurst ? enterBurstImpulse(q, reduced) : 0;
+  }
   galaxyTravel.galaxyForm = enterGalaxyForm(q);
   galaxyTravel.diveBlend = enterDive(q);
   galaxyTravel.enterRush = enterRush(q);
   galaxyTravel.coreReveal = enterCoreReveal(q);
-  // The ignition hand-off rides the same clock. `withBurst` is false on the way
-  // out: the exit replays the enter curves backwards and must not fire the blast
-  // (a reverse burst is its own spec, not this one).
-  galaxyTravel.burst = withBurst ? enterBurst(q, reduced) : 0;
-  galaxyTravel.ignition = withBurst ? enterBurstIgnition(q, reduced) : 0;
-  galaxyTravel.dissolve = withBurst ? enterBurstDissolve(q) : 0;
-  galaxyTravel.burstImpulse = withBurst ? enterBurstImpulse(q, reduced) : 0;
 }
 
 function skipDurations() {

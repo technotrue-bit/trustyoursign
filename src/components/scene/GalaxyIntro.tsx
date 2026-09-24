@@ -70,6 +70,8 @@ import {
 } from "@/lib/galaxy/travel";
 import { SETTLE_DIST } from "@/lib/galaxy/dwellClip";
 import {
+  capricornInsideKeepsPlate,
+  capricornSkipsEnterDissolve,
   enterHubSettle,
   getSignGalaxy,
   insideHardGateHidesLeftovers,
@@ -876,12 +878,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         : smooth(Math.max(0, (gather - 0.52) / 0.48));
 
     const landedHere = exploringHere && insideHardGateHidesLeftovers(galaxyTravel.explorePhase);
+    const capricornInsidePlate =
+      landedHere && capricornInsideKeepsPlate(sign.id, galaxyTravel.explorePhase);
 
     // Ignition dissolve: the painting is eaten outward from its hub. Data-driven —
     // the hub lands in plate UV via the same measured alignment the field uses.
     const pb = plateBurst.current;
     if (pb) {
-      const live = exploringHere && galaxyTravel.dissolve > 0.001 ? galaxyTravel.dissolve : 0;
+      const skipDissolve = capricornSkipsEnterDissolve(sign.id);
+      const live =
+        exploringHere && !skipDissolve && galaxyTravel.dissolve > 0.001 ? galaxyTravel.dissolve : 0;
       if (live > 0 && !platePlan.current) platePlan.current = measurePlatePlan(sign.id, volEarly);
       const plan = platePlan.current;
       if (plan) {
@@ -891,7 +897,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       pb.uDissolve.value = live;
     }
 
-    if (landedHere) {
+    if (landedHere && !capricornInsidePlate) {
       // Inside: the star volume is the room — keep it lit. The painted plate and
       // the 3D shell are the approach shells and go away (the camera is past them).
       releaseLife();
@@ -950,6 +956,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         // Corridor plates follow the one-owner weight alone (no floor, so no stack).
         // BirthChat, the enter dive, and the intro keep the tested helper.
         const corridorPlate = !held && !exploringHere && !(introPlaying() && index === 0);
+        const skipPlateFade = exploringHere && capricornSkipsEnterDissolve(sign.id);
         const plateOp = corridorPlate
           ? plateOn
             ? fade
@@ -961,18 +968,21 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
               fade,
               bornIn,
               morphLevel: morphLevel.current,
-            }) * (exploringHere ? galaxyTravel.plateFade : 1);
-        art.current.visible = plateOp > 0.04;
+            }) * (exploringHere && !skipPlateFade ? galaxyTravel.plateFade : 1);
+        if (capricornInsidePlate) {
+          art.current.visible = plateOn;
+          mat.opacity = plateOn ? 1 : 0;
+          if (exploringHere) galaxyTravel.plateOpacity = plateOn ? 1 : 0;
+        } else {
+          art.current.visible = plateOp > 0.04;
+          mat.opacity =
+            plateOp *
+            (!lifeVideo && index === 0 && !reducedMotion
+              ? 0.985 + Math.sin(galaxyTravel.shaderTime * 0.9 + 0.6) * 0.015
+              : 1);
+          if (exploringHere) galaxyTravel.plateOpacity = plateOp;
+        }
         art.current.scale.set(wide * ariesBreath, (wide / aspect) * ariesBreath, 1);
-        mat.opacity =
-          plateOp *
-          (!lifeVideo && index === 0 && !reducedMotion
-            ? 0.985 + Math.sin(galaxyTravel.shaderTime * 0.9 + 0.6) * 0.015
-            : 1);
-        // Measured evidence for M11: what the entered sign's plate is actually
-        // drawn at. Only the entered station publishes, so a neighbour's frame
-        // can't clobber the value the QA probe reads.
-        if (exploringHere) galaxyTravel.plateOpacity = plateOp;
         if (plateBurst.current) plateBurst.current.uLifeKey.value = lifeVideo ? 1 : 0;
         if (lifeVideo && dwellTex.current) {
           if (mat.map !== dwellTex.current) {
@@ -991,7 +1001,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         }
       }
       if (shellWrap.current) {
-        const shellOp = exploringHere ? galaxyTravel.plateFade : 1;
+        const shellOp =
+          capricornInsidePlate ? 0 : exploringHere ? galaxyTravel.plateFade : 1;
         shellWrap.current.visible = shellOp > 0.04;
         if (shellWrap.current.visible) {
           for (const mat of shellMats.current) {
