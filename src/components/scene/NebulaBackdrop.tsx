@@ -74,7 +74,12 @@ function configureWallpaperTexture(tex: Texture, modest: boolean, maxAnisotropy:
  * plate cannot. Soft plate falloff lives in the bake. A radial centre well
  * darkens type. Pause freezes drift via `galaxyTravel.shaderTime`.
  */
-export function NebulaBackdrop() {
+type NebulaBackdropProps = {
+  /** Fires once the wallpaper texture is on the GPU (next frame after upload). */
+  onBackdropReady?: () => void;
+};
+
+export function NebulaBackdrop({ onBackdropReady }: NebulaBackdropProps = {}) {
   const group = useRef<Group>(null);
   const back = useRef<Mesh>(null);
   const well = useRef<Mesh>(null);
@@ -116,6 +121,12 @@ export function NebulaBackdrop() {
       owned?.dispose();
     };
   }, [modest, gain, maxAnisotropy]);
+
+  useEffect(() => {
+    if (!compositeMap || !onBackdropReady) return;
+    const id = requestAnimationFrame(() => onBackdropReady());
+    return () => cancelAnimationFrame(id);
+  }, [compositeMap, onBackdropReady]);
 
   const wellMap = useMemo(
     () => makeDataTexture(makeCenterWellData(MASK_SIZE), true),

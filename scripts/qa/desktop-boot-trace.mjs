@@ -48,6 +48,19 @@ async function oneRun() {
     )
     .catch(() => {});
   const hudMs = Date.now() - t0;
+  const { plateAt, nebulaAt } = await page.evaluate(() => {
+    const resources = performance.getEntriesByType("resource");
+    const plate = resources.find(
+      (e) => /\/signs\/aries\.(webp|png)/i.test(e.name) && e.responseEnd > 0,
+    );
+    const nebula = resources.find(
+      (e) => /nebula-wallpaper/i.test(e.name) && e.responseEnd > 0,
+    );
+    return {
+      plateAt: plate ? plate.responseEnd : null,
+      nebulaAt: nebula ? nebula.responseEnd : null,
+    };
+  });
   const end = await cdp.send("Tracing.end");
   let nebulaSelfMs = 0;
   let longTasksMs = 0;
@@ -84,7 +97,7 @@ async function oneRun() {
     }
   }
   await browser.close();
-  return { hudMs, nebulaSelfMs, longTasksMs };
+  return { hudMs, plateAt, nebulaAt, nebulaSelfMs, longTasksMs };
 }
 
 const rows = [];
@@ -96,6 +109,8 @@ const out = {
   runs: rows,
   median: {
     hudMs: median(rows.map((r) => r.hudMs)),
+    plateAt: median(rows.map((r) => r.plateAt)),
+    nebulaAt: median(rows.map((r) => r.nebulaAt)),
     nebulaSelfMs: median(rows.map((r) => r.nebulaSelfMs)),
     longTasksMs: median(rows.map((r) => r.longTasksMs)),
   },

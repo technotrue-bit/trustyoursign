@@ -190,6 +190,9 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
       return;
     }
     let cancelled = false;
+    void Promise.all([import("@/lib/galaxy/nebulaBackdrop"), import("@/lib/gpu")]).then(
+      ([nb, gpu]) => nb.prefetchPrebakedNebulaWallpaper(gpu.isSmallGpu(), "gl"),
+    );
     void import("@/components/scene/ChartCanvas")
       .then((m) => {
         if (cancelled) return;

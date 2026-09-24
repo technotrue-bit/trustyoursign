@@ -189,8 +189,13 @@ export function nebulaWallpaperGain(path: NebulaWallpaperPath, modest: boolean):
   return modest ? NEBULA_GL_LAYER_GAIN_MODEST : NEBULA_GL_LAYER_GAIN;
 }
 
-/** Load the static bake; resolves null when the asset is missing or decode fails. */
-export function loadPrebakedNebulaWallpaper(
+const prebakedWallpaperLoads = new Map<string, Promise<HTMLImageElement | null>>();
+
+function prebakedWallpaperKey(modest: boolean, path: NebulaWallpaperPath) {
+  return `${modest ? "m" : "f"}:${path}`;
+}
+
+function fetchPrebakedNebulaWallpaper(
   modest: boolean,
   path: NebulaWallpaperPath,
 ): Promise<HTMLImageElement | null> {
@@ -202,6 +207,28 @@ export function loadPrebakedNebulaWallpaper(
     img.onerror = () => resolve(null);
     img.src = prebakedNebulaWallpaperUrl(modest, path);
   });
+}
+
+/** Start decoding the static bake before NebulaBackdrop mounts. */
+export function prefetchPrebakedNebulaWallpaper(modest: boolean, path: NebulaWallpaperPath): void {
+  const key = prebakedWallpaperKey(modest, path);
+  if (!prebakedWallpaperLoads.has(key)) {
+    prebakedWallpaperLoads.set(key, fetchPrebakedNebulaWallpaper(modest, path));
+  }
+}
+
+/** Load the static bake; resolves null when the asset is missing or decode fails. */
+export function loadPrebakedNebulaWallpaper(
+  modest: boolean,
+  path: NebulaWallpaperPath,
+): Promise<HTMLImageElement | null> {
+  const key = prebakedWallpaperKey(modest, path);
+  let pending = prebakedWallpaperLoads.get(key);
+  if (!pending) {
+    pending = fetchPrebakedNebulaWallpaper(modest, path);
+    prebakedWallpaperLoads.set(key, pending);
+  }
+  return pending;
 }
 
 function clamp01(v: number) {

@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import {
   ACESFilmicToneMapping,
@@ -313,6 +313,8 @@ export function GalaxyIntro() {
   const { gl, scene } = useThree();
   const [sky, setSky] = useState(false);
   const [rest, setRest] = useState(false);
+  /** Nebula wallpaper is uploaded before star/dust/galaxy-arm GPU work. */
+  const [backdropReady, setBackdropReady] = useState(false);
   useEffect(() => {
     bootIntro();
     galaxyTravel.birth = 1;
@@ -320,6 +322,7 @@ export function GalaxyIntro() {
     primeSignArt("aries");
     primeSignArt("taurus");
     const skyT = window.setTimeout(() => setSky(true), 80);
+    const backdropFallback = window.setTimeout(() => setBackdropReady(true), 2200);
     const restT = window.setTimeout(
       () => {
         setRest(true);
@@ -334,9 +337,11 @@ export function GalaxyIntro() {
     return () => {
       window.clearTimeout(skyT);
       window.clearTimeout(restT);
+      window.clearTimeout(backdropFallback);
       stopDwellClip();
     };
   }, []);
+  const markBackdropReady = useCallback(() => setBackdropReady(true), []);
   useEffect(() => {
     const prev = gl.toneMapping;
     gl.toneMapping = ACESFilmicToneMapping;
@@ -355,17 +360,23 @@ export function GalaxyIntro() {
       <StationLight />
       {sky ? (
         <Suspense fallback={null}>
-          <NebulaBackdrop />
+          <NebulaBackdrop onBackdropReady={markBackdropReady} />
         </Suspense>
       ) : null}
-      {sky ? <CelestialSky /> : null}
-      {sky ? <CornerGalaxies /> : null}
-      {sky ? <Dust /> : null}
-      <BirthNebula />
+      {sky && backdropReady ? <CelestialSky /> : null}
+      {sky && backdropReady ? <CornerGalaxies /> : null}
+      {sky && backdropReady ? <Dust /> : null}
+      {backdropReady ? <BirthNebula /> : null}
       {TEMPLE_SIGNS.map((sign, i) => (
-        <Station key={sign.id} index={i} sign={sign} eager={i <= 2} />
+        <Station
+          key={sign.id}
+          index={i}
+          sign={sign}
+          eager={i === 0}
+          starGpuLive={backdropReady}
+        />
       ))}
-      {sky ? <ArriveBurstTicker /> : null}
+      {sky && backdropReady ? <ArriveBurstTicker /> : null}
       <ChartRing />
       <TempleRig />
     </>
@@ -557,7 +568,17 @@ function stationCloudApproach(index: number, t: number) {
   return Math.abs(index - aim) <= 1;
 }
 
-function Station({ index, sign, eager }: { index: number; sign: TempleSign; eager: boolean }) {
+function Station({
+  index,
+  sign,
+  eager,
+  starGpuLive,
+}: {
+  index: number;
+  sign: TempleSign;
+  eager: boolean;
+  starGpuLive: boolean;
+}) {
   const volumeGated = hasVolumeSign(sign.id);
   // Volume geometry loads async from the sign's PNG — until it's actually
   // ready, stay on the plate + denseCloud path instead of hiding the plate
@@ -611,6 +632,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const scatter = useRef<Vector3[] | null>(null);
   const starGeo = useMemo(() => {
     const g = new BufferGeometry();
+    if (!starGpuLive) {
+      g.setAttribute("position", new BufferAttribute(new Float32Array(3), 3));
+      g.setDrawRange(0, 0);
+      return g;
+    }
     // Cold boot builds only the landing sign's cloud; neighbours hydrate on approach.
     if (index === 0) {
       scatter.current = makeScatter(index, n);
@@ -622,7 +648,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       g.setDrawRange(0, 0);
     }
     return g;
-  }, [index, n, sign.id, morphPairs, useVolume]);
+  }, [index, n, sign.id, morphPairs, useVolume, starGpuLive]);
   const pick = () => {
     if (enterAnimating()) return;
     if (exploringSign()) {
@@ -1126,17 +1152,21 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           </Suspense>
         </group>
       ) : null}
-      <points
-        ref={cores}
-        key={stationName}
-        name={stationName}
-        geometry={starGeo}
-        material={coreMat}
-        frustumCulled={false}
-        raycast={noopRaycast}
-      />
-      <SignGalaxyField sign={sign} index={index} />
-      {index === 0 ? <AriesAtmosphere /> : null}
+      {starGpuLive ? (
+        <>
+          <points
+            ref={cores}
+            key={stationName}
+            name={stationName}
+            geometry={starGeo}
+            material={coreMat}
+            frustumCulled={false}
+            raycast={noopRaycast}
+          />
+          <SignGalaxyField sign={sign} index={index} />
+          {index === 0 ? <AriesAtmosphere /> : null}
+        </>
+      ) : null}
       <BigThreeLights signId={sign.id} />
     </group>
   );
