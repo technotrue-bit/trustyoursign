@@ -145,9 +145,7 @@ async function captureViewport(label, viewport) {
         });
         if (m === "life0") video.currentTime = 0;
         else {
-          const end =
-            Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 6.041667;
-          video.currentTime = Math.max(0, end - 1 / 30);
+          video.currentTime = 6.041667 - 1 / 30;
         }
         video.pause();
         await new Promise((resolve) => {
@@ -157,12 +155,6 @@ async function captureViewport(label, viewport) {
       }
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     }, mode);
-    if (mode === "lifeLast") {
-      await page.waitForFunction(
-        () => (window.__tysQa.dwellClipFrame("aries").videoCurrentTime ?? 0) > 4.5,
-        { timeout: 20_000 },
-      );
-    }
     await page.waitForFunction(
       () => {
         const s = window.__tysQa.state();
