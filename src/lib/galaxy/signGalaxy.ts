@@ -1,7 +1,6 @@
 import type { SignId } from "@/lib/chart/types";
 import { CONSTELLATIONS, type Figure, type StarPt } from "./constellations";
 import { insightsForSign, type InsightTone } from "./signInsights";
-import { applyCapricornPlatePoints, capricornInsideKeepsPlate, capricornSkipsEnterDissolve } from "./capricornPlateMap";
 import { burstDissolve, burstIgnition, burstImpulse, burstPulse, burstPulseReduced, DISSOLVE_END } from "./signBurst";
 import { TEMPLE_SIGNS, type TempleSign } from "./temple";
 
@@ -243,18 +242,10 @@ export function buildSignGalaxy(signId: SignId): SignGalaxy {
 export function getSignGalaxy(signId: SignId): SignGalaxy {
   const hit = cache.get(signId);
   if (hit) return hit;
-  const built = applyCapricornPlatePoints(buildSignGalaxy(signId));
+  const built = buildSignGalaxy(signId);
   cache.set(signId, built);
   return built;
 }
-
-export { capricornInsideKeepsPlate, capricornSkipsEnterDissolve };
-export {
-  CAPRICORN_PLATE_LESSON_UV,
-  CAPRICORN_INSIDE_CORE_SCALE,
-  capricornInsideHidesLineCage,
-  capricornHubPlateUv,
-} from "./capricornPlateMap";
 
 export function clearSignGalaxyCache() {
   cache.clear();
