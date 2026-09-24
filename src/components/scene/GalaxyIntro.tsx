@@ -1030,9 +1030,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
                   lifeMat.current.needsUpdate = true;
                 }
                 dwellStall.current = 0;
-                if (dwellPhase.current !== "in" && dwellPhase.current !== "play") {
-                  dwellPhase.current = "in";
-                }
+                dwellPhase.current = "in";
               } else if (video.paused && video.currentTime === 0) {
                 dwellPhase.current = "wait";
                 dwellStall.current += dt;
@@ -1093,7 +1091,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         mat.opacity = plateOp * (1 - dwellBlend.current) * stillMul;
         mat.map = artTex;
         if (lifeArt.current && lifeMat.current) {
-          const lifeOp = plateOp * dwellBlend.current;
+          const lifeOp = plateOp * dwellBlend.current * stillMul;
           lifeArt.current.visible = lifeOp > 0.004;
           lifeArt.current.scale.set(plane.x * ariesBreath, plane.y * ariesBreath, 1);
           if (dwellTex.current) {
