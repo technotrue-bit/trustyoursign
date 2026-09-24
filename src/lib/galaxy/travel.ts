@@ -334,6 +334,8 @@ export const galaxyTravel = {
    */
   dwellClipIndex: null as number | null,
   dwellClipDone: false,
+  /** Dev QA: force corridor plate pixels for still vs life frame compares. */
+  dwellPlateQa: null as null | "still" | "life0" | "lifeLast",
 };
 
 export function prefersReducedMotion() {
@@ -468,6 +470,7 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.enterAfterSeek = null;
   resetExplore(false);
   clearDwellClip();
+  galaxyTravel.dwellPlateQa = null;
   restIdle();
 }
 

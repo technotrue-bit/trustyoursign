@@ -586,29 +586,6 @@ function releaseDwellTexture(
   }
 }
 
-/** Black-key the life clip on its own plate layer (same threshold as uLifeKey on the still shader). */
-function attachLifeKeyMaterial(mat: MeshBasicMaterial) {
-  mat.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec2 vTysLifeUv;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvTysLifeUv = uv;");
-    shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying vec2 vTysLifeUv;")
-      .replace(
-        "#include <map_fragment>",
-        [
-          "#include <map_fragment>",
-          "{",
-          "  float lifeLuma = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));",
-          "  diffuseColor.a *= smoothstep(0.02, 0.06, lifeLuma);",
-          "}",
-        ].join("\n"),
-      );
-  };
-  mat.customProgramCacheKey = () => "tys-life-plate-key";
-  mat.needsUpdate = true;
-}
-
 /** True when this station should build its star cloud before the viewer reaches it. */
 function stationCloudApproach(index: number, t: number) {
   const cur = stationFromT(t);
@@ -646,7 +623,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const dwellEnded = useRef(false);
   const lifeArt = useRef<Mesh>(null);
   const lifeMat = useRef<MeshBasicMaterial | null>(null);
-  const lifeKeyReady = useRef(false);
   const shellWrap = useRef<Group>(null);
   const shown = useRef(false);
   const hydrated = useRef(false);
@@ -799,13 +775,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     mat.customProgramCacheKey = () => "tys-plate-dissolve-life";
     mat.needsUpdate = true;
   }, [sign.id, sign.palette]);
-
-  useEffect(() => {
-    const mat = lifeMat.current;
-    if (!mat || lifeKeyReady.current) return;
-    attachLifeKeyMaterial(mat);
-    lifeKeyReady.current = true;
-  }, [sign.id]);
 
   useFrame(({ clock, camera }, dt) => {
     const g = group.current;
@@ -993,6 +962,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         const plateOn = Boolean(artTex && (artReady(artTex) || ready));
         const bornIn = plateReveal;
         const reducedMotion = prefersReducedMotion();
+        const plateQa =
+          index === 0 && sign.id === "aries" && !held && !exploringHere
+            ? galaxyTravel.dwellPlateQa
+            : null;
         const lifeOwns =
           galaxyTravel.dwellClipIndex === index &&
           !galaxyTravel.dwellClipDone &&
@@ -1018,6 +991,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           if (markDone) galaxyTravel.dwellClipDone = true;
         };
 
+        if (!plateQa) {
         if (lifeOwns && mayPlay && !reducedMotion && dwellPhase.current !== "out") {
           const video = primeDwellClip(sign.id);
           if (dwellPhase.current === "idle" || dwellPhase.current === "wait") {
@@ -1061,6 +1035,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         } else if (dwellPhase.current !== "idle" || dwellBlend.current > 0) {
           finishDwellFade(false);
         }
+        }
 
         const ariesBreath =
           index === 0 && !reducedMotion
@@ -1090,7 +1065,32 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             : 1;
         mat.opacity = plateOp * (1 - dwellBlend.current) * stillMul;
         mat.map = artTex;
-        if (lifeArt.current && lifeMat.current) {
+        if (plateQa === "still") {
+          mat.opacity = plateOp * stillMul;
+          if (lifeArt.current && lifeMat.current) {
+            lifeMat.current.opacity = 0;
+            lifeArt.current.visible = false;
+          }
+        } else if (plateQa === "life0" || plateQa === "lifeLast") {
+          const video = primeDwellClip(sign.id);
+          if (video && dwellVideoFrameReady(video)) {
+            dwellTex.current = bindDwellTexture(video, dwellTex.current, aspect);
+            if (lifeMat.current && dwellTex.current) {
+              lifeMat.current.map = dwellTex.current;
+              lifeMat.current.needsUpdate = true;
+              fitDwellCoverUv(dwellTex.current, video, aspect);
+            }
+            mat.opacity = 0;
+            const lifeOp = plateOp * stillMul;
+            if (lifeArt.current && lifeMat.current) {
+              lifeArt.current.visible = lifeOp > 0.004;
+              lifeArt.current.scale.set(plane.x * ariesBreath, plane.y * ariesBreath, 1);
+              lifeMat.current.opacity = lifeOp;
+              lifeMat.current.depthTest = false;
+              lifeMat.current.alphaTest = 0.04;
+            }
+          }
+        } else if (lifeArt.current && lifeMat.current) {
           const lifeOp = plateOp * dwellBlend.current * stillMul;
           lifeArt.current.visible = lifeOp > 0.004;
           lifeArt.current.scale.set(plane.x * ariesBreath, plane.y * ariesBreath, 1);

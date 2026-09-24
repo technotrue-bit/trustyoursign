@@ -6,6 +6,7 @@ import { clearBurstParamCache } from "./galaxy/signBurst";
 import { clearSignBurstCache, clearSignCoreCache } from "./galaxy/signCore";
 import { getSignVolume } from "./galaxy/signVolume";
 import { primeSignArt } from "./galaxy/signArt";
+import { dwellVideoFrameReady, primeDwellClip, stopDwellClip } from "./galaxy/dwellClip";
 import { galaxyFigureBox, getFigureMatch, paintedFigureBox } from "./galaxy/signAlign";
 import { useGalaxy } from "./galaxy/store";
 import { stationT } from "./galaxy/temple";
@@ -179,6 +180,34 @@ export function installQaHooks() {
         videoPaused: video ? video.paused : null,
         videoEnded: video ? video.ended : null,
       };
+    },
+    /** Park on Aries and force still-only or a single life frame for plate compares. */
+    dwellPlateShot(mode: "still" | "life0" | "lifeLast") {
+      stopDwellClip("aries");
+      galaxyTravel.dwellClipIndex = null;
+      galaxyTravel.dwellClipDone = false;
+      galaxyTravel.dwellPlateQa = mode;
+      seekSign(0, { direct: true });
+      if (mode === "still") return { mode };
+      const video = primeDwellClip("aries");
+      if (!video) return { mode, error: "no-video" as const };
+      video.pause();
+      if (mode === "life0") {
+        video.currentTime = 0;
+      } else {
+        const end = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 6.04;
+        video.currentTime = Math.max(0, end - 1 / 30);
+      }
+      return {
+        mode,
+        ready: dwellVideoFrameReady(video),
+        currentTime: video.currentTime,
+        duration: video.duration,
+        ended: video.ended,
+      };
+    },
+    clearDwellPlateShot() {
+      galaxyTravel.dwellPlateQa = null;
     },
   };
 
