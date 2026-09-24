@@ -5,6 +5,7 @@ import {
   type FrameGovernorMode,
   type HalfRateState,
 } from "@/lib/galaxy/frameGovernor";
+import { noteOpeningMs, openingHudWindowActive } from "@/lib/galaxy/openingProfile";
 import { introPlaying } from "@/lib/galaxy/intro";
 import { galaxyTravel } from "@/lib/galaxy/travel";
 
@@ -103,8 +104,11 @@ export function FrameGovernor() {
     if (hidden.current) return;
 
     tick.current += 1;
-    if (tick.current % everyNth.current !== 0) return;
+    const renderNth = openingHudWindowActive() ? 2 : everyNth.current;
+    if (tick.current % renderNth !== 0) return;
+    const r0 = import.meta.env.DEV ? performance.now() : 0;
     gl.render(scene, camera);
+    if (import.meta.env.DEV) noteOpeningMs("webglRender", performance.now() - r0);
   }, 1);
 
   return null;
