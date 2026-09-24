@@ -495,7 +495,8 @@ function BirthNebula() {
     const playing = introPlaying();
     const hold = playing ? 1 : Math.max(0, 1 - assemble);
     const fade = playing ? 1 - Math.max(0, (assemble - 0.7) / 0.3) : hold;
-    mesh.visible = fade > 0.02;
+    const fieldOn = introField() > 0.02;
+    mesh.visible = fade > 0.02 && fieldOn;
     if (!mesh.visible) return;
     mesh.position.copy(TEMPLE_STATIONS[0]!);
     mat.uniforms.uTime.value = galaxyTravel.shaderTime;
@@ -821,7 +822,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       releaseLife();
       return;
     }
-    if (hydrated.current) setCloudDrawRange(starGeo, true);
+    const fieldDraw = introField() > 0.02;
+    if (hydrated.current && fieldDraw) setCloudDrawRange(starGeo, true);
+    else if (!fieldDraw && introPlaying()) setCloudDrawRange(starGeo, false);
 
     const volEarly = getSignVolume(sign.id);
     const plateAspect = volEarly?.aspect ?? (artTex ? artAspect(artTex) : 16 / 9) ?? 16 / 9;
@@ -1007,9 +1010,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       }
       if (introPlaying() && index === 0 && introAries() < 0.1) {
         mesh.visible = false;
+        setCloudDrawRange(starGeo, false);
+        return;
+      }
+      if (introPlaying() && !fieldDraw) {
+        mesh.visible = false;
+        setCloudDrawRange(starGeo, false);
         return;
       }
       mesh.visible = true;
+      if (hydrated.current) setCloudDrawRange(starGeo, true);
       const morphTarget = picked ? 1 : 0;
       // Faster in (star formation feels snappy), slower out (dissolve back gracefully)
       const morphRate = prefersReducedMotion() ? 20 : picked ? 1.8 : 1.2;
