@@ -11,6 +11,7 @@ import {
   DWELL_ASPECT_MATCH_EPS,
   dwellVideoFrameReady,
   primeDwellClip,
+  ensureDwellClip,
   stopDwellClip,
 } from "./galaxy/dwellClip";
 import { galaxyFigureBox, getFigureMatch, paintedFigureBox } from "./galaxy/signAlign";
@@ -216,6 +217,115 @@ export function installQaHooks() {
     },
     clearDwellPlateShot() {
       galaxyTravel.dwellPlateQa = null;
+    },
+    clearDwellRamSplit() {
+      galaxyTravel.dwellPlateQa = null;
+      galaxyTravel.dwellBlendQa = null;
+      galaxyTravel.dwellVideoQa = null;
+    },
+    /** Still plate PNG for ram-mask baseline. */
+    dwellRamStill() {
+      galaxyTravel.dwellBlendQa = null;
+      galaxyTravel.dwellVideoQa = null;
+      galaxyTravel.dwellClipIndex = null;
+      galaxyTravel.dwellClipDone = false;
+      galaxyTravel.dwellPlateQa = "still";
+      seekSign(0, { direct: true });
+      return { mode: "still" as const };
+    },
+    /** B: live plate path, dwellBlend=1, video paused at frame 0. */
+    async dwellRamSplitB() {
+      galaxyTravel.dwellPlateQa = null;
+      galaxyTravel.dwellClipIndex = 0;
+      galaxyTravel.dwellClipDone = false;
+      galaxyTravel.dwellBlendQa = 1;
+      galaxyTravel.dwellVideoQa = "pause";
+      seekSign(0, { direct: true });
+      const video = ensureDwellClip("aries");
+      if (!video) return { error: "no-video" as const };
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 1) resolve();
+        else video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+      });
+      video.currentTime = 0;
+      video.pause();
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 2) resolve();
+        else video.addEventListener("seeked", () => resolve(), { once: true });
+      });
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await new Promise((r) => window.setTimeout(r, 350));
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return {
+        ready: dwellVideoFrameReady(video),
+        currentTime: video.currentTime,
+        paused: video.paused,
+        blend: galaxyTravel.dwellBlendQa,
+      };
+    },
+    /** A: decoded HTMLVideo pixels at currentTime (drawImage). Returns PNG data URL. */
+    async dwellRamSplitA() {
+      const video = ensureDwellClip("aries");
+      if (!video) return { error: "no-video" as const };
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 1) resolve();
+        else video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+      });
+      video.pause();
+      video.currentTime = 0;
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 2) resolve();
+        else video.addEventListener("seeked", () => resolve(), { once: true });
+      });
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext("2d");
+      if (!ctx) return { error: "no-ctx" as const };
+      ctx.drawImage(video, 0, 0, w, h);
+      return {
+        dataUrl: c.toDataURL("image/png"),
+        videoWidth: w,
+        videoHeight: h,
+        currentTime: video.currentTime,
+      };
+    },
+    /** C: live plate while playing; canvas PNGs during first ~55ms. */
+    async dwellRamSplitC() {
+      galaxyTravel.dwellPlateQa = null;
+      galaxyTravel.dwellClipIndex = 0;
+      galaxyTravel.dwellClipDone = false;
+      galaxyTravel.dwellBlendQa = 1;
+      galaxyTravel.dwellVideoQa = "play";
+      seekSign(0, { direct: true });
+      const video = ensureDwellClip("aries");
+      if (!video) return { error: "no-video" as const };
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 1) resolve();
+        else video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+      });
+      video.currentTime = 0;
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 2) resolve();
+        else video.addEventListener("seeked", () => resolve(), { once: true });
+      });
+      void video.play();
+      const canvas = document.querySelector("canvas");
+      if (!canvas) return { error: "no-canvas" as const };
+      const shots: { ms: number; dataUrl: string; videoTime: number; paused: boolean }[] = [];
+      const t0 = performance.now();
+      while (performance.now() - t0 < 55) {
+        await new Promise((r) => requestAnimationFrame(r));
+        shots.push({
+          ms: performance.now() - t0,
+          dataUrl: canvas.toDataURL("image/png"),
+          videoTime: video.currentTime,
+          paused: video.paused,
+        });
+      }
+      return { shots };
     },
     /** Log video vs plate aspect for dwell QA (phone cover-crop diagnosis). */
     dwellPlateDiag(signId: SignId = "aries") {

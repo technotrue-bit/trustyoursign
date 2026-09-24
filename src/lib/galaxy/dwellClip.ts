@@ -107,6 +107,10 @@ export function primeDwellClip(id: SignId): HTMLVideoElement | null {
     primeArmedAt.set(id, armedAt);
   }
   if (performance.now() < armedAt) return null;
+  return createDwellVideoElement(id, url);
+}
+
+function createDwellVideoElement(id: SignId, url: string): HTMLVideoElement {
   const video = document.createElement("video");
   video.dataset.dwellClip = id;
   video.setAttribute("aria-hidden", "true");
@@ -117,6 +121,20 @@ export function primeDwellClip(id: SignId): HTMLVideoElement | null {
   document.body.appendChild(video);
   videos.set(id, video);
   return video;
+}
+
+/** Ensure a clip element exists now (QA + plate holds). Skips the preload delay. */
+export function ensureDwellClip(id: SignId): HTMLVideoElement | null {
+  const url = DWELL_CLIPS[id];
+  if (!url || typeof document === "undefined") return null;
+  const existing = videos.get(id);
+  if (existing) {
+    harden(existing);
+    if (!existing.src.endsWith(url)) existing.src = url;
+    return existing;
+  }
+  primeArmedAt.set(id, 0);
+  return createDwellVideoElement(id, url);
 }
 
 /** Keep a paused element only for the aimed sign. Drops every other clip. */

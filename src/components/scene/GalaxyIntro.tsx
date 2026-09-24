@@ -21,6 +21,7 @@ import {
   Vector2,
   Vector3,
   VideoTexture,
+  type Texture,
 } from "three";
 import { isSmallGpu } from "@/lib/gpu";
 import { CONSTELLATIONS, ELEMENT_TINT, pairFigures } from "@/lib/galaxy/constellations";
@@ -118,6 +119,7 @@ import {
   dwellVideoFrameReady,
   pauseDwellClip,
   primeDwellClip,
+  ensureDwellClip,
   stopDwellClip,
   syncDwellPrefetch,
 } from "@/lib/galaxy/dwellClip";
@@ -532,6 +534,7 @@ function bindDwellTexture(
 ): VideoTexture {
   if (prev && prev.image === video) {
     fitDwellCoverUv(prev, video, plateAspect, signId);
+    prev.needsUpdate = true;
     return prev;
   }
   if (prev) {
@@ -548,9 +551,68 @@ function bindDwellTexture(
   return tex;
 }
 
+/** Paused/ended frames upload reliably via 2D drawImage (matches HTMLVideo pixels). */
+function paintDwellSnap(
+  snap: CanvasTexture,
+  video: HTMLVideoElement,
+  plateAspect: number,
+  signId: SignId,
+  pinnedTime: { current: number | null },
+) {
+  if (!dwellVideoFrameReady(video)) return snap;
+  const c = snap.image as HTMLCanvasElement;
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (c.width !== w) c.width = w;
+  if (c.height !== h) c.height = h;
+  if (pinnedTime.current !== video.currentTime) {
+    const ctx = c.getContext("2d");
+    if (ctx) {
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(video, 0, 0, w, h);
+    }
+    pinnedTime.current = video.currentTime;
+    snap.needsUpdate = true;
+  }
+  fitDwellCoverUv(snap, video, plateAspect, signId);
+  return snap;
+}
+
+function ensureDwellSnap(slot: { current: CanvasTexture | null }): CanvasTexture {
+  if (slot.current) return slot.current;
+  const canvas = document.createElement("canvas");
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  tex.generateMipmaps = false;
+  slot.current = tex;
+  return tex;
+}
+
+function bindLifeClipMap(
+  video: HTMLVideoElement,
+  plateAspect: number,
+  signId: SignId,
+  dwellTex: { current: VideoTexture | null },
+  dwellSnap: { current: CanvasTexture | null },
+  snapPinned: { current: number | null },
+): Texture {
+  const streaming = !video.paused && !video.ended;
+  if (streaming) {
+    dwellTex.current = bindDwellTexture(video, dwellTex.current, plateAspect, signId);
+    return dwellTex.current;
+  }
+  return paintDwellSnap(
+    ensureDwellSnap(dwellSnap),
+    video,
+    plateAspect,
+    signId,
+    snapPinned,
+  );
+}
+
 /** Map life clip into the still plate rect; near-matching aspects skip cover crop. */
 function fitDwellCoverUv(
-  tex: VideoTexture,
+  tex: Texture,
   video: HTMLVideoElement,
   plateAspect: number,
   signId: SignId,
@@ -634,6 +696,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     | null
   >(null);
   const dwellTex = useRef<VideoTexture | null>(null);
+  const dwellSnap = useRef<CanvasTexture | null>(null);
+  const snapPinned = useRef<number | null>(null);
   const dwellStall = useRef(0);
   const dwellBlend = useRef(0);
   const dwellPhase = useRef<"idle" | "wait" | "in" | "play" | "out">("idle");
@@ -699,6 +763,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       releaseSignArt(artTex);
       const tex = dwellTex.current;
       dwellTex.current = null;
+      if (dwellSnap.current) {
+        dwellSnap.current.dispose();
+        dwellSnap.current = null;
+      }
       if (tex) {
         try {
           tex.dispose();
@@ -803,6 +871,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       dwellPhase.current = "idle";
       dwellEnded.current = false;
       releaseDwellTexture(lifeMat.current, null, dwellTex);
+      if (dwellSnap.current) {
+        dwellSnap.current.dispose();
+        dwellSnap.current = null;
+      }
+      snapPinned.current = null;
       if (plateMat.current) plateMat.current.map = artTex;
       if (lifeMat.current) {
         lifeMat.current.opacity = 0;
@@ -1011,7 +1084,37 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           if (markDone) galaxyTravel.dwellClipDone = true;
         };
 
-        if (!plateQa) {
+        const blendQa =
+          index === 0 && sign.id === "aries" && !held && !exploringHere
+            ? galaxyTravel.dwellBlendQa
+            : null;
+
+        if (blendQa != null) {
+          dwellBlend.current = blendQa;
+          const video = ensureDwellClip(sign.id);
+          if (video) {
+            if (galaxyTravel.dwellVideoQa === "play") {
+              if (video.paused && !video.ended) void video.play().catch(() => {});
+            } else if (galaxyTravel.dwellVideoQa === "pause") {
+              video.pause();
+            }
+            if (dwellVideoFrameReady(video)) {
+              if (lifeMat.current) {
+                lifeMat.current.map = bindLifeClipMap(
+                  video,
+                  aspect,
+                  sign.id,
+                  dwellTex,
+                  dwellSnap,
+                  snapPinned,
+                );
+                lifeMat.current.needsUpdate = true;
+              }
+            }
+          }
+        }
+
+        if (!plateQa && blendQa == null) {
         if (lifeOwns && mayPlay && !reducedMotion && dwellPhase.current !== "out") {
           const video = primeDwellClip(sign.id);
           if (dwellPhase.current === "idle" || dwellPhase.current === "wait") {
@@ -1094,11 +1197,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         } else if (plateQa === "life0" || plateQa === "lifeLast") {
           const video = primeDwellClip(sign.id);
           if (video && dwellVideoFrameReady(video)) {
-            dwellTex.current = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
-            if (lifeMat.current && dwellTex.current) {
-              lifeMat.current.map = dwellTex.current;
+            if (lifeMat.current) {
+              lifeMat.current.map = bindLifeClipMap(
+                video,
+                aspect,
+                sign.id,
+                dwellTex,
+                dwellSnap,
+                snapPinned,
+              );
               lifeMat.current.needsUpdate = true;
-              fitDwellCoverUv(dwellTex.current, video, aspect, sign.id);
             }
             mat.opacity = 0;
             const lifeOp = plateOp * stillMul;
@@ -1114,13 +1222,17 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           const lifeOp = plateOp * dwellBlend.current * stillMul;
           lifeArt.current.visible = lifeOp > 0.004;
           lifeArt.current.scale.set(plane.x * ariesBreath, plane.y * ariesBreath, 1);
-          if (dwellTex.current) {
-            fitDwellCoverUv(
-              dwellTex.current,
-              dwellTex.current.image as HTMLVideoElement,
+          const clipVideo = primeDwellClip(sign.id);
+          if (clipVideo && dwellVideoFrameReady(clipVideo) && dwellBlend.current > 0.001) {
+            lifeMat.current.map = bindLifeClipMap(
+              clipVideo,
               aspect,
               sign.id,
+              dwellTex,
+              dwellSnap,
+              snapPinned,
             );
+            lifeMat.current.needsUpdate = true;
           }
           lifeMat.current.opacity = lifeOp;
           lifeMat.current.depthTest = false;

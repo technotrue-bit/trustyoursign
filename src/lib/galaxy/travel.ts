@@ -336,6 +336,10 @@ export const galaxyTravel = {
   dwellClipDone: false,
   /** Dev QA: force corridor plate pixels for still vs life frame compares. */
   dwellPlateQa: null as null | "still" | "life0" | "lifeLast",
+  /** Dev QA: force corridor dwellBlend (0–1) on the live plate path. */
+  dwellBlendQa: null as number | null,
+  /** Dev QA: pause vs play while dwellBlendQa is set. */
+  dwellVideoQa: null as null | "pause" | "play",
 };
 
 export function prefersReducedMotion() {
