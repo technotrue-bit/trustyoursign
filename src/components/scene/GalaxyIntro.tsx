@@ -132,7 +132,7 @@ import {
   getSignVolume,
   hasVolumeSign,
   interiorCloud,
-  primeSignVolumes,
+  primeSignVolumeNear,
   type SignVolume,
 } from "@/lib/galaxy/signVolume";
 import { buildBirthNebula, makeNebulaMaterial } from "@/lib/galaxy/nebula";
@@ -324,7 +324,7 @@ export function GalaxyIntro() {
       () => {
         setRest(true);
         preloadSignArtNear(0);
-        primeSignVolumes();
+        primeSignVolumeNear(0);
         primeSignArt("aries");
         primeSignArt("taurus");
         primeSignArt("gemini");
@@ -549,6 +549,14 @@ function releaseDwellTexture(
   }
 }
 
+/** True when this station should build its star cloud before the viewer reaches it. */
+function stationCloudApproach(index: number, t: number) {
+  const cur = stationFromT(t);
+  if (Math.abs(index - cur) <= 1) return true;
+  const aim = aimedIndex(t);
+  return Math.abs(index - aim) <= 1;
+}
+
 function Station({ index, sign, eager }: { index: number; sign: TempleSign; eager: boolean }) {
   const volumeGated = hasVolumeSign(sign.id);
   // Volume geometry loads async from the sign's PNG — until it's actually
@@ -603,7 +611,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const scatter = useRef<Vector3[] | null>(null);
   const starGeo = useMemo(() => {
     const g = new BufferGeometry();
-    if (eager) {
+    // Cold boot builds only the landing sign's cloud; neighbours hydrate on approach.
+    if (index === 0) {
       scatter.current = makeScatter(index, n);
       const cloud = useVolume ? interiorCloud(sign.id, n) : denseCloud(sign.id, n);
       fillMorphCloud(g, cloud, scatter.current, n, morphPairs);
@@ -613,7 +622,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       g.setDrawRange(0, 0);
     }
     return g;
-  }, [eager, index, n, sign.id, morphPairs, useVolume]);
+  }, [index, n, sign.id, morphPairs, useVolume]);
   const pick = () => {
     if (enterAnimating()) return;
     if (exploringSign()) {
@@ -750,7 +759,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const dist = Math.abs(t - dest);
     const incoming = index === Math.min(11, stationFromT(t) + 1);
     const focused = held || index === aimedIndex() || index === stationFromT(t);
-    if (focused || incoming) preloadSignArtNear(index);
+    if (focused || incoming) {
+      preloadSignArtNear(index);
+      primeSignVolumeNear(index);
+    }
     const ready = plateReady(sign.id);
     if (!artTex && (focused || incoming || ready) && !wantArt.current) {
       wantArt.current = true;
@@ -842,7 +854,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
 
     if (artTex) hydrateSignArt(sign.id, artTex);
     const vol = volEarly;
-    if (!hydrated.current && (focused || incoming || held || eager || ready)) {
+    const approach = stationCloudApproach(index, t);
+    if (!hydrated.current && (focused || incoming || held || ready || approach)) {
       if (!scatter.current) scatter.current = makeScatter(index, n);
       const cloud = useVolume ? interiorCloud(sign.id, n) : denseCloud(sign.id, n);
       if (cloud.length > n * 0.4) {

@@ -23,6 +23,13 @@ export type SignVolume = {
 };
 
 const volumes = new Map<SignId, SignVolume>();
+
+function noteBootVolumeBuild() {
+  if (!import.meta.env.DEV || typeof window === "undefined") return;
+  const w = window as Window & { __tysBoot?: { volumeBuilds: number; morphFills: number } };
+  if (!w.__tysBoot) w.__tysBoot = { volumeBuilds: 0, morphFills: 0 };
+  w.__tysBoot.volumeBuilds = volumes.size;
+}
 const SMALL = typeof window !== "undefined" && isSmallGpu();
 const COLS = SMALL ? 52 : 72;
 const ROWS = SMALL ? 30 : 42;
@@ -169,11 +176,24 @@ export function getSignVolume(id: SignId): SignVolume | null {
   if (!img.complete || (img.naturalWidth ?? 0) < 2) return null;
   const vol = build(id, img);
   volumes.set(id, vol);
+  noteBootVolumeBuild();
   return vol;
 }
 
 export function primeSignVolumes() {
   (Object.keys(SIGN_ART) as SignId[]).forEach((id) => getSignVolume(id));
+}
+
+/** Warm relief bakes for aimed station ±1 — same corridor window as plate prefetch. */
+export function primeSignVolumeNear(index: number) {
+  if (typeof document === "undefined") return;
+  const ids = Object.keys(SIGN_ART) as SignId[];
+  const n = ids.length;
+  const i = ((index % n) + n) % n;
+  for (const j of [i - 1, i, i + 1]) {
+    if (j < 0 || j >= n) continue;
+    getSignVolume(ids[j]!);
+  }
 }
 
 function sampleField(field: Float32Array, vol: SignVolume, u: number, v: number) {
