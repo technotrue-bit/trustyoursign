@@ -5,7 +5,15 @@ import { clearSignGalaxyCache, getSignGalaxy } from "./galaxy/signGalaxy";
 import { clearBurstParamCache } from "./galaxy/signBurst";
 import { clearSignBurstCache, clearSignCoreCache } from "./galaxy/signCore";
 import { getSignVolume } from "./galaxy/signVolume";
-import { primeSignArt } from "./galaxy/signArt";
+import { isSmallGpu } from "./gpu";
+import { loadSignArt, artAspect, primeSignArt } from "./galaxy/signArt";
+import {
+  DWELL_ASPECT_MATCH_EPS,
+  dwellVideoFrameReady,
+  ensureDwellClip,
+  primeDwellClip,
+  stopDwellClip,
+} from "./galaxy/dwellClip";
 import { galaxyFigureBox, getFigureMatch, paintedFigureBox } from "./galaxy/signAlign";
 import { useGalaxy } from "./galaxy/store";
 import { stationT } from "./galaxy/temple";
@@ -43,6 +51,7 @@ export type QaState = {
   seek: number | null;
   seekKind: string;
   dwellClipIndex: number | null;
+  dwellClipDone: boolean;
   /** Portal glide: camera offset off its station (signs, + forward), phase, camera progress. */
   portalSigns: number;
   portalPhase: number | null;
@@ -153,6 +162,7 @@ export function installQaHooks() {
         seek: galaxyTravel.seek,
         seekKind: galaxyTravel.seekKind,
         dwellClipIndex: galaxyTravel.dwellClipIndex,
+        dwellClipDone: galaxyTravel.dwellClipDone,
         portalSigns: galaxyTravel.portalSigns,
         portalPhase: galaxyTravel.portalTo != null ? galaxyTravel.portalPhase : null,
         portalCamV: galaxyTravel.portalCamV,
@@ -162,6 +172,275 @@ export function installQaHooks() {
           (window as unknown as { __tysPlates?: ArrayLike<number> }).__tysPlates ?? [],
         ),
         probe: (window as unknown as { __tys?: Record<string, unknown> }).__tys ?? null,
+      };
+    },
+    /** Dwell life-clip element + travel flags for corridor capture strips. */
+    dwellClipFrame(signId = "aries") {
+      const video = document.querySelector(
+        `video[data-dwell-clip="${signId}"]`,
+      ) as HTMLVideoElement | null;
+      return {
+        t: galaxyTravel.t,
+        dwellClipIndex: galaxyTravel.dwellClipIndex,
+        dwellClipDone: galaxyTravel.dwellClipDone,
+        dwellPlateQa: galaxyTravel.dwellPlateQa,
+        videoCurrentTime: video ? video.currentTime : null,
+        videoPaused: video ? video.paused : null,
+        videoEnded: video ? video.ended : null,
+      };
+    },
+    /** Park on Aries and force still-only or a single life frame for plate compares. */
+    dwellPlateShot(mode: "still" | "life0" | "lifeLast") {
+      stopDwellClip("aries");
+      galaxyTravel.dwellClipIndex = null;
+      galaxyTravel.dwellClipDone = false;
+      galaxyTravel.dwellPlateQa = mode;
+      seekSign(0, { direct: true });
+      if (mode === "still") return { mode };
+      const video = primeDwellClip("aries");
+      if (!video) return { mode, error: "no-video" as const };
+      video.pause();
+      if (mode === "life0") {
+        video.currentTime = 0;
+      } else {
+        const end =
+          Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 6.041667;
+        video.currentTime = Math.max(0, end - 1 / 30);
+      }
+      return {
+        mode,
+        ready: dwellVideoFrameReady(video),
+        currentTime: video.currentTime,
+        duration: video.duration,
+        ended: video.ended,
+      };
+    },
+    clearDwellPlateShot() {
+      galaxyTravel.dwellPlateQa = null;
+    },
+    clearDwellRamSplit() {
+      galaxyTravel.dwellPlateQa = null;
+      galaxyTravel.dwellBlendQa = null;
+      galaxyTravel.dwellVideoQa = null;
+    },
+    /** Still plate PNG for ram-mask baseline. */
+    dwellRamStill() {
+      galaxyTravel.dwellBlendQa = null;
+      galaxyTravel.dwellVideoQa = null;
+      galaxyTravel.dwellClipIndex = null;
+      galaxyTravel.dwellClipDone = false;
+      galaxyTravel.dwellPlateQa = "still";
+      seekSign(0, { direct: true });
+      return { mode: "still" as const };
+    },
+    /** B: live plate path, dwellBlend=1, video paused at frame 0. */
+    async dwellRamSplitB() {
+      galaxyTravel.dwellPlateQa = null;
+      galaxyTravel.dwellClipIndex = 0;
+      galaxyTravel.dwellClipDone = false;
+      galaxyTravel.dwellBlendQa = 1;
+      galaxyTravel.dwellVideoQa = "pause";
+      seekSign(0, { direct: true });
+      const video = ensureDwellClip("aries");
+      if (!video) return { error: "no-video" as const };
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 1) resolve();
+        else video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+      });
+      video.currentTime = 0;
+      video.pause();
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 2) resolve();
+        else video.addEventListener("seeked", () => resolve(), { once: true });
+      });
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await new Promise((r) => window.setTimeout(r, 200));
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const rvfc = (
+        video as HTMLVideoElement & {
+          requestVideoFrameCallback?: (cb: () => void) => number;
+        }
+      ).requestVideoFrameCallback;
+      if (typeof rvfc === "function") {
+        await new Promise<void>((resolve) => {
+          rvfc.call(video, () => resolve());
+        });
+      }
+      return {
+        ready: dwellVideoFrameReady(video),
+        currentTime: video.currentTime,
+        paused: video.paused,
+        blend: galaxyTravel.dwellBlendQa,
+      };
+    },
+    /** A: decoded HTMLVideo pixels at currentTime (drawImage). Returns PNG data URL. */
+    async dwellRamSplitA() {
+      const video = ensureDwellClip("aries");
+      if (!video) return { error: "no-video" as const };
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 1) resolve();
+        else video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+      });
+      video.pause();
+      video.currentTime = 0;
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 2) resolve();
+        else video.addEventListener("seeked", () => resolve(), { once: true });
+      });
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext("2d");
+      if (!ctx) return { error: "no-ctx" as const };
+      ctx.drawImage(video, 0, 0, w, h);
+      return {
+        dataUrl: c.toDataURL("image/png"),
+        videoWidth: w,
+        videoHeight: h,
+        currentTime: video.currentTime,
+      };
+    },
+    /**
+     * C: first WebGL-presented frame while the clip is playing (mediaTime < 0.02).
+     * Only records a sample when the decoded frame is still at t≈0 — never a late canvas grab.
+     */
+    async dwellRamSplitC() {
+      galaxyTravel.dwellPlateQa = null;
+      galaxyTravel.dwellClipIndex = 0;
+      galaxyTravel.dwellClipDone = false;
+      galaxyTravel.dwellBlendQa = 1;
+      galaxyTravel.dwellVideoQa = "play";
+      seekSign(0, { direct: true });
+      const video = ensureDwellClip("aries");
+      if (!video) return { error: "no-video" as const };
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 1) resolve();
+        else video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+      });
+      video.pause();
+      video.currentTime = 0;
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 2) resolve();
+        else video.addEventListener("seeked", () => resolve(), { once: true });
+      });
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const canvas = document.querySelector("canvas");
+      if (!canvas) return { error: "no-canvas" as const };
+      const shots: { ms: number; dataUrl: string; videoTime: number; paused: boolean }[] = [];
+      const t0 = performance.now();
+      type RvfcMeta = { mediaTime?: number; presentedFrames?: number };
+      const rvfc = (
+        video as HTMLVideoElement & {
+          requestVideoFrameCallback?: (
+            cb: (now: DOMHighResTimeStamp, metadata: RvfcMeta) => void,
+          ) => number;
+        }
+      ).requestVideoFrameCallback;
+      await new Promise<void>((resolve) => {
+        const finish = () => {
+          video.pause();
+          resolve();
+        };
+        const onPresented = (mediaTime: number) => {
+          if (mediaTime >= 0.02) {
+            finish();
+            return;
+          }
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              shots.push({
+                ms: performance.now() - t0,
+                dataUrl: canvas.toDataURL("image/png"),
+                videoTime: mediaTime,
+                paused: video.paused,
+              });
+              finish();
+            });
+          });
+        };
+        if (typeof rvfc !== "function") {
+          void video.play().then(() => {
+            requestAnimationFrame(() => onPresented(video.currentTime));
+          });
+          return;
+        }
+        void video.play().then(() => {
+          rvfc.call(video, (_now, metadata) => {
+            onPresented(metadata?.mediaTime ?? video.currentTime);
+          });
+        });
+      });
+      return { shots };
+    },
+    /** Hold corridor dwell for fade / swipe captures (VideoTexture path only). */
+    async dwellRamQaHold(opts: {
+      blend?: number;
+      videoTime?: number;
+      playing?: boolean;
+    } = {}) {
+      const blend = opts.blend ?? 1;
+      const videoTime = opts.videoTime ?? 0;
+      const playing = opts.playing ?? false;
+      galaxyTravel.dwellPlateQa = null;
+      galaxyTravel.dwellClipIndex = 0;
+      galaxyTravel.dwellClipDone = false;
+      galaxyTravel.dwellBlendQa = blend;
+      galaxyTravel.dwellVideoQa = playing ? "play" : "pause";
+      seekSign(0, { direct: true });
+      const video = ensureDwellClip("aries");
+      if (!video) return { error: "no-video" as const };
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 1) resolve();
+        else video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+      });
+      video.currentTime = videoTime;
+      if (playing) void video.play().catch(() => {});
+      else video.pause();
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 2) resolve();
+        else video.addEventListener("seeked", () => resolve(), { once: true });
+      });
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await new Promise((r) => window.setTimeout(r, 120));
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return {
+        blend,
+        playing,
+        currentTime: video.currentTime,
+        paused: video.paused,
+      };
+    },
+    /** Log video vs plate aspect for dwell QA (phone cover-crop diagnosis). */
+    dwellPlateDiag(signId: SignId = "aries") {
+      const video = document.querySelector(
+        `video[data-dwell-clip="${signId}"]`,
+      ) as HTMLVideoElement | null;
+      const vol = getSignVolume(signId);
+      const artTex = loadSignArt(signId);
+      const artPlateAspect = artAspect(artTex);
+      const volumeAspect = vol?.aspect ?? null;
+      const plateAspectUsed = artPlateAspect;
+      const vw = video?.videoWidth ?? 0;
+      const vh = video?.videoHeight ?? 0;
+      const videoAspect = vw > 2 && vh > 2 ? vw / vh : null;
+      const aspectDelta =
+        videoAspect != null ? Math.abs(videoAspect - plateAspectUsed) : null;
+      return {
+        videoWidth: vw || null,
+        videoHeight: vh || null,
+        videoAspect,
+        artPlateAspect,
+        volumeAspect,
+        plateAspectUsed,
+        aspectMatchEpsilon: DWELL_ASPECT_MATCH_EPS,
+        aspectsMatch:
+          aspectDelta != null ? aspectDelta <= DWELL_ASPECT_MATCH_EPS : null,
+        coverCropWouldApply:
+          aspectDelta != null ? aspectDelta > DWELL_ASPECT_MATCH_EPS : null,
+        dwellPlateQa: galaxyTravel.dwellPlateQa,
+        isSmallGpu: isSmallGpu(),
       };
     },
   };
