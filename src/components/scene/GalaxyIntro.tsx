@@ -1030,6 +1030,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           Boolean(dwellClipFor(sign.id));
         const mayPlay = dwellClipMayPlay(index);
         const fadeStep = dt / Math.max(0.001, DWELL_CROSSFADE_SEC);
+        // One stalled paint must not swallow the whole fade. 60fps is unchanged.
+        const inStep = Math.min(dt, 1 / 30) / Math.max(0.001, DWELL_CROSSFADE_SEC);
         const winding =
           dwellPhase.current === "out" ||
           (dwellBlend.current > 0 && (!lifeOwns || !mayPlay));
@@ -1127,7 +1129,13 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             finishDwellFade(true);
           } else if (dwellPhase.current === "in") {
             if (video && video.paused && !video.ended) void video.play().catch(() => {});
-            dwellBlend.current = Math.min(1, dwellBlend.current + fadeStep);
+            dwellBlend.current = Math.min(1, dwellBlend.current + inStep);
+            // Keep the visible pose on the fade. A long paint otherwise
+            // reveals a frame that already moved while the blend was stuck.
+            if (video && !video.ended) {
+              const target = dwellBlend.current * DWELL_CROSSFADE_SEC;
+              if (video.currentTime > target + 0.05) video.currentTime = target;
+            }
             if (dwellBlend.current >= 1) dwellPhase.current = "play";
           } else if (dwellPhase.current === "play") {
             dwellBlend.current = 1;
@@ -1223,10 +1231,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
               lifeMat.current.map = dwellTex.current;
               lifeMat.current.needsUpdate = true;
               fitDwellCoverUv(dwellTex.current, clipVideo, aspect, sign.id);
-              // requestVideoFrameCallback can sit quiet while currentTime
-              // runs, then deliver a later frame in one pop. Upload whatever
-              // frame is current on this paint, paused or playing.
-              dwellTex.current.needsUpdate = true;
+              // Playback presents frames through requestVideoFrameCallback.
+              // A held pose does not, so the paused frame never reaches the GPU
+              // unless we ask for the upload ourselves. Forcing an upload on
+              // every playing paint was tried; the desktop frame gap stayed.
+              if (clipVideo.paused || dwellPhase.current === "in") dwellTex.current.needsUpdate = true;
             }
           }
           lifeMat.current.opacity = lifeOp;
