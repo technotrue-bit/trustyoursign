@@ -639,6 +639,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const dwellBlend = useRef(0);
   const dwellPhase = useRef<"idle" | "wait" | "in" | "play" | "out">("idle");
   const dwellEnded = useRef(false);
+  /** True while a hidden play/pause is decoding frame 0. The fade stays on the still. */
+  const dwellHold = useRef(false);
   const lifeArt = useRef<Mesh>(null);
   const lifeMat = useRef<MeshBasicMaterial | null>(null);
   const shellWrap = useRef<Group>(null);
@@ -1007,6 +1009,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             lifeMat.current.visible = false;
           }
           dwellStall.current = 0;
+          dwellHold.current = false;
           if (keepVideo) pauseDwellClip(sign.id);
           else stopDwellClip(sign.id);
           if (markDone) galaxyTravel.dwellClipDone = true;
@@ -1041,18 +1044,43 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           const video = primeDwellClip(sign.id);
           if (dwellPhase.current === "idle" || dwellPhase.current === "wait") {
             if (video && !video.error && !video.ended) {
-              if (video.paused) void video.play().catch(() => {});
-              if (dwellVideoFrameReady(video) && !video.paused) {
+              const poseHeld =
+                !dwellHold.current && video.paused && video.currentTime < 0.05;
+              if (!dwellVideoFrameReady(video)) {
+                // Decode frame 0 offscreen. Do not leave playback running, or the
+                // first visible frame is already in motion.
+                if (!dwellHold.current) {
+                  dwellHold.current = true;
+                  void video
+                    .play()
+                    .then(() => {
+                      if (dwellPhase.current !== "wait") return;
+                      video.pause();
+                      if (video.currentTime > 0.04) video.currentTime = 0;
+                    })
+                    .catch(() => {})
+                    .finally(() => {
+                      dwellHold.current = false;
+                    });
+                }
+                dwellPhase.current = "wait";
+                dwellStall.current += dt;
+              } else if (!poseHeld) {
+                if (!dwellHold.current) {
+                  video.pause();
+                  if (video.currentTime > 0.04) video.currentTime = 0;
+                }
+                dwellPhase.current = "wait";
+                dwellStall.current += dt;
+              } else {
                 dwellTex.current = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
                 if (lifeMat.current && dwellTex.current) {
                   lifeMat.current.map = dwellTex.current;
                   lifeMat.current.needsUpdate = true;
                 }
                 dwellStall.current = 0;
+                dwellHold.current = false;
                 dwellPhase.current = "in";
-              } else if (video.paused && video.currentTime === 0) {
-                dwellPhase.current = "wait";
-                dwellStall.current += dt;
               }
             }
           }
@@ -1064,6 +1092,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             if (dwellBlend.current >= 1) dwellPhase.current = "play";
           } else if (dwellPhase.current === "play") {
             dwellBlend.current = 1;
+            if (video && video.paused && !video.ended) void video.play().catch(() => {});
             if (video?.ended) {
               video.pause();
               dwellEnded.current = true;
