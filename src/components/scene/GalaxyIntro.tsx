@@ -1077,8 +1077,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
               const poseHeld =
                 !dwellHold.current && video.paused && video.currentTime < 0.05;
               if (!dwellVideoFrameReady(video)) {
-                // Decode frame 0 offscreen. Do not leave playback running, or the
-                // first visible frame is already in motion.
+                // Decode frame 0 offscreen and park it. The fade starts on that
+                // pose; playback begins with the fade, not on an empty frame.
                 if (!dwellHold.current) {
                   dwellHold.current = true;
                   void video
@@ -1111,6 +1111,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
                 dwellStall.current = 0;
                 dwellHold.current = false;
                 dwellPhase.current = "in";
+                // Motion starts inside the fade. A held pose that then plays
+                // is a frame you can point at.
+                if (video.paused && !video.ended) void video.play().catch(() => {});
               }
             }
           }
@@ -1118,13 +1121,19 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           if (stalled || video?.error) {
             finishDwellFade(true);
           } else if (dwellPhase.current === "in") {
+            if (video && video.paused && !video.ended) void video.play().catch(() => {});
             dwellBlend.current = Math.min(1, dwellBlend.current + fadeStep);
             if (dwellBlend.current >= 1) dwellPhase.current = "play";
           } else if (dwellPhase.current === "play") {
             dwellBlend.current = 1;
             if (video && video.paused && !video.ended) void video.play().catch(() => {});
-            if (video?.ended) {
-              video.pause();
+            const dur = video && Number.isFinite(video.duration) ? video.duration : 0;
+            const remain = video ? dur - video.currentTime : 99;
+            // The clip eases back into the pose. Fade across that settle
+            // instead of freezing the last frame and then cutting.
+            const settling =
+              !!video && video.currentTime > 0.4 && dur > 1 && remain <= DWELL_CROSSFADE_SEC;
+            if (video?.ended || settling) {
               dwellEnded.current = true;
               dwellPhase.current = "out";
             }
