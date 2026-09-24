@@ -569,17 +569,16 @@ function fitDwellCoverUv(
   if (Math.abs(va - plateAspect) <= DWELL_ASPECT_MATCH_EPS) {
     tex.repeat.set(1, 1);
     tex.offset.set(0, 0);
-  } else if (plateAspect > va) {
-    const scale = plateAspect / va;
+  } else if (va > plateAspect) {
+    // Video is wider than the plate: crop the sides.
+    const scale = va / plateAspect;
     tex.repeat.set(1 / scale, 1);
     tex.offset.set((1 - 1 / scale) / 2, 0);
-  } else if (va > plateAspect) {
-    const scale = va / plateAspect;
+  } else {
+    // Video is taller than the plate: crop the top and bottom.
+    const scale = plateAspect / va;
     tex.repeat.set(1, 1 / scale);
     tex.offset.set(0, (1 - 1 / scale) / 2);
-  } else {
-    tex.repeat.set(1, 1);
-    tex.offset.set(0, 0);
   }
   const nudge = DWELL_LIFE_PLATE_NUDGE_PX[signId];
   if (nudge) {

@@ -12,7 +12,7 @@ const BASE = process.env.QA_BASE ?? "http://127.0.0.1:8080";
 const outDir =
   "/cursor/stores/bc-94162dc9-7018-48da-a5a0-9bf7e81bd591/media/dwell-clip";
 
-const NUDGE = { x: 12, y: 16 };
+const NUDGE = { x: 0, y: 0 };
 const PLATE_REF = { w: 1024, h: 576 };
 
 async function loadRgba(path) {

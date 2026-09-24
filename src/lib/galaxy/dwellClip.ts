@@ -18,11 +18,10 @@ export const DWELL_ASPECT_MATCH_EPS = 0.012;
 
 /**
  * Shift life-clip texels on the plate so frame 0 stacks on SIGN_ART (plate space px).
- * Positive x = move ram right on screen; positive y = move ram down.
+ * Positive x = move the animal right on screen; positive y = move it down.
+ * Aries frame 0 already stacks at 0. A 12×16 shift knocks it off the painting.
  */
-export const DWELL_LIFE_PLATE_NUDGE_PX: Partial<Record<SignId, { x: number; y: number }>> = {
-  aries: { x: 12, y: 16 },
-};
+export const DWELL_LIFE_PLATE_NUDGE_PX: Partial<Record<SignId, { x: number; y: number }>> = {};
 
 /**
  * Optional life clip per sign. Absent = still plate and the 7s auto-walk.
