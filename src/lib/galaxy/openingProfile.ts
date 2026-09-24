@@ -19,6 +19,10 @@ const BUCKETS = [
   "reactPublish",
 ] as const;
 
+function devProfileEnabled() {
+  return import.meta.env?.DEV === true;
+}
+
 function probe(): OpeningProfile {
   if (typeof window === "undefined") {
     return {
@@ -51,24 +55,24 @@ export function openingHudWindowActive() {
 }
 
 export function noteOpeningMs(bucket: (typeof BUCKETS)[number], ms: number) {
-  if (!import.meta.env.DEV || ms <= 0) return;
+  if (!devProfileEnabled() || ms <= 0) return;
   if (!openingHudWindowActive()) return;
   const p = probe();
   p.buckets[bucket] = (p.buckets[bucket] ?? 0) + ms;
 }
 
 export function noteOpeningMorphFill() {
-  if (!import.meta.env.DEV || !openingHudWindowActive()) return;
+  if (!devProfileEnabled() || !openingHudWindowActive()) return;
   probe().morphFills += 1;
 }
 
 export function noteOpeningVolumeBuild() {
-  if (!import.meta.env.DEV || !openingHudWindowActive()) return;
+  if (!devProfileEnabled() || !openingHudWindowActive()) return;
   probe().volumeBuilds += 1;
 }
 
 export function tickOpeningProfile() {
-  if (!import.meta.env.DEV || typeof performance === "undefined") return;
+  if (!devProfileEnabled() || typeof performance === "undefined") return;
   const p = probe();
   const field = introField();
   const title = introTitle();
