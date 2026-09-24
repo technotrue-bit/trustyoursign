@@ -818,8 +818,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           [
             "#include <map_fragment>",
             "{",
-            "  vec2 stillUv = vec2(vTysStillUv.x, 1.0 - vTysStillUv.y);",
-            "  diffuseColor.a *= texture2D(uStillMap, stillUv).a;",
+            "  diffuseColor.a *= texture2D(uStillMap, vTysStillUv).a;",
             "}",
           ].join("\n"),
         );
