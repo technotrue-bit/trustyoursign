@@ -214,8 +214,11 @@ async function captureViewport(label, viewport) {
   };
 }
 
+const phoneOnly = process.env.QA_PHONE_ONLY === "1";
 const phone = await captureViewport("phone", { width: 390, height: 844 });
-const desktop = await captureViewport("desktop", { width: 1280, height: 800 });
+const desktop = phoneOnly
+  ? null
+  : await captureViewport("desktop", { width: 1280, height: 800 });
 
 const report = {
   note:
