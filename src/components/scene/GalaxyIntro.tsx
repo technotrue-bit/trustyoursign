@@ -549,25 +549,6 @@ function bindDwellTexture(
   return tex;
 }
 
-function poseEase(x: number) {
-  const t = Math.min(1, Math.max(0, x));
-  return t * t * (3 - 2 * t);
-}
-
-/**
- * 0 on the opening and closing crossfade, 1 through the middle.
- * The encoded frame is close to the painting, not the same strokes, so the
- * life layer borrows the painting's color at both cuts.
- */
-function dwellPoseAmount(video: HTMLVideoElement | null) {
-  if (!video) return 0;
-  const dur = video.duration;
-  if (!Number.isFinite(dur) || dur < DWELL_CROSSFADE_SEC * 2) return 0;
-  const inn = poseEase(video.currentTime / DWELL_CROSSFADE_SEC);
-  const out = poseEase((dur - video.currentTime) / DWELL_CROSSFADE_SEC);
-  return inn * out;
-}
-
 /** Map life clip into the still plate rect; near-matching aspects skip cover crop. */
 function fitDwellCoverUv(
   tex: VideoTexture,
@@ -661,7 +642,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const dwellHold = useRef(false);
   const lifeArt = useRef<Mesh>(null);
   const lifeMat = useRef<MeshBasicMaterial | null>(null);
-  const dwellPose = useRef({ value: 0 });
   const shellWrap = useRef<Group>(null);
   const shown = useRef(false);
   const hydrated = useRef(false);
@@ -821,17 +801,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   useEffect(() => {
     const mat = lifeMat.current;
     if (!mat || !artTex) return;
-    const uniforms = { uStillMap: { value: artTex }, uPose: dwellPose.current };
+    const uniforms = { uStillMap: { value: artTex } };
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uStillMap = uniforms.uStillMap;
-      shader.uniforms.uPose = uniforms.uPose;
       shader.vertexShader = shader.vertexShader
         .replace("#include <common>", "#include <common>\nvarying vec2 vTysStillUv;")
         .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvTysStillUv = uv;");
       shader.fragmentShader = shader.fragmentShader
         .replace(
           "#include <common>",
-          "#include <common>\nvarying vec2 vTysStillUv;\nuniform sampler2D uStillMap;\nuniform float uPose;",
+          "#include <common>\nvarying vec2 vTysStillUv;\nuniform sampler2D uStillMap;",
         )
         .replace(
           "#include <map_fragment>",
@@ -839,13 +818,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             "#include <map_fragment>",
             "{",
             "  vec4 tysStill = texture2D(uStillMap, vTysStillUv);",
-            "  diffuseColor.rgb = mix(tysStill.rgb, diffuseColor.rgb, uPose);",
+            // The clip's strokes are not the painting. Mixing the painting's
+            // color back in over this same 200ms piles that gap onto the last
+            // frames (opacity and color both rising). A straight dissolve
+            // spreads it across every frame of the fade.
             "  diffuseColor.a *= tysStill.a;",
             "}",
           ].join("\n"),
         );
     };
-    mat.customProgramCacheKey = () => "tys-dwell-still-pose";
+    mat.customProgramCacheKey = () => "tys-dwell-still-mask";
     mat.needsUpdate = true;
   }, [artTex]);
 
@@ -1250,7 +1232,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           lifeMat.current.opacity = lifeOp;
           lifeMat.current.depthTest = false;
           lifeMat.current.alphaTest = 0.04;
-          dwellPose.current.value = dwellPoseAmount(clipVideo);
         }
         // Measured evidence for M11: what the entered sign's plate is actually
         // drawn at. Only the entered station publishes, so a neighbour's frame
