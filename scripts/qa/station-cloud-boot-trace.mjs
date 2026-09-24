@@ -1,6 +1,6 @@
 /**
- * Desktop cold boot: main-thread ms in nebulaBackdrop during HUD-ready window.
- *   node scripts/qa/desktop-boot-trace.mjs <url> [label] [cpuThrottle]
+ * Cold boot: station cloud + volume build cost until HUD-ready (same window as desktop-boot-trace).
+ *   node scripts/qa/station-cloud-boot-trace.mjs <url> [label] [cpuThrottle]
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { chromium } from "playwright";
@@ -9,6 +9,9 @@ const url = process.argv[2];
 const label = process.argv[3] ?? "run";
 const cpuRate = Number(process.argv[4] ?? 1);
 const RUNS = 5;
+
+const CLOUD_RE =
+  /denseCloud|interiorCloud|fillMorphCloud|fillStationCloud|getSignVolume|primeSignVolumes|primeSignVolumeNear|signVolume\.ts|starRender\.ts/i;
 
 function median(nums) {
   const s = nums.filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
@@ -48,9 +51,15 @@ async function oneRun() {
     )
     .catch(() => {});
   const hudMs = Date.now() - t0;
+  const boot = await page.evaluate(() => {
+    const b = window.__tysBoot;
+    return b ? { morphFills: b.morphFills ?? 0, volumeBuilds: b.volumeBuilds ?? 0 } : null;
+  });
   const end = await cdp.send("Tracing.end");
-  let nebulaSelfMs = 0;
+  let cloudSelfMs = 0;
+  let volumeBuildMs = 0;
   let longTasksMs = 0;
+  let longTaskCount = 0;
   if (end.stream) {
     let data = "";
     let eof = false;
@@ -70,21 +79,27 @@ async function oneRun() {
       }
       if (ev.ph === "X" && ev.dur) {
         const name = ev.name ?? "";
-        if (/nebulaBackdrop|composeNebulaWallpaper|drawPlacement/i.test(name)) {
-          nebulaSelfMs += ev.dur / 1000;
-        }
-        if (name === "RunTask" && ev.dur >= 50_000) longTasksMs += ev.dur / 1000;
-      }
-      if (ev.ph === "P" && ev.name === "FunctionCall" && ev.args?.data?.functionName) {
-        const fn = ev.args.data.functionName;
-        if (/composeNebulaWallpaper|drawPlacement/.test(fn)) {
-          /* paired with X events in full trace — keep X scan only */
+        const cat = ev.cat ?? "";
+        const blob = `${name} ${cat}`;
+        if (CLOUD_RE.test(blob)) cloudSelfMs += ev.dur / 1000;
+        if (/signVolume|function build\b/i.test(blob)) volumeBuildMs += ev.dur / 1000;
+        if (name === "RunTask" && ev.dur >= 50_000) {
+          longTasksMs += ev.dur / 1000;
+          longTaskCount += 1;
         }
       }
     }
   }
   await browser.close();
-  return { hudMs, nebulaSelfMs, longTasksMs };
+  return {
+    hudMs,
+    morphFills: boot?.morphFills ?? null,
+    volumeBuilds: boot?.volumeBuilds ?? null,
+    cloudSelfMs,
+    volumeBuildMs,
+    longTasksMs,
+    longTaskCount,
+  };
 }
 
 const rows = [];
@@ -96,11 +111,15 @@ const out = {
   runs: rows,
   median: {
     hudMs: median(rows.map((r) => r.hudMs)),
-    nebulaSelfMs: median(rows.map((r) => r.nebulaSelfMs)),
+    morphFills: median(rows.map((r) => r.morphFills)),
+    volumeBuilds: median(rows.map((r) => r.volumeBuilds)),
+    cloudSelfMs: median(rows.map((r) => r.cloudSelfMs)),
+    volumeBuildMs: median(rows.map((r) => r.volumeBuildMs)),
     longTasksMs: median(rows.map((r) => r.longTasksMs)),
+    longTaskCount: median(rows.map((r) => r.longTaskCount)),
   },
 };
-const path = `/workspace/screenshots/desktop-trace-${label}.json`;
+const path = `/workspace/screenshots/station-cloud-trace-${label}.json`;
 await mkdir("/workspace/screenshots", { recursive: true });
 await writeFile(path, JSON.stringify(out, null, 2));
 console.log(JSON.stringify(out, null, 2));

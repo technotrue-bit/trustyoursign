@@ -10,6 +10,7 @@ import {
   stopDwellClip,
 } from "./dwellClip";
 import { primeSignArt } from "./signArt";
+import { primeSignVolumeNear } from "./signVolume";
 import {
   enterBurst,
   enterBurstDissolve,
@@ -1091,6 +1092,7 @@ function beginSeek(i: number, kind: SeekKind) {
 }
 
 function primeAround(i: number) {
+  primeSignVolumeNear(i);
   const sign = CONSTELLATIONS[i];
   if (sign) primeSignArt(sign.id);
   const nxt = CONSTELLATIONS[(i + 1) % 12];

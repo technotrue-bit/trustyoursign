@@ -413,6 +413,11 @@ export function fillMorphCloud(
   count: number,
   pairs: MorphPair[],
 ) {
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    const w = window as Window & { __tysBoot?: { volumeBuilds: number; morphFills: number } };
+    if (!w.__tysBoot) w.__tysBoot = { volumeBuilds: 0, morphFills: 0 };
+    w.__tysBoot.morphFills += 1;
+  }
   fillStationCloud(geo, cloud, scatter, count);
   const n = count;
   const glyph = (geo.getAttribute("glyphPos") as BufferAttribute).array as Float32Array;
