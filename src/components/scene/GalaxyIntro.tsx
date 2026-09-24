@@ -583,7 +583,7 @@ function fitDwellCoverUv(
   const nudge = DWELL_LIFE_PLATE_NUDGE_PX[signId];
   if (nudge) {
     tex.offset.x -= nudge.x / DWELL_PLATE_REF.w;
-    tex.offset.y -= nudge.y / DWELL_PLATE_REF.h;
+    tex.offset.y += nudge.y / DWELL_PLATE_REF.h;
   }
 }
 
@@ -894,7 +894,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     else if (!fieldDraw && introPlaying()) setCloudDrawRange(starGeo, false);
 
     const volEarly = getSignVolume(sign.id);
-    const plateAspect = volEarly?.aspect ?? (artTex ? artAspect(artTex) : 16 / 9) ?? 16 / 9;
+    const artPlateAspect = (artTex ? artAspect(artTex) : 16 / 9) ?? 16 / 9;
+    /** Painted plate aspect — not the volume PNG grid (can differ and mis-cover clips). */
+    const plateAspect =
+      useVolume && volEarly?.aspect ? volEarly.aspect : artPlateAspect;
     const slide = computeBirthChatSlide({
       picked,
       travelT: t,
@@ -934,7 +937,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       }
     }
 
-    const aspect = vol?.aspect ?? (artTex ? artAspect(artTex) : 16 / 9) ?? 16 / 9;
+    const aspect = plateAspect;
     const wide = PLATE_WIDE;
     const arrive = index === 0 ? introAries() : 1;
     const along = smooth(fieldGather(dist));

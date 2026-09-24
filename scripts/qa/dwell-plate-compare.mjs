@@ -184,6 +184,7 @@ async function captureViewport(label, viewport) {
 
   const stillMeta = await settleAndShot("still", stillPath);
   const frame0Meta = await settleAndShot("life0", frame0Path);
+  const plateDiag = await page.evaluate(() => window.__tysQa.dwellPlateDiag("aries"));
   const lastMeta = await settleAndShot("lifeLast", lastPath);
 
   await page.evaluate(() => window.__tysQa.clearDwellPlateShot());
@@ -209,6 +210,7 @@ async function captureViewport(label, viewport) {
     lastVsStill,
     frame0VsLast,
     stillVsFrame0,
+    plateDiag,
   };
 }
 

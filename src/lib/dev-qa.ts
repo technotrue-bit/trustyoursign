@@ -5,8 +5,14 @@ import { clearSignGalaxyCache, getSignGalaxy } from "./galaxy/signGalaxy";
 import { clearBurstParamCache } from "./galaxy/signBurst";
 import { clearSignBurstCache, clearSignCoreCache } from "./galaxy/signCore";
 import { getSignVolume } from "./galaxy/signVolume";
-import { primeSignArt } from "./galaxy/signArt";
-import { dwellVideoFrameReady, primeDwellClip, stopDwellClip } from "./galaxy/dwellClip";
+import { isSmallGpu } from "./gpu";
+import { loadSignArt, artAspect, primeSignArt } from "./galaxy/signArt";
+import {
+  DWELL_ASPECT_MATCH_EPS,
+  dwellVideoFrameReady,
+  primeDwellClip,
+  stopDwellClip,
+} from "./galaxy/dwellClip";
 import { galaxyFigureBox, getFigureMatch, paintedFigureBox } from "./galaxy/signAlign";
 import { useGalaxy } from "./galaxy/store";
 import { stationT } from "./galaxy/temple";
@@ -176,6 +182,7 @@ export function installQaHooks() {
         t: galaxyTravel.t,
         dwellClipIndex: galaxyTravel.dwellClipIndex,
         dwellClipDone: galaxyTravel.dwellClipDone,
+        dwellPlateQa: galaxyTravel.dwellPlateQa,
         videoCurrentTime: video ? video.currentTime : null,
         videoPaused: video ? video.paused : null,
         videoEnded: video ? video.ended : null,
@@ -209,6 +216,37 @@ export function installQaHooks() {
     },
     clearDwellPlateShot() {
       galaxyTravel.dwellPlateQa = null;
+    },
+    /** Log video vs plate aspect for dwell QA (phone cover-crop diagnosis). */
+    dwellPlateDiag(signId: SignId = "aries") {
+      const video = document.querySelector(
+        `video[data-dwell-clip="${signId}"]`,
+      ) as HTMLVideoElement | null;
+      const vol = getSignVolume(signId);
+      const artTex = loadSignArt(signId);
+      const artPlateAspect = artAspect(artTex);
+      const volumeAspect = vol?.aspect ?? null;
+      const plateAspectUsed = artPlateAspect;
+      const vw = video?.videoWidth ?? 0;
+      const vh = video?.videoHeight ?? 0;
+      const videoAspect = vw > 2 && vh > 2 ? vw / vh : null;
+      const aspectDelta =
+        videoAspect != null ? Math.abs(videoAspect - plateAspectUsed) : null;
+      return {
+        videoWidth: vw || null,
+        videoHeight: vh || null,
+        videoAspect,
+        artPlateAspect,
+        volumeAspect,
+        plateAspectUsed,
+        aspectMatchEpsilon: DWELL_ASPECT_MATCH_EPS,
+        aspectsMatch:
+          aspectDelta != null ? aspectDelta <= DWELL_ASPECT_MATCH_EPS : null,
+        coverCropWouldApply:
+          aspectDelta != null ? aspectDelta > DWELL_ASPECT_MATCH_EPS : null,
+        dwellPlateQa: galaxyTravel.dwellPlateQa,
+        isSmallGpu: isSmallGpu(),
+      };
     },
   };
 
