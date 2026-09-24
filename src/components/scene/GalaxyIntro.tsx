@@ -1175,6 +1175,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
               lifeMat.current.map = dwellTex.current;
               lifeMat.current.needsUpdate = true;
               fitDwellCoverUv(dwellTex.current, clipVideo, aspect, sign.id);
+              // Playback presents frames through requestVideoFrameCallback.
+              // A held pose does not, so the paused frame never reaches the GPU
+              // unless we ask for the upload ourselves.
+              if (clipVideo.paused) dwellTex.current.needsUpdate = true;
             }
           }
           lifeMat.current.opacity = lifeOp;
