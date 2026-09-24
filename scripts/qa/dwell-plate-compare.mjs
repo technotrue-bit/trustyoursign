@@ -165,8 +165,19 @@ async function captureViewport(label, viewport) {
       { timeout: 30_000 },
     );
     await page.waitForTimeout(900);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const meta = await page.evaluate(() => {
+      const f = window.__tysQa.dwellClipFrame("aries");
+      const v = document.querySelector('video[data-dwell-clip="aries"]');
+      return {
+        ...f,
+        dwellPlateQa: window.__tysQa.state().dwellClipIndex,
+        videoWidth: v?.videoWidth ?? null,
+        videoHeight: v?.videoHeight ?? null,
+      };
+    });
     await page.screenshot({ path: join(outDir, file), type: "png" });
-    return page.evaluate(() => window.__tysQa.dwellClipFrame("aries"));
+    return meta;
   }
 
   const stillPath = `aries-still-${label}.png`;
@@ -182,8 +193,25 @@ async function captureViewport(label, viewport) {
 
   const frame0VsStill = await ramDiff(join(outDir, frame0Path), join(outDir, stillPath));
   const lastVsStill = await ramDiff(join(outDir, lastPath), join(outDir, stillPath));
+  const frame0VsLast = await bestCorrelation(
+    join(outDir, frame0Path),
+    join(outDir, lastPath),
+  );
+  const stillVsFrame0 = await bestCorrelation(
+    join(outDir, stillPath),
+    join(outDir, frame0Path),
+  );
 
-  return { label, stillMeta, frame0Meta, lastMeta, frame0VsStill, lastVsStill };
+  return {
+    label,
+    stillMeta,
+    frame0Meta,
+    lastMeta,
+    frame0VsStill,
+    lastVsStill,
+    frame0VsLast,
+    stillVsFrame0,
+  };
 }
 
 const phone = await captureViewport("phone", { width: 390, height: 844 });
@@ -191,7 +219,7 @@ const desktop = await captureViewport("desktop", { width: 1280, height: 800 });
 
 const report = {
   note:
-    "Center crop (~42% viewport) on the ram only. Large movedFraction means frame 0 or last frame still does not match the still plate.",
+    "Brightness-normalized correlation on center ram crop (±24px shift search). stillVsFrame0 near 1 at shift (0,0) means stack; frame0VsLast near 1 means clip returns to its own pose.",
   phone,
   desktop,
 };
