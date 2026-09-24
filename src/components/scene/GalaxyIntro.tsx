@@ -1167,7 +1167,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           index === 0 && !reducedMotion
             ? 0.985 + Math.sin(galaxyTravel.shaderTime * 0.9 + 0.6) * 0.015
             : 1;
-        mat.opacity = plateOp * (1 - dwellBlend.current) * stillMul;
+        // Life fades on top of the still. Fading the still out at the same time
+        // lets the sky through at the midpoint, which is the hitch at both cuts.
+        // The still steps aside only once the clip fully covers it.
+        const blending = dwellBlend.current > 0 && dwellBlend.current < 1;
+        mat.opacity = plateOp * (blending ? 1 : 1 - dwellBlend.current) * stillMul;
         mat.map = artTex;
         if (plateQa === "still") {
           mat.opacity = plateOp * stillMul;
