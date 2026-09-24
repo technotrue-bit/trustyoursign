@@ -12,7 +12,6 @@ import {
   dwellVideoFrameReady,
   ensureDwellClip,
   primeDwellClip,
-  ensureDwellClip,
   stopDwellClip,
 } from "./galaxy/dwellClip";
 import { galaxyFigureBox, getFigureMatch, paintedFigureBox } from "./galaxy/signAlign";
