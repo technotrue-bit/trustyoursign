@@ -16,12 +16,14 @@ import {
 const T0 = 10_000;
 
 describe("dwell clip map", () => {
-  it("attaches life clips to Aries and Leo only", () => {
-    assert.deepEqual(Object.keys(DWELL_CLIPS), ["aries", "leo"]);
+  it("attaches life clips to Aries, Leo, and Aquarius only", () => {
+    assert.deepEqual(Object.keys(DWELL_CLIPS), ["aries", "leo", "aquarius"]);
     assert.equal(DWELL_CLIPS.aries, "/signs/aries-life.mp4");
     assert.equal(DWELL_CLIPS.leo, "/signs/leo-life.mp4");
+    assert.equal(DWELL_CLIPS.aquarius, "/signs/aquarius-life.mp4");
     assert.equal(DWELL_CLIPS.taurus, undefined);
     assert.equal(DWELL_CLIPS.cancer, undefined);
+    assert.equal(DWELL_CLIPS.capricorn, undefined);
     assert.ok(DWELL_STILL_SEC >= 2 && DWELL_STILL_SEC <= 3);
   });
 });
@@ -109,6 +111,23 @@ describe("stepAutoSign dwell", () => {
     assert.equal(stepAt(8_100), true);
     assert.equal(galaxyTravel.dwellClipIndex, null);
     assert.equal(galaxyTravel.seek, stationT(leo + 1));
+  });
+
+  it("holds Aquarius, plays once, then walks to Pisces", () => {
+    const aquarius = CONSTELLATIONS.findIndex((c) => c.id === "aquarius");
+    assert.equal(aquarius, 10);
+    galaxyTravel.t = stationT(aquarius);
+    galaxyTravel.tTarget = stationT(aquarius);
+    assert.equal(stepAt(2_400), false);
+    assert.equal(galaxyTravel.dwellClipIndex, null);
+    assert.equal(stepAt(2_500), false);
+    assert.equal(galaxyTravel.dwellClipIndex, aquarius);
+    assert.equal(galaxyTravel.seek, null);
+    assert.equal(stepAt(8_000), false);
+    galaxyTravel.dwellClipDone = true;
+    assert.equal(stepAt(8_100), true);
+    assert.equal(galaxyTravel.dwellClipIndex, null);
+    assert.equal(galaxyTravel.seek, stationT(aquarius + 1));
   });
 
   it("kills a Leo clip when Enter starts the dive", () => {
