@@ -7,7 +7,6 @@ import {
   dwellClipFor,
   pauseDwellClip,
   settledOnSign,
-  retireDwellClip,
   stopDwellClip,
 } from "./dwellClip";
 import { primeSignArt } from "./signArt";
@@ -334,12 +333,6 @@ export const galaxyTravel = {
    */
   dwellClipIndex: null as number | null,
   dwellClipDone: false,
-  /** Dev QA: force corridor plate pixels for still vs life frame compares. */
-  dwellPlateQa: null as null | "still" | "life0" | "lifeLast",
-  /** Dev QA: force corridor dwellBlend (0–1) on the live plate path. */
-  dwellBlendQa: null as number | null,
-  /** Dev QA: pause vs play while dwellBlendQa is set. */
-  dwellVideoQa: null as null | "pause" | "play",
 };
 
 export function prefersReducedMotion() {
@@ -376,7 +369,7 @@ function clearDwellClip() {
   if (galaxyTravel.dwellClipIndex == null && !galaxyTravel.dwellClipDone) return;
   galaxyTravel.dwellClipIndex = null;
   galaxyTravel.dwellClipDone = false;
-  retireDwellClip();
+  stopDwellClip();
 }
 
 /** Kill the life clip now; the still plate takes the frame back. */
@@ -399,9 +392,7 @@ export function cameraSettledOn(index: number) {
 
 /** The life clip may run on this station right now. Refuses unless the camera is SETTLED. */
 export function dwellClipMayPlay(index: number) {
-  if (prefersReducedMotion() || exploringSign() || introPlaying() || galaxyTravel.paused) {
-    return false;
-  }
+  if (prefersReducedMotion() || exploringSign() || introPlaying()) return false;
   if (galaxyTravel.dwellClipIndex !== index || galaxyTravel.dwellClipDone) return false;
   return cameraSettledOn(index);
 }
@@ -474,7 +465,6 @@ export function resetTravel(replayBirth: boolean) {
   galaxyTravel.enterAfterSeek = null;
   resetExplore(false);
   clearDwellClip();
-  galaxyTravel.dwellPlateQa = null;
   restIdle();
 }
 
