@@ -642,10 +642,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const dwellHold = useRef(false);
   const lifeArt = useRef<Mesh>(null);
   const lifeMat = useRef<MeshBasicMaterial | null>(null);
-  const dwellMix = useRef<{
-    uBlend: { value: number };
-    uStillMap: { value: CanvasTexture | null };
-  } | null>(null);
   const shellWrap = useRef<Group>(null);
   const shown = useRef(false);
   const hydrated = useRef(false);
@@ -805,13 +801,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   useEffect(() => {
     const mat = lifeMat.current;
     if (!mat || !artTex) return;
-    const uniforms = {
-      uBlend: { value: 0 },
-      uStillMap: { value: artTex as CanvasTexture | null },
-    };
-    dwellMix.current = uniforms;
+    const uniforms = { uStillMap: { value: artTex } };
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uBlend = uniforms.uBlend;
       shader.uniforms.uStillMap = uniforms.uStillMap;
       shader.vertexShader = shader.vertexShader
         .replace("#include <common>", "#include <common>\nvarying vec2 vTysStillUv;")
@@ -819,24 +810,24 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       shader.fragmentShader = shader.fragmentShader
         .replace(
           "#include <common>",
-          "#include <common>\nvarying vec2 vTysStillUv;\nuniform float uBlend;\nuniform sampler2D uStillMap;",
+          "#include <common>\nvarying vec2 vTysStillUv;\nuniform sampler2D uStillMap;",
         )
         .replace(
           "#include <map_fragment>",
           [
             "#include <map_fragment>",
             "{",
-            // One layer owns the plate. Mesh opacity cannot do this: the
-            // painting's opaque strokes stay on top until they are switched
-            // off, and that last frame is the hitch.
-            "  vec4 tysStill = sRGBTransferEOTF(texture2D(uStillMap, vTysStillUv));",
-            "  diffuseColor.rgb = mix(tysStill.rgb, diffuseColor.rgb, clamp(uBlend, 0.0, 1.0));",
+            "  vec4 tysStill = texture2D(uStillMap, vTysStillUv);",
+            // The clip's strokes are not the painting. Mixing the painting's
+            // color back in over this same 200ms piles that gap onto the last
+            // frames (opacity and color both rising). A straight dissolve
+            // spreads it across every frame of the fade.
             "  diffuseColor.a *= tysStill.a;",
             "}",
           ].join("\n"),
         );
     };
-    mat.customProgramCacheKey = () => "tys-dwell-plate-mix";
+    mat.customProgramCacheKey = () => "tys-dwell-still-mask";
     mat.needsUpdate = true;
   }, [artTex]);
 
@@ -1201,12 +1192,14 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           index === 0 && !reducedMotion
             ? 0.985 + Math.sin(galaxyTravel.shaderTime * 0.9 + 0.6) * 0.015
             : 1;
-        // The life shader mixes painting and clip in one layer and keeps the
-        // painting's alpha, so the sky never shows through the strokes.
+        // Life fades on top of the still. Fading the still out at the same time
+        // lets the sky through at the midpoint, which is the hitch at both cuts.
+        // The still steps aside only once the clip fully covers it.
+        const blending = dwellBlend.current > 0 && dwellBlend.current < 1;
+        mat.opacity = plateOp * (blending ? 1 : 1 - dwellBlend.current) * stillMul;
         mat.map = artTex;
         if (plateQa === "still") {
           mat.opacity = plateOp * stillMul;
-          if (dwellMix.current) dwellMix.current.uBlend.value = 0;
           if (lifeArt.current && lifeMat.current) {
             lifeMat.current.opacity = 0;
             lifeArt.current.visible = false;
@@ -1220,7 +1213,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
               lifeMat.current.needsUpdate = true;
               fitDwellCoverUv(dwellTex.current, video, aspect, sign.id);
             }
-            if (dwellMix.current) dwellMix.current.uBlend.value = 1;
             mat.opacity = 0;
             const lifeOp = plateOp * stillMul;
             if (lifeArt.current && lifeMat.current) {
@@ -1232,18 +1224,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             }
           }
         } else if (lifeArt.current && lifeMat.current) {
-          const clipVideo = primeDwellClip(sign.id);
-          const cover = Boolean(
-            clipVideo && dwellVideoFrameReady(clipVideo) && dwellBlend.current > 0.001,
-          );
-          // Hide the painting mesh while the mix is on screen. Leaving it at
-          // full opacity holds the opaque strokes until the last frame.
-          mat.opacity = plateOp * (cover ? 0 : 1) * stillMul;
-          art.current.visible = plateOp > 0.04 && !cover;
-          const lifeOp = plateOp * (cover ? 1 : 0) * stillMul;
+          const lifeOp = plateOp * dwellBlend.current * stillMul;
           lifeArt.current.visible = lifeOp > 0.004;
           lifeArt.current.scale.set(plane.x * ariesBreath, plane.y * ariesBreath, 1);
-          if (cover && clipVideo) {
+          const clipVideo = primeDwellClip(sign.id);
+          if (clipVideo && dwellVideoFrameReady(clipVideo) && dwellBlend.current > 0.001) {
             dwellTex.current = bindDwellTexture(clipVideo, dwellTex.current, aspect, sign.id);
             if (dwellTex.current) {
               lifeMat.current.map = dwellTex.current;
@@ -1253,17 +1238,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
               // A held pose does not, so the paused frame never reaches the GPU
               // unless we ask for the upload ourselves. Forcing an upload on
               // every playing paint was tried; the desktop frame gap stayed.
-              if (
-                clipVideo.paused ||
-                dwellPhase.current === "in" ||
-                dwellPhase.current === "out"
-              ) {
-                dwellTex.current.needsUpdate = true;
-              }
+              if (clipVideo.paused || dwellPhase.current === "in") dwellTex.current.needsUpdate = true;
             }
-            if (dwellMix.current) dwellMix.current.uBlend.value = dwellBlend.current;
-          } else if (dwellMix.current) {
-            dwellMix.current.uBlend.value = 0;
           }
           lifeMat.current.opacity = lifeOp;
           lifeMat.current.depthTest = false;
