@@ -393,7 +393,9 @@ export function cameraSettledOn(index: number) {
 
 /** The life clip may run on this station right now. Refuses unless the camera is SETTLED. */
 export function dwellClipMayPlay(index: number) {
-  if (prefersReducedMotion() || exploringSign() || introPlaying()) return false;
+  if (prefersReducedMotion() || exploringSign() || introPlaying() || galaxyTravel.paused) {
+    return false;
+  }
   if (galaxyTravel.dwellClipIndex !== index || galaxyTravel.dwellClipDone) return false;
   return cameraSettledOn(index);
 }
