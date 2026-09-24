@@ -254,8 +254,18 @@ export function installQaHooks() {
         else video.addEventListener("seeked", () => resolve(), { once: true });
       });
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      await new Promise((r) => window.setTimeout(r, 350));
+      await new Promise((r) => window.setTimeout(r, 200));
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const rvfc = (
+        video as HTMLVideoElement & {
+          requestVideoFrameCallback?: (cb: () => void) => number;
+        }
+      ).requestVideoFrameCallback;
+      if (typeof rvfc === "function") {
+        await new Promise<void>((resolve) => {
+          rvfc.call(video, () => resolve());
+        });
+      }
       return {
         ready: dwellVideoFrameReady(video),
         currentTime: video.currentTime,
@@ -292,7 +302,10 @@ export function installQaHooks() {
         currentTime: video.currentTime,
       };
     },
-    /** C: live plate while playing; canvas PNGs during first ~55ms. */
+    /**
+     * C: first WebGL-presented frame while the clip is playing (mediaTime < 0.02).
+     * Only records a sample when the decoded frame is still at t≈0 — never a late canvas grab.
+     */
     async dwellRamSplitC() {
       galaxyTravel.dwellPlateQa = null;
       galaxyTravel.dwellClipIndex = 0;
@@ -306,26 +319,98 @@ export function installQaHooks() {
         if (video.readyState >= 1) resolve();
         else video.addEventListener("loadedmetadata", () => resolve(), { once: true });
       });
+      video.pause();
       video.currentTime = 0;
       await new Promise<void>((resolve) => {
         if (video.readyState >= 2) resolve();
         else video.addEventListener("seeked", () => resolve(), { once: true });
       });
-      void video.play();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const canvas = document.querySelector("canvas");
       if (!canvas) return { error: "no-canvas" as const };
       const shots: { ms: number; dataUrl: string; videoTime: number; paused: boolean }[] = [];
       const t0 = performance.now();
-      while (performance.now() - t0 < 55) {
-        await new Promise((r) => requestAnimationFrame(r));
-        shots.push({
-          ms: performance.now() - t0,
-          dataUrl: canvas.toDataURL("image/png"),
-          videoTime: video.currentTime,
-          paused: video.paused,
+      type RvfcMeta = { mediaTime?: number; presentedFrames?: number };
+      const rvfc = (
+        video as HTMLVideoElement & {
+          requestVideoFrameCallback?: (
+            cb: (now: DOMHighResTimeStamp, metadata: RvfcMeta) => void,
+          ) => number;
+        }
+      ).requestVideoFrameCallback;
+      await new Promise<void>((resolve) => {
+        const finish = () => {
+          video.pause();
+          resolve();
+        };
+        const onPresented = (mediaTime: number) => {
+          if (mediaTime >= 0.02) {
+            finish();
+            return;
+          }
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              shots.push({
+                ms: performance.now() - t0,
+                dataUrl: canvas.toDataURL("image/png"),
+                videoTime: mediaTime,
+                paused: video.paused,
+              });
+              finish();
+            });
+          });
+        };
+        if (typeof rvfc !== "function") {
+          void video.play().then(() => {
+            requestAnimationFrame(() => onPresented(video.currentTime));
+          });
+          return;
+        }
+        void video.play().then(() => {
+          rvfc.call(video, (_now, metadata) => {
+            onPresented(metadata?.mediaTime ?? video.currentTime);
+          });
         });
-      }
+      });
       return { shots };
+    },
+    /** Hold corridor dwell for fade / swipe captures (VideoTexture path only). */
+    async dwellRamQaHold(opts: {
+      blend?: number;
+      videoTime?: number;
+      playing?: boolean;
+    } = {}) {
+      const blend = opts.blend ?? 1;
+      const videoTime = opts.videoTime ?? 0;
+      const playing = opts.playing ?? false;
+      galaxyTravel.dwellPlateQa = null;
+      galaxyTravel.dwellClipIndex = 0;
+      galaxyTravel.dwellClipDone = false;
+      galaxyTravel.dwellBlendQa = blend;
+      galaxyTravel.dwellVideoQa = playing ? "play" : "pause";
+      seekSign(0, { direct: true });
+      const video = ensureDwellClip("aries");
+      if (!video) return { error: "no-video" as const };
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 1) resolve();
+        else video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+      });
+      video.currentTime = videoTime;
+      if (playing) void video.play().catch(() => {});
+      else video.pause();
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= 2) resolve();
+        else video.addEventListener("seeked", () => resolve(), { once: true });
+      });
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await new Promise((r) => window.setTimeout(r, 120));
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return {
+        blend,
+        playing,
+        currentTime: video.currentTime,
+        paused: video.paused,
+      };
     },
     /** Log video vs plate aspect for dwell QA (phone cover-crop diagnosis). */
     dwellPlateDiag(signId: SignId = "aries") {
