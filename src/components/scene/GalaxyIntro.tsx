@@ -50,7 +50,6 @@ import {
   exitSignGalaxy,
   exploringSign,
   galaxyTravel,
-  killDwellClip,
   noteControl,
   prefersReducedMotion,
   publishTravel,
@@ -110,9 +109,11 @@ import {
   stepArriveBurst,
 } from "@/lib/galaxy/signField";
 import {
+  DWELL_CROSSFADE_SEC,
   dwellClipFor,
+  dwellVideoFrameReady,
   pauseDwellClip,
-  playDwellClip,
+  primeDwellClip,
   stopDwellClip,
   syncDwellPrefetch,
 } from "@/lib/galaxy/dwellClip";
@@ -519,14 +520,6 @@ function BirthNebula() {
 /** Give up starting a clip that never leaves frame 0, then let the walk continue. */
 const DWELL_START_GIVE_UP_SEC = 4;
 
-/** Fit the clip's own frame inside the plate width. 16:9 clips match the still plate; portrait clips keep their bars for the black key. */
-function lifePlaneSize(plateWide: number, plateAspect: number, video: HTMLVideoElement | null) {
-  const vw = video?.videoWidth ?? 0;
-  const vh = video?.videoHeight ?? 0;
-  const aspect = vw > 2 && vh > 2 ? vw / vh : plateAspect;
-  return { x: plateWide, y: plateWide / aspect };
-}
-
 function bindDwellTexture(video: HTMLVideoElement, prev: VideoTexture | null): VideoTexture {
   if (prev && prev.image === video) return prev;
   if (prev) {
@@ -556,6 +549,29 @@ function releaseDwellTexture(
   } catch {
     /* element already detached */
   }
+}
+
+/** Black-key the life clip on its own plate layer (same threshold as uLifeKey on the still shader). */
+function attachLifeKeyMaterial(mat: MeshBasicMaterial) {
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vTysLifeUv;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvTysLifeUv = uv;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vTysLifeUv;")
+      .replace(
+        "#include <map_fragment>",
+        [
+          "#include <map_fragment>",
+          "{",
+          "  float lifeLuma = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));",
+          "  diffuseColor.a *= smoothstep(0.02, 0.06, lifeLuma);",
+          "}",
+        ].join("\n"),
+      );
+  };
+  mat.customProgramCacheKey = () => "tys-life-plate-key";
+  mat.needsUpdate = true;
 }
 
 /** True when this station should build its star cloud before the viewer reaches it. */
@@ -590,6 +606,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   >(null);
   const dwellTex = useRef<VideoTexture | null>(null);
   const dwellStall = useRef(0);
+  const dwellBlend = useRef(0);
+  const dwellPhase = useRef<"idle" | "wait" | "in" | "play" | "out">("idle");
+  const dwellEnded = useRef(false);
+  const lifeArt = useRef<Mesh>(null);
+  const lifeMat = useRef<MeshBasicMaterial | null>(null);
+  const lifeKeyReady = useRef(false);
   const shellWrap = useRef<Group>(null);
   const shown = useRef(false);
   const hydrated = useRef(false);
@@ -743,14 +765,30 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     mat.needsUpdate = true;
   }, [sign.id, sign.palette]);
 
+  useEffect(() => {
+    const mat = lifeMat.current;
+    if (!mat || lifeKeyReady.current) return;
+    attachLifeKeyMaterial(mat);
+    lifeKeyReady.current = true;
+  }, [sign.id]);
+
   useFrame(({ clock, camera }, dt) => {
     const g = group.current;
     const mesh = cores.current;
     if (!g || !mesh) return;
     const releaseLife = () => {
       if (galaxyTravel.dwellClipIndex === index) pauseDwellClip(sign.id);
-      releaseDwellTexture(plateMat.current, artTex, dwellTex);
+      dwellBlend.current = 0;
+      dwellPhase.current = "idle";
+      dwellEnded.current = false;
+      releaseDwellTexture(lifeMat.current, null, dwellTex);
+      if (plateMat.current) plateMat.current.map = artTex;
+      if (lifeMat.current) {
+        lifeMat.current.opacity = 0;
+        lifeMat.current.visible = false;
+      }
       dwellStall.current = 0;
+      stopDwellClip(sign.id);
       if (plateBurst.current) plateBurst.current.uLifeKey.value = 0;
     };
     if (volumeGated && !volReady.current && getSignVolume(sign.id)) {
@@ -924,38 +962,73 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           galaxyTravel.dwellClipIndex === index &&
           !galaxyTravel.dwellClipDone &&
           Boolean(dwellClipFor(sign.id));
-        let lifeVideo = false;
+        const mayPlay = dwellClipMayPlay(index);
+        const fadeStep = dt / Math.max(0.001, DWELL_CROSSFADE_SEC);
+        const winding =
+          dwellPhase.current === "out" ||
+          (dwellBlend.current > 0 && (!lifeOwns || !mayPlay));
+
+        const finishDwellFade = (markDone: boolean) => {
+          dwellBlend.current = 0;
+          dwellPhase.current = "idle";
+          dwellEnded.current = false;
+          releaseDwellTexture(lifeMat.current, null, dwellTex);
+          if (lifeMat.current) {
+            lifeMat.current.opacity = 0;
+            lifeMat.current.visible = false;
+          }
+          dwellStall.current = 0;
+          stopDwellClip(sign.id);
+          if (markDone) galaxyTravel.dwellClipDone = true;
+        };
+
         if (lifeOwns && galaxyTravel.paused) {
           pauseDwellClip(sign.id);
-          lifeVideo = Boolean(dwellTex.current);
-        } else if (!lifeOwns || !dwellClipMayPlay(index)) {
-          // Not parked, or someone is steering: the clip dies and the still plate rides.
-          if (lifeOwns) killDwellClip();
-          dwellStall.current = 0;
-          releaseDwellTexture(mat, artTex, dwellTex);
-        } else {
-          const video = playDwellClip(sign.id);
-          if (video && !video.ended && !video.error && video.paused && video.currentTime === 0) {
-            dwellStall.current += dt;
-          } else {
-            dwellStall.current = 0;
+        } else if (lifeOwns && mayPlay && !reducedMotion && dwellPhase.current !== "out") {
+          const video = primeDwellClip(sign.id);
+          if (dwellPhase.current === "idle" || dwellPhase.current === "wait") {
+            if (video && !video.error && !video.ended) {
+              if (video.paused) void video.play().catch(() => {});
+              if (dwellVideoFrameReady(video) && !video.paused) {
+                dwellTex.current = bindDwellTexture(video, dwellTex.current);
+                if (lifeMat.current && dwellTex.current) {
+                  lifeMat.current.map = dwellTex.current;
+                  lifeMat.current.needsUpdate = true;
+                }
+                dwellStall.current = 0;
+                if (dwellPhase.current !== "in" && dwellPhase.current !== "play") {
+                  dwellPhase.current = "in";
+                }
+              } else if (video.paused && video.currentTime === 0) {
+                dwellPhase.current = "wait";
+                dwellStall.current += dt;
+              }
+            }
           }
-          const stalled = dwellStall.current > DWELL_START_GIVE_UP_SEC;
-          const giveUp = !video || Boolean(video.error) || video.ended || stalled;
-          const playing = Boolean(video && !video.ended && !video.error && !video.paused);
-          if (giveUp) {
-            if (!video || video.ended || video.error || stalled) galaxyTravel.dwellClipDone = true;
-            dwellStall.current = 0;
-            releaseDwellTexture(mat, artTex, dwellTex);
-          } else if (video && (playing || video.currentTime > 0)) {
-            dwellTex.current = bindDwellTexture(video, dwellTex.current);
-            lifeVideo = true;
-          } else {
-            releaseDwellTexture(mat, artTex, dwellTex);
+          const stalled = dwellPhase.current === "wait" && dwellStall.current > DWELL_START_GIVE_UP_SEC;
+          if (stalled || video?.error) {
+            finishDwellFade(true);
+          } else if (dwellPhase.current === "in") {
+            dwellBlend.current = Math.min(1, dwellBlend.current + fadeStep);
+            if (dwellBlend.current >= 1) dwellPhase.current = "play";
+          } else if (dwellPhase.current === "play") {
+            dwellBlend.current = 1;
+            if (video?.ended) {
+              video.pause();
+              dwellEnded.current = true;
+              dwellPhase.current = "out";
+            }
           }
+        } else if (winding) {
+          if (dwellPhase.current !== "out") dwellPhase.current = "out";
+          dwellBlend.current = Math.max(0, dwellBlend.current - fadeStep);
+          if (dwellBlend.current <= 0) finishDwellFade(dwellEnded.current);
+        } else if (dwellPhase.current !== "idle" || dwellBlend.current > 0) {
+          finishDwellFade(false);
         }
+
         const ariesBreath =
-          !lifeVideo && index === 0 && !reducedMotion
+          dwellBlend.current < 0.04 && index === 0 && !reducedMotion
             ? 1 + Math.sin(galaxyTravel.shaderTime * 0.72) * 0.012
             : 1;
         // Corridor plates follow the one-owner weight alone (no floor, so no stack).
@@ -973,29 +1046,28 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
               bornIn,
               morphLevel: morphLevel.current,
             }) * (exploringHere ? galaxyTravel.plateFade : 1);
+        const plane = { x: wide, y: wide / aspect };
         art.current.visible = plateOp > 0.04;
-        const lifeSource =
-          lifeVideo && dwellTex.current ? (dwellTex.current.image as HTMLVideoElement) : null;
-        const plane = lifeVideo ? lifePlaneSize(wide, aspect, lifeSource) : { x: wide, y: wide / aspect };
         art.current.scale.set(plane.x * ariesBreath, plane.y * ariesBreath, 1);
-        mat.opacity =
-          plateOp *
-          (!lifeVideo && index === 0 && !reducedMotion
+        const stillMul =
+          dwellBlend.current < 0.04 && index === 0 && !reducedMotion
             ? 0.985 + Math.sin(galaxyTravel.shaderTime * 0.9 + 0.6) * 0.015
-            : 1);
+            : 1;
+        mat.opacity = plateOp * (1 - dwellBlend.current) * stillMul;
+        mat.map = artTex;
+        if (lifeArt.current && lifeMat.current) {
+          const lifeOp = plateOp * dwellBlend.current;
+          lifeArt.current.visible = lifeOp > 0.004;
+          lifeArt.current.scale.set(plane.x, plane.y, 1);
+          lifeMat.current.opacity = lifeOp;
+          lifeMat.current.depthTest = false;
+          lifeMat.current.alphaTest = 0.04;
+        }
         // Measured evidence for M11: what the entered sign's plate is actually
         // drawn at. Only the entered station publishes, so a neighbour's frame
         // can't clobber the value the QA probe reads.
         if (exploringHere) galaxyTravel.plateOpacity = plateOp;
-        if (plateBurst.current) plateBurst.current.uLifeKey.value = lifeVideo ? 1 : 0;
-        if (lifeVideo && dwellTex.current) {
-          if (mat.map !== dwellTex.current) {
-            mat.map = dwellTex.current;
-            mat.needsUpdate = true;
-          }
-        } else {
-          mat.map = artTex;
-        }
+        if (plateBurst.current) plateBurst.current.uLifeKey.value = 0;
         mat.depthTest = false;
         mat.alphaTest = 0.04;
         if (plateOn && !shown.current) {
@@ -1130,6 +1202,28 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         <meshBasicMaterial
           ref={plateMat}
           map={artTex ?? undefined}
+          color="#ffffff"
+          transparent
+          opacity={0}
+          depthWrite={false}
+          depthTest={false}
+          fog={false}
+          toneMapped={false}
+          side={DoubleSide}
+        />
+      </mesh>
+      <mesh
+        ref={lifeArt}
+        position={[0, 0.05, -0.06]}
+        visible={false}
+        renderOrder={19}
+        frustumCulled={false}
+        raycast={noopRaycast}
+        dispose={null}
+      >
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
+          ref={lifeMat}
           color="#ffffff"
           transparent
           opacity={0}

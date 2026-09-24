@@ -7,6 +7,9 @@ import { stationT } from "./temple";
  */
 export const DWELL_STILL_SEC = 2.5;
 
+/** Crossfade still plate ↔ life clip on the corridor plate (seconds). */
+export const DWELL_CROSSFADE_SEC = 0.2;
+
 /**
  * Optional life clip per sign. Absent = still plate and the 7s auto-walk.
  * Prefetch only the station the camera is aimed at.
@@ -128,6 +131,23 @@ export function pauseDwellClip(id?: SignId) {
   if (typeof document === "undefined") return;
   const keys = id ? [id] : [...videos.keys()];
   for (const key of keys) videos.get(key)?.pause();
+}
+
+/** True when the element can paint a frame (not just metadata). */
+export function dwellVideoFrameReady(video: HTMLVideoElement): boolean {
+  return (
+    video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+    video.videoWidth > 2 &&
+    video.videoHeight > 2
+  );
+}
+
+/**
+ * Disarm playback but keep the element so the plate can fade out. Full teardown
+ * is `stopDwellClip` once the fade reaches the still.
+ */
+export function retireDwellClip(id?: SignId) {
+  pauseDwellClip(id);
 }
 
 /** Stop decoding and drop the element. Safe to call twice. */

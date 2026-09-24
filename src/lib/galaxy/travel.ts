@@ -7,6 +7,7 @@ import {
   dwellClipFor,
   pauseDwellClip,
   settledOnSign,
+  retireDwellClip,
   stopDwellClip,
 } from "./dwellClip";
 import { primeSignArt } from "./signArt";
@@ -369,7 +370,7 @@ function clearDwellClip() {
   if (galaxyTravel.dwellClipIndex == null && !galaxyTravel.dwellClipDone) return;
   galaxyTravel.dwellClipIndex = null;
   galaxyTravel.dwellClipDone = false;
-  stopDwellClip();
+  retireDwellClip();
 }
 
 /** Kill the life clip now; the still plate takes the frame back. */
