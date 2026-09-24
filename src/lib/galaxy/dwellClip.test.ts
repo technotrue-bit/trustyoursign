@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { CONSTELLATIONS } from "./constellations.ts";
 import { DWELL_CLIPS, DWELL_STILL_SEC } from "./dwellClip.ts";
 import { templeIntro } from "./intro.ts";
 import { stationT } from "./temple.ts";
@@ -15,9 +16,12 @@ import {
 const T0 = 10_000;
 
 describe("dwell clip map", () => {
-  it("attaches a life clip to Aries only", () => {
-    assert.deepEqual(Object.keys(DWELL_CLIPS), ["aries"]);
+  it("attaches life clips to Aries and Leo only", () => {
+    assert.deepEqual(Object.keys(DWELL_CLIPS), ["aries", "leo"]);
     assert.equal(DWELL_CLIPS.aries, "/signs/aries-life.mp4");
+    assert.equal(DWELL_CLIPS.leo, "/signs/leo-life.mp4");
+    assert.equal(DWELL_CLIPS.taurus, undefined);
+    assert.equal(DWELL_CLIPS.cancer, undefined);
     assert.ok(DWELL_STILL_SEC >= 2 && DWELL_STILL_SEC <= 3);
   });
 });
@@ -88,6 +92,34 @@ describe("stepAutoSign dwell", () => {
     assert.equal(galaxyTravel.dwellClipIndex, null);
     assert.equal(galaxyTravel.seek, stationT(1));
     assert.equal(galaxyTravel.selectionHoldLeft, null);
+  });
+
+  it("holds Leo, plays once, then walks to Virgo", () => {
+    const leo = CONSTELLATIONS.findIndex((c) => c.id === "leo");
+    assert.equal(leo, 4);
+    galaxyTravel.t = stationT(leo);
+    galaxyTravel.tTarget = stationT(leo);
+    assert.equal(stepAt(2_400), false);
+    assert.equal(galaxyTravel.dwellClipIndex, null);
+    assert.equal(stepAt(2_500), false);
+    assert.equal(galaxyTravel.dwellClipIndex, leo);
+    assert.equal(galaxyTravel.seek, null);
+    assert.equal(stepAt(8_000), false);
+    galaxyTravel.dwellClipDone = true;
+    assert.equal(stepAt(8_100), true);
+    assert.equal(galaxyTravel.dwellClipIndex, null);
+    assert.equal(galaxyTravel.seek, stationT(leo + 1));
+  });
+
+  it("kills a Leo clip when Enter starts the dive", () => {
+    const leo = CONSTELLATIONS.findIndex((c) => c.id === "leo");
+    templeIntro.done = true;
+    galaxyTravel.t = stationT(leo);
+    galaxyTravel.dwellClipIndex = leo;
+    const started = enterSignGalaxy(leo);
+    assert.equal(started, true);
+    assert.equal(galaxyTravel.dwellClipIndex, null);
+    assert.equal(galaxyTravel.explorePhase, "fading");
   });
 
   it("keeps Taurus on the 7s walk with no clip", () => {
