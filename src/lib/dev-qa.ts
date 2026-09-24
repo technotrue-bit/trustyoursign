@@ -43,6 +43,7 @@ export type QaState = {
   seek: number | null;
   seekKind: string;
   dwellClipIndex: number | null;
+  dwellClipDone: boolean;
   /** Portal glide: camera offset off its station (signs, + forward), phase, camera progress. */
   portalSigns: number;
   portalPhase: number | null;
@@ -153,6 +154,7 @@ export function installQaHooks() {
         seek: galaxyTravel.seek,
         seekKind: galaxyTravel.seekKind,
         dwellClipIndex: galaxyTravel.dwellClipIndex,
+        dwellClipDone: galaxyTravel.dwellClipDone,
         portalSigns: galaxyTravel.portalSigns,
         portalPhase: galaxyTravel.portalTo != null ? galaxyTravel.portalPhase : null,
         portalCamV: galaxyTravel.portalCamV,
@@ -162,6 +164,20 @@ export function installQaHooks() {
           (window as unknown as { __tysPlates?: ArrayLike<number> }).__tysPlates ?? [],
         ),
         probe: (window as unknown as { __tys?: Record<string, unknown> }).__tys ?? null,
+      };
+    },
+    /** Dwell life-clip element + travel flags for corridor capture strips. */
+    dwellClipFrame(signId = "aries") {
+      const video = document.querySelector(
+        `video[data-dwell-clip="${signId}"]`,
+      ) as HTMLVideoElement | null;
+      return {
+        t: galaxyTravel.t,
+        dwellClipIndex: galaxyTravel.dwellClipIndex,
+        dwellClipDone: galaxyTravel.dwellClipDone,
+        videoCurrentTime: video ? video.currentTime : null,
+        videoPaused: video ? video.paused : null,
+        videoEnded: video ? video.ended : null,
       };
     },
   };
