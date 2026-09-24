@@ -739,21 +739,26 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const g = group.current;
     const mesh = cores.current;
     if (!g || !mesh) return;
+    const state = frameSession;
+    const chatting = state.chatting;
+    const shelfSignId = state.shelfSignId;
+    const picked = chatting && state.claimSignId === sign.id;
+    const held = picked || shelfSignId === sign.id;
     const releaseLife = () => {
       if (galaxyTravel.dwellClipIndex === index) pauseDwellClip(sign.id);
       releaseDwellTexture(plateMat.current, artTex, dwellTex);
       dwellStall.current = 0;
       if (plateBurst.current) plateBurst.current.uLifeKey.value = 0;
     };
+    if (introPlaying() && index !== 0 && !held) {
+      g.visible = false;
+      releaseLife();
+      return;
+    }
     if (volumeGated && !volReady.current && getSignVolume(sign.id)) {
       volReady.current = true;
       bumpVolReady((n) => n + 1);
     }
-    const state = frameSession;
-    const chatting = state.chatting;
-    const shelfSignId = state.shelfSignId;
-    const picked = chatting && state.claimSignId === sign.id;
-    const held = picked || shelfSignId === sign.id;
     const t = galaxyTravel.t;
     const direct = galaxyTravel.seekDirect && galaxyTravel.seek != null;
     const dest = stationT(index);
@@ -770,11 +775,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       queueMicrotask(() => setArtTex(loadSignArt(sign.id)));
     }
     stationWeight[index] = 0;
-    if (introPlaying() && index !== 0 && !held) {
-      g.visible = false;
-      releaseLife();
-      return;
-    }
     // A strip / Enter jump shows only where it left and where it lands, never the signs between.
     const departing = direct && index === stationFromT(galaxyTravel.seekStartT ?? t);
     if (direct && !held && index !== aimedIndex() && !departing) {

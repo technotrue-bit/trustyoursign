@@ -1,3 +1,4 @@
+import { tickInvisibleOpeningProfile } from "./openingInvisibleProfile";
 import { useGalaxy } from "./store";
 import { prefersReducedMotion } from "./travel";
 
@@ -147,6 +148,7 @@ function publish() {
     introSkip: skip,
     introDone: templeIntro.done,
   });
+  tickInvisibleOpeningProfile();
 }
 
 /** Ember → expand → ignite. Visible from the first frames. */
