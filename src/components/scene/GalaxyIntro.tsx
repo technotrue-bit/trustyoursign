@@ -796,6 +796,38 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     mat.needsUpdate = true;
   }, [sign.id, sign.palette]);
 
+  // The painted plate is mostly transparent, so the starfield shows through.
+  // The clip is an opaque black frame. Mask it with the still's alpha or the
+  // fade covers the stars with a black rectangle.
+  useEffect(() => {
+    const mat = lifeMat.current;
+    if (!mat || !artTex) return;
+    const uniforms = { uStillMap: { value: artTex } };
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uStillMap = uniforms.uStillMap;
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", "#include <common>\nvarying vec2 vTysStillUv;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvTysStillUv = uv;");
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          "#include <common>\nvarying vec2 vTysStillUv;\nuniform sampler2D uStillMap;",
+        )
+        .replace(
+          "#include <map_fragment>",
+          [
+            "#include <map_fragment>",
+            "{",
+            "  vec2 stillUv = vec2(vTysStillUv.x, 1.0 - vTysStillUv.y);",
+            "  diffuseColor.a *= texture2D(uStillMap, stillUv).a;",
+            "}",
+          ].join("\n"),
+        );
+    };
+    mat.customProgramCacheKey = () => "tys-dwell-still-alpha";
+    mat.needsUpdate = true;
+  }, [artTex]);
+
   useFrame(({ clock, camera }, dt) => {
     const g = group.current;
     const mesh = cores.current;
