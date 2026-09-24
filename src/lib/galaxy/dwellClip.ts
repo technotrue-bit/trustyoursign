@@ -10,6 +10,20 @@ export const DWELL_STILL_SEC = 2.5;
 /** Crossfade still plate ↔ life clip on the corridor plate (seconds). */
 export const DWELL_CROSSFADE_SEC = 0.2;
 
+/** Reference plate pixels for normalizing life-clip UV nudge (matches max sign art canvas). */
+export const DWELL_PLATE_REF = { w: 1024, h: 576 } as const;
+
+/** When |video aspect − plate aspect| is below this, use full UV (no cover crop). */
+export const DWELL_ASPECT_MATCH_EPS = 0.012;
+
+/**
+ * Shift life-clip texels on the plate so frame 0 stacks on SIGN_ART (plate space px).
+ * Positive x = move ram right on screen; positive y = move ram down.
+ */
+export const DWELL_LIFE_PLATE_NUDGE_PX: Partial<Record<SignId, { x: number; y: number }>> = {
+  aries: { x: 12, y: 16 },
+};
+
 /**
  * Optional life clip per sign. Absent = still plate and the 7s auto-walk.
  * Prefetch only the station the camera is aimed at.

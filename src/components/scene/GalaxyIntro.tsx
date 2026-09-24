@@ -110,7 +110,10 @@ import {
   stepArriveBurst,
 } from "@/lib/galaxy/signField";
 import {
+  DWELL_ASPECT_MATCH_EPS,
   DWELL_CROSSFADE_SEC,
+  DWELL_LIFE_PLATE_NUDGE_PX,
+  DWELL_PLATE_REF,
   dwellClipFor,
   dwellVideoFrameReady,
   pauseDwellClip,
@@ -525,9 +528,10 @@ function bindDwellTexture(
   video: HTMLVideoElement,
   prev: VideoTexture | null,
   plateAspect: number,
+  signId: SignId,
 ): VideoTexture {
   if (prev && prev.image === video) {
-    fitDwellCoverUv(prev, video, plateAspect);
+    fitDwellCoverUv(prev, video, plateAspect, signId);
     return prev;
   }
   if (prev) {
@@ -540,12 +544,17 @@ function bindDwellTexture(
   const tex = new VideoTexture(video);
   tex.colorSpace = SRGBColorSpace;
   tex.generateMipmaps = false;
-  fitDwellCoverUv(tex, video, plateAspect);
+  fitDwellCoverUv(tex, video, plateAspect, signId);
   return tex;
 }
 
-/** Crop the clip into the still plate frame (object-fit cover), never stretch the mesh. */
-function fitDwellCoverUv(tex: VideoTexture, video: HTMLVideoElement, plateAspect: number) {
+/** Map life clip into the still plate rect; near-matching aspects skip cover crop. */
+function fitDwellCoverUv(
+  tex: VideoTexture,
+  video: HTMLVideoElement,
+  plateAspect: number,
+  signId: SignId,
+) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   tex.wrapS = ClampToEdgeWrapping;
@@ -556,7 +565,10 @@ function fitDwellCoverUv(tex: VideoTexture, video: HTMLVideoElement, plateAspect
     return;
   }
   const va = vw / vh;
-  if (plateAspect > va) {
+  if (Math.abs(va - plateAspect) <= DWELL_ASPECT_MATCH_EPS) {
+    tex.repeat.set(1, 1);
+    tex.offset.set(0, 0);
+  } else if (plateAspect > va) {
     const scale = plateAspect / va;
     tex.repeat.set(1 / scale, 1);
     tex.offset.set((1 - 1 / scale) / 2, 0);
@@ -567,6 +579,11 @@ function fitDwellCoverUv(tex: VideoTexture, video: HTMLVideoElement, plateAspect
   } else {
     tex.repeat.set(1, 1);
     tex.offset.set(0, 0);
+  }
+  const nudge = DWELL_LIFE_PLATE_NUDGE_PX[signId];
+  if (nudge) {
+    tex.offset.x -= nudge.x / DWELL_PLATE_REF.w;
+    tex.offset.y += nudge.y / DWELL_PLATE_REF.h;
   }
 }
 
@@ -998,7 +1015,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             if (video && !video.error && !video.ended) {
               if (video.paused) void video.play().catch(() => {});
               if (dwellVideoFrameReady(video) && !video.paused) {
-                dwellTex.current = bindDwellTexture(video, dwellTex.current, aspect);
+                dwellTex.current = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
                 if (lifeMat.current && dwellTex.current) {
                   lifeMat.current.map = dwellTex.current;
                   lifeMat.current.needsUpdate = true;
@@ -1074,11 +1091,11 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         } else if (plateQa === "life0" || plateQa === "lifeLast") {
           const video = primeDwellClip(sign.id);
           if (video && dwellVideoFrameReady(video)) {
-            dwellTex.current = bindDwellTexture(video, dwellTex.current, aspect);
+            dwellTex.current = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
             if (lifeMat.current && dwellTex.current) {
               lifeMat.current.map = dwellTex.current;
               lifeMat.current.needsUpdate = true;
-              fitDwellCoverUv(dwellTex.current, video, aspect);
+              fitDwellCoverUv(dwellTex.current, video, aspect, sign.id);
             }
             mat.opacity = 0;
             const lifeOp = plateOp * stillMul;
@@ -1099,6 +1116,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
               dwellTex.current,
               dwellTex.current.image as HTMLVideoElement,
               aspect,
+              sign.id,
             );
           }
           lifeMat.current.opacity = lifeOp;

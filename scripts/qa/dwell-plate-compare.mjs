@@ -13,6 +13,75 @@ const outDir =
   process.argv[2] ??
   "/cursor/stores/bc-94162dc9-7018-48da-a5a0-9bf7e81bd591/media/dwell-clip";
 
+async function loadGrayCrop(path, cropFrac = 0.42) {
+  const meta = await sharp(path).metadata();
+  const w = meta.width ?? 0;
+  const h = meta.height ?? 0;
+  const cw = Math.round(w * cropFrac);
+  const ch = Math.round(h * cropFrac);
+  const left = Math.round((w - cw) / 2);
+  const top = Math.round((h - ch) / 2);
+  const { data, info } = await sharp(path)
+    .extract({ left, top, width: cw, height: ch })
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return { data, w: info.width, h: info.height, crop: { left, top, width: cw, height: ch } };
+}
+
+function normalizeGray(data) {
+  let mean = 0;
+  for (let i = 0; i < data.length; i++) mean += data[i];
+  mean /= data.length || 1;
+  let variance = 0;
+  for (let i = 0; i < data.length; i++) {
+    const d = data[i] - mean;
+    variance += d * d;
+  }
+  const std = Math.sqrt(variance / (data.length || 1)) || 1;
+  const out = new Float64Array(data.length);
+  for (let i = 0; i < data.length; i++) out[i] = (data[i] - mean) / std;
+  return out;
+}
+
+function corrShift(a, aw, ah, b, bw, bh, dx, dy) {
+  let sum = 0;
+  let n = 0;
+  let abs = 0;
+  for (let y = 0; y < ah; y++) {
+    for (let x = 0; x < aw; x++) {
+      const bx = x + dx;
+      const by = y + dy;
+      if (bx < 0 || by < 0 || bx >= bw || by >= bh) continue;
+      const av = a[y * aw + x];
+      const bv = b[by * bw + bx];
+      sum += av * bv;
+      abs += Math.abs(av - bv);
+      n++;
+    }
+  }
+  if (!n) return { correlation: 0, meanAbs: 0, overlap: 0 };
+  return { correlation: sum / n, meanAbs: abs / n, overlap: n };
+}
+
+function bestCorrelation(aPath, bPath, cropFrac = 0.42, search = 24) {
+  return loadGrayCrop(aPath, cropFrac).then(async (Araw) => {
+    const Braw = await loadGrayCrop(bPath, cropFrac);
+    const a = normalizeGray(Araw.data);
+    const b = normalizeGray(Braw.data);
+    let best = { correlation: -2, shift: { x: 0, y: 0 }, meanAbs: 0 };
+    let atZero = { correlation: 0, meanAbs: 0 };
+    for (let dy = -search; dy <= search; dy++) {
+      for (let dx = -search; dx <= search; dx++) {
+        const { correlation, meanAbs } = corrShift(a, Araw.w, Araw.h, b, Braw.w, Braw.h, dx, dy);
+        if (dx === 0 && dy === 0) atZero = { correlation, meanAbs };
+        if (correlation > best.correlation) best = { correlation, shift: { x: dx, y: dy }, meanAbs };
+      }
+    }
+    return { ...best, atZero, crop: Araw.crop };
+  });
+}
+
 async function ramDiff(aPath, bPath, cropFrac = 0.42) {
   const meta = await sharp(aPath).metadata();
   const w = meta.width ?? 0;
