@@ -15,10 +15,6 @@ import {
 } from "three";
 import { getSignGalaxy, GALAXY_SPAN, type SignGalaxy } from "@/lib/galaxy/signGalaxy";
 import {
-  CAPRICORN_INSIDE_CORE_SCALE,
-  capricornInsideHidesLineCage,
-} from "@/lib/galaxy/capricornPlateMap";
-import {
   CORE_LOCAL_SIZE,
   coreOpacity,
   coreSpin,
@@ -119,7 +115,6 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
     const exploring =
       galaxyTravel.exploreSignIndex === index && galaxyTravel.explorePhase !== "idle";
     const inside = exploring && galaxyTravel.explorePhase === "inside";
-    const hideFigureCage = capricornInsideHidesLineCage(sign.id, galaxyTravel.explorePhase);
     const form = exploring ? galaxyTravel.galaxyForm : 0;
     // Ignition hand-off channels (all zero outside the enter).
     const pulse = exploring ? galaxyTravel.burst : 0;
@@ -157,10 +152,7 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
     // The figure turns about the view axis. Rolling the camera instead would do
     // nothing: the station is billboarded to it, so the billboard would follow.
     g.rotation.z = frame.roll;
-    if (figureGroup.current) {
-      figureGroup.current.visible = !hideFigureCage;
-      figureGroup.current.position.x = frame.shift;
-    }
+    if (figureGroup.current) figureGroup.current.position.x = frame.shift;
     if (haloGroup.current) haloGroup.current.scale.setScalar(1.018 + form * 0.006);
 
     const fieldReveal = Math.max(0, (form - 0.18) / 0.82);
@@ -222,12 +214,8 @@ export function SignGalaxyField({ sign, index }: { sign: TempleSign; index: numb
       const show = reveal > 0.004 || inside;
       core.visible = show;
       if (show) {
-        const capJewel = sign.id === "capricorn" && inside;
-        core.scale.setScalar(
-          CORE_LOCAL_SIZE *
-            (capJewel ? CAPRICORN_INSIDE_CORE_SCALE : inside ? 1 : coreSwell(reveal)),
-        );
-        coreMat.current.opacity = capJewel ? 0.72 : coreOpacity(reveal, inside);
+        core.scale.setScalar(CORE_LOCAL_SIZE * (inside ? 1 : coreSwell(reveal)));
+        coreMat.current.opacity = coreOpacity(reveal, inside);
         coreMat.current.rotation = coreSpin(state.clock.elapsedTime, inside);
       }
     }
