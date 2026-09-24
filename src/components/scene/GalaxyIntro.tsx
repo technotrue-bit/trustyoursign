@@ -1154,7 +1154,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         } else if (winding) {
           if (galaxyTravel.paused) pauseDwellClip(sign.id);
           if (dwellPhase.current !== "out") dwellPhase.current = "out";
-          dwellBlend.current = Math.max(0, dwellBlend.current - fadeStep);
+          // A swipe can land in one long paint. Cap that fade the same way
+          // as the start. The natural end still tracks the last 200ms of the file.
+          const outStep = dwellEnded.current ? fadeStep : inStep;
+          dwellBlend.current = Math.max(0, dwellBlend.current - outStep);
           if (dwellBlend.current <= 0) {
             finishDwellFade(dwellEnded.current, galaxyTravel.paused && lifeOwns);
           }
