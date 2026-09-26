@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "@tanstack/react-router";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
@@ -8,26 +8,75 @@ import { FeedbackForm } from "./FeedbackForm";
  * Starlight orb in the home HUD’s top-center gap. Opens the same product
  * feedback form as `/contact#feedback` (POST `/api/feedback` → Ultron).
  * The parent row centers this control between the beta chip and Pause.
+ *
+ * On the first mount of a page load the orb eases in, a glass bubble names
+ * it (“Contact support”), and the bubble retracts after it has been out for
+ * three seconds. Later mounts in the same document (leaving a sign and
+ * coming home) leave the orb settled — the hint is a greeting, not a loop.
  */
+let supportHintPlayed = false;
+
 export function FeedbackOrb() {
   const [open, setOpen] = useState(false);
+  const [hint, setHint] = useState(() => !supportHintPlayed);
+
+  useLayoutEffect(() => {
+    if (hint) supportHintPlayed = true;
+    const root = document.documentElement;
+    // Phone rows have no empty band beside the orb. While the label is out,
+    // the headline eases down so the bubble can sit under the orb’s side
+    // without covering the beta chip or the title. See support-hint-room.
+    if (hint && !open) root.dataset.supportHint = "";
+    else delete root.dataset.supportHint;
+    return () => {
+      delete root.dataset.supportHint;
+    };
+  }, [hint, open]);
+
+  useEffect(() => {
+    if (!hint || open) return;
+    // Reduced motion zeroes CSS animation duration globally, so the label
+    // cannot time itself. Hold the still bubble for three seconds, then close it.
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = window.setTimeout(() => setHint(false), 3000);
+    return () => window.clearTimeout(id);
+  }, [hint, open]);
 
   return (
     <>
-      <button
-        type="button"
-        data-no-fly
-        className="feedback-orb pointer-events-auto"
-        aria-label="Send feedback"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? "feedback-orb-dialog" : undefined}
-        onClick={() => setOpen(true)}
-      >
-        <svg viewBox="0 0 24 24" className="feedback-orb-mark" aria-hidden>
-          <path d="M12 1.6 13.85 8.7 21.4 12 13.85 15.3 12 22.4 10.15 15.3 2.6 12 10.15 8.7Z" />
-        </svg>
-      </button>
+      <div className="feedback-orb-slot">
+        <button
+          type="button"
+          data-no-fly
+          className={`feedback-orb pointer-events-auto${hint ? " feedback-orb--arrive" : ""}`}
+          aria-label="Contact support"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? "feedback-orb-dialog" : undefined}
+          onClick={() => {
+            setHint(false);
+            setOpen(true);
+          }}
+        >
+          <svg viewBox="0 0 24 24" className="feedback-orb-mark" aria-hidden>
+            <path d="M12 1.6 13.85 8.7 21.4 12 13.85 15.3 12 22.4 10.15 15.3 2.6 12 10.15 8.7Z" />
+          </svg>
+        </button>
+        {hint && !open ? (
+          <span className="feedback-orb-hint-anchor">
+            <span
+              className="feedback-orb-hint"
+              aria-hidden="true"
+              onAnimationEnd={(e) => {
+                if (e.target !== e.currentTarget) return;
+                if (e.animationName === "feedback-orb-hint") setHint(false);
+              }}
+            >
+              Contact support
+            </span>
+          </span>
+        ) : null}
+      </div>
       {open && typeof document !== "undefined"
         ? createPortal(<FeedbackSheet onClose={() => setOpen(false)} />, document.body)
         : null}
