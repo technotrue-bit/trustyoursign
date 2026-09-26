@@ -11,6 +11,9 @@ Never commit secrets. Set in the host environment:
 - `OWNER_PASSWORD` — owner desk email/password (**not** the legacy value `True`; treat that as compromised)
 - `GROK_PREVIEW_CLIENT_SECRET` or `PREVIEW_CLIENT_SECRET` — live-preview OAuth client secret
 - `GROK_AUTH_CLIENT_SECRET` — deployed per-app OAuth secret (overrides preview)
+- `ALLOW_PREVIEW_OWNER_BIND=1` — required before the live-preview / localhost
+  owner desk may sign in as the owner. Unset fails closed. Do not set this on
+  Vercel (Production or Preview). A preview host header alone is not enough.
 
 See `docs/security/p0-remediation-2026-09-06.md`.
 
