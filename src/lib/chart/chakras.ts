@@ -15,7 +15,7 @@ export type ChakraDef = {
 
 /**
  * Structure + look only — safe for visitor charts / client bundles.
- * Natal chakra essays live under `nativities/saige-chakras.ts`.
+ * Natal chakra essays are not in the tracked tree.
  */
 export const CHAKRAS: ChakraDef[] = [
   {

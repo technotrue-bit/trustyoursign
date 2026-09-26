@@ -13,4 +13,7 @@ attachments/
 .grok/
 *.log
 
+# Private natal books. Never commit. See docs/security/research-nativities.md
+seeds/private/
+
 .node_modules.lock

@@ -5,8 +5,8 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 /**
- * Strings that must never appear in public chart modules (client-reachable).
- * Research natal books live only under `nativities/`.
+ * Strings that must never appear in tracked chart source.
+ * Research natal books are seeded from gitignored `seeds/private/`, not committed.
  */
 const FORBIDDEN = [
   "Port Huron",
@@ -47,15 +47,24 @@ describe("research natal data stays off public chart modules", () => {
     assert.deepEqual(hits, [], `leaked research PII:\n${hits.join("\n")}`);
   });
 
-  it("nativities/ still hold the research books", () => {
+  it("tracked nativities/ does not hold the research books", () => {
     const natDir = join(chartDir, "nativities");
     const names = readdirSync(natDir);
-    assert.ok(names.includes("saige.ts"));
-    assert.ok(names.includes("joey.ts"));
-    assert.ok(names.includes("load.server.ts"));
-    const saige = readFileSync(join(natDir, "saige-houses.ts"), "utf8");
-    assert.match(saige, /Port Huron/);
-    const joey = readFileSync(join(natDir, "joey.ts"), "utf8");
-    assert.match(joey, /Joey Devin Norris/);
+    assert.deepEqual(
+      names.filter((name) => name.endsWith(".ts")),
+      ["load.server.ts"],
+    );
+    const loader = readFileSync(join(natDir, "load.server.ts"), "utf8");
+    assert.equal(loader.includes("./joey"), false);
+    assert.equal(loader.includes("./saige"), false);
+    assert.match(loader, /research_nativity/);
+    const hits: string[] = [];
+    for (const name of names) {
+      const text = readFileSync(join(natDir, name), "utf8");
+      for (const needle of FORBIDDEN) {
+        if (text.includes(needle)) hits.push(`${name}: ${needle}`);
+      }
+    }
+    assert.deepEqual(hits, []);
   });
 });

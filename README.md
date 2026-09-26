@@ -17,6 +17,15 @@ Never commit secrets. Set in the host environment:
 
 See `docs/security/p0-remediation-2026-09-06.md`.
 
+## Database (`DATABASE_URL`)
+
+Production must use Neon’s **pooled** connection string (PgBouncer). The host’s
+first label ends with `-pooler` (`ep-…-pooler.<region>.aws.neon.tech`). The
+direct compute host exhausts under serverless bursts — each instance keeps its
+own pool of 4 — and requests used to hang ~25s. Starved checkouts and queries
+now fail in about 8 seconds. Set the URL in Vercel only. Details:
+`docs/ops/neon-pool.md`.
+
 ## Owner authorization (immutable identity only)
 
 Owner access is decided by **identity**, never by a display name — a name is
