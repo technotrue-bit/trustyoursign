@@ -13,7 +13,7 @@ import {
   stepExplore,
 } from "@/lib/galaxy/travel";
 import { skipIntro, templeIntro } from "@/lib/galaxy/intro";
-import { useSessionStore } from "./store.ts";
+import { clearClaimReopenGuard, useSessionStore } from "./store.ts";
 
 const nativity = {
   id: "visitor",
@@ -42,6 +42,7 @@ describe("session store", () => {
       surface: "galaxy",
     });
     useGalaxy.setState({ born: false, moved: false, t: OPEN_T, signIndex: 0 });
+    clearClaimReopenGuard();
   });
 
   it("starts with domain state only", () => {
@@ -49,6 +50,14 @@ describe("session store", () => {
     assert.equal(state.session, null);
     assert.equal(state.claim, null);
     assert.equal(state.surface, "galaxy");
+  });
+
+  it("ignores a reopen in the same beat as Keep flying", () => {
+    const state = useSessionStore.getState();
+    state.openClaim("leo");
+    state.closeClaim();
+    state.openClaim("leo");
+    assert.equal(useSessionStore.getState().claim, null);
   });
 
   it("validates claim birth and opens a visitor", () => {

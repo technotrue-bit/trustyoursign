@@ -27,6 +27,19 @@ import {
 import { fromResearch, fromShelf, fromVisitor, visitorBirth, visitorSign } from "./factories";
 import type { BirthFacts, ChartSession, Surface } from "./types";
 
+/** Second tap of a double-tap lands on Begin birth chart after Keep flying unmounts. */
+const CLAIM_REOPEN_MS = 450;
+let claimDismissedAt = 0;
+
+export function claimReopenBlocked(now = Date.now()): boolean {
+  return claimDismissedAt > 0 && now - claimDismissedAt < CLAIM_REOPEN_MS;
+}
+
+/** Test isolation. Production never needs to clear this. */
+export function clearClaimReopenGuard(): void {
+  claimDismissedAt = 0;
+}
+
 export type ShelfSessionInput = {
   id?: string;
   label: string;
@@ -134,6 +147,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }),
 
   openClaim: (signId) => {
+    if (claimReopenBlocked()) return;
     seekSignFor(signId);
     // Reopening the same sign keeps the birth already typed — "This is my
     // sign" twice must not discard a half-finished birth chat.
@@ -146,6 +160,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   closeClaim: () => {
+    if (get().claim) claimDismissedAt = Date.now();
     set((state) => clearClaimState(state));
     // Deliberate exit ("Keep flying") ends the in-progress flow; a reload
     // should not resurrect it. Redirects that skip closeClaim keep the draft.
