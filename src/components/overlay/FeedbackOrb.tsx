@@ -10,7 +10,7 @@ import { FeedbackForm } from "./FeedbackForm";
  * The parent row centers this control between the beta chip and Pause.
  *
  * On the first mount of a page load the orb eases in, a glass bubble names
- * it (“Contact support”), and the bubble retracts after it has been out for
+ * it (“Send feedback”), and the bubble retracts after it has been out for
  * three seconds. Later mounts in the same document (leaving a sign and
  * coming home) leave the orb settled — the hint is a greeting, not a loop.
  */
@@ -49,7 +49,7 @@ export function FeedbackOrb() {
           type="button"
           data-no-fly
           className={`feedback-orb pointer-events-auto${hint ? " feedback-orb--arrive" : ""}`}
-          aria-label="Contact support"
+          aria-label="Send feedback"
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? "feedback-orb-dialog" : undefined}
@@ -58,7 +58,9 @@ export function FeedbackOrb() {
             setOpen(true);
           }}
         >
-          <svg viewBox="0 0 24 24" className="feedback-orb-mark" aria-hidden>
+          {/* Name lives in the button, not only on aria-label. The star is hidden and the bubble is too. */}
+          <span className="sr-only">Send feedback</span>
+          <svg viewBox="0 0 24 24" className="feedback-orb-mark" aria-hidden="true">
             <path d="M12 1.6 13.85 8.7 21.4 12 13.85 15.3 12 22.4 10.15 15.3 2.6 12 10.15 8.7Z" />
           </svg>
         </button>
@@ -72,7 +74,7 @@ export function FeedbackOrb() {
                 if (e.animationName === "feedback-orb-hint") setHint(false);
               }}
             >
-              Contact support
+              Send feedback
             </span>
           </span>
         ) : null}

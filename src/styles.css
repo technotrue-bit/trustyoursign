@@ -344,23 +344,23 @@
 
 .sign-soft .word {
   display: inline-block;
-  margin-inline: 0.18em;
   opacity: 0;
   filter: blur(16px);
   transform: translateY(12px);
   animation: sign-soft 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.sign-soft .word:first-child {
+/* nth-of-type: the spaces between words are text nodes, so nth-child would skip them. */
+.sign-soft .word:nth-of-type(1) {
   animation-delay: 0.16s;
 }
-.sign-soft .word:nth-child(2) {
+.sign-soft .word:nth-of-type(2) {
   animation-delay: 0.58s;
 }
-.sign-soft .word:nth-child(3) {
+.sign-soft .word:nth-of-type(3) {
   animation-delay: 1.02s;
 }
-.sign-soft .word:nth-child(4) {
+.sign-soft .word:nth-of-type(4) {
   animation-delay: 1.38s;
 }
 
@@ -869,7 +869,9 @@ html.sky-paused .feedback-orb.feedback-orb--arrive {
   .galaxy-title .gloss-word::after {
     content: "";
     position: absolute;
-    inset: -0.45rem 0;
+    /* Horizontal slop replaces the title word’s padding so the tap target
+       stays large without opening a fake gap in “what’s your sign?”. */
+    inset: -0.45rem -0.35rem;
   }
 }
 
@@ -1558,10 +1560,6 @@ html.sky-paused .stagger-in > * {
     white-space: nowrap;
   }
 
-  .galaxy-title .word {
-    margin-inline: 0.1em;
-  }
-
   .galaxy-chrome {
     padding-bottom: 0.1rem;
     gap: 0.3rem;
@@ -1740,6 +1738,8 @@ html.sky-paused .stagger-in > * {
 /* Title “sign” stays clean; glossary underline reads wrong in the hero line. */
 .galaxy-title .gloss-word {
   background: none;
+  /* Shared glossary padding was the only gap before “sign”, so the line read “what'syour sign”. */
+  padding-inline: 0;
 }
 
 .galaxy-title .gloss-word:hover,

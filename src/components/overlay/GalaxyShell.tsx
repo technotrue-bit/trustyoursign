@@ -178,8 +178,9 @@ export function GalaxyShell() {
                     titleAnimating ? "sign-soft" : "intro-hold",
                   )}
                 >
-                  <span className="word">what&rsquo;s</span>
-                  <span className="word">your</span>
+                  {/* The JSX transform drops whitespace-only text between elements, which glued these words together. */}
+                  <span className="word">what&rsquo;s</span>{" "}
+                  <span className="word">your</span>{" "}
                   <span className="word pointer-events-auto">
                     <Gloss card={false}>sign</Gloss>
                   </span>
