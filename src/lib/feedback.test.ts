@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it, beforeEach } from "node:test";
 import {
   buildFeedbackEmail,
@@ -18,6 +19,7 @@ import {
   submitFeedback,
   type FeedbackSubmitResult,
 } from "./feedback-submit.ts";
+import { feedbackMethodNotAllowedResponse, handleFeedbackPost } from "./feedback-http.ts";
 import type { Sql } from "./db.ts";
 
 describe("feedback validation", () => {
@@ -172,6 +174,31 @@ describe("feedback submit", () => {
     if (!blocked.ok) assert.equal(blocked.status, 429);
   });
 
+  it("turns a throwing rate-limit store into 503 and does not send mail", async () => {
+    let sent = 0;
+    const result = await submitFeedback(
+      { kind: "bug", message: "The sky froze after I opened the note form." },
+      {
+        clientKey: "limiter-down",
+        env: { RESEND_API_KEY: "re_x", EMAIL_FROM: "vault@trustyoursign.com" },
+        rateLimitStore: {
+          consume() {
+            throw new Error("connection refused");
+          },
+        },
+        sendEmail: async () => {
+          sent += 1;
+        },
+      },
+    );
+    assert.equal(sent, 0);
+    assert.deepEqual(result, {
+      ok: false,
+      error: "Feedback is temporarily unavailable. Try again in a bit, or email directly.",
+      status: 503,
+    });
+  });
+
   it("does not share budget across different client keys", async () => {
     const env = { RESEND_API_KEY: "re_x", EMAIL_FROM: "vault@trustyoursign.com" };
     const sendEmail = async () => {};
@@ -286,5 +313,120 @@ describe("feedback durable rate limit store", () => {
     });
     assert.equal(await store.consume("x"), false);
     assert.equal(saw, 1);
+  });
+});
+
+describe("feedback HTTP methods", () => {
+  const env = { RESEND_API_KEY: "re_x", EMAIL_FROM: "vault@trustyoursign.com" };
+
+  function post(body: string) {
+    return new Request("https://trustyoursign.com/api/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+  }
+
+  it("answers GET, OPTIONS, HEAD, and other methods with 405 and never a send status", async () => {
+    for (const method of ["GET", "OPTIONS", "PUT", "PATCH", "DELETE"] as const) {
+      const res = feedbackMethodNotAllowedResponse(method);
+      assert.equal(res.status, 405, method);
+      assert.equal(res.headers.get("allow"), "POST");
+      assert.match(res.headers.get("content-type") ?? "", /json/);
+      const body = (await res.json()) as { ok: boolean; status: number; error: string };
+      assert.equal(body.ok, false);
+      assert.equal(body.status, 405);
+      assert.match(body.error, /POST/);
+    }
+
+    const head = feedbackMethodNotAllowedResponse("HEAD");
+    assert.equal(head.status, 405);
+    assert.equal(head.headers.get("allow"), "POST");
+    assert.equal(await head.text(), "");
+  });
+
+  it("rejects an invalid POST before the limiter or the mailer", async () => {
+    let consumed = 0;
+    let sent = 0;
+    const deps = {
+      env,
+      clientKey: "probe",
+      rateLimitStore: {
+        consume() {
+          consumed += 1;
+          return true;
+        },
+      },
+      sendEmail: async () => {
+        sent += 1;
+      },
+    };
+
+    const badJson = await handleFeedbackPost(post("not-json"), deps);
+    assert.equal(badJson.status, 400);
+    const badJsonBody = (await badJson.json()) as { error: string };
+    assert.match(badJsonBody.error, /JSON/);
+
+    const badKind = await handleFeedbackPost(post("{}"), deps);
+    assert.equal(badKind.status, 400);
+    const badKindBody = (await badKind.json()) as { error: string; status: number };
+    assert.equal(badKindBody.error, "Pick bug or suggestion.");
+    assert.equal(badKindBody.status, 400);
+
+    assert.equal(consumed, 0);
+    assert.equal(sent, 0);
+  });
+
+  it("keeps 502 for a real submit the provider rejects, and 503 when the limiter throws", async () => {
+    const note = JSON.stringify({
+      kind: "bug",
+      message: "Labels overlap after opening the support sheet.",
+    });
+
+    let sent = 0;
+    const rejected = await handleFeedbackPost(post(note), {
+      env,
+      clientKey: "real-submit",
+      rateLimitStore: createMemoryFeedbackRateLimitStore(),
+      sendEmail: async () => {
+        sent += 1;
+        throw new Error("Email provider rejected the message (429): quota");
+      },
+    });
+    assert.equal(sent, 1);
+    assert.equal(rejected.status, 502);
+    const rejectedBody = (await rejected.json()) as { ok: boolean; status: number; error: string };
+    assert.equal(rejectedBody.ok, false);
+    assert.equal(rejectedBody.status, 502);
+    assert.match(rejectedBody.error, /Could not send feedback/);
+
+    let sentAfter = 0;
+    const limited = await handleFeedbackPost(post(note), {
+      env,
+      clientKey: "limiter-down",
+      rateLimitStore: {
+        consume() {
+          throw new Error("connection refused");
+        },
+      },
+      sendEmail: async () => {
+        sentAfter += 1;
+      },
+    });
+    assert.equal(sentAfter, 0);
+    assert.equal(limited.status, 503);
+    const limitedBody = (await limited.json()) as { status: number };
+    assert.equal(limitedBody.status, 503);
+  });
+});
+
+describe("feedback route registers non-POST handlers", () => {
+  it("lists GET, OPTIONS, HEAD, and ANY beside POST", () => {
+    const src = readFileSync(new URL("../routes/api/feedback.ts", import.meta.url), "utf8");
+    for (const method of ["POST", "GET", "OPTIONS", "PUT", "PATCH", "DELETE", "HEAD", "ANY"]) {
+      assert.match(src, new RegExp(`\\b${method}:`));
+    }
+    assert.match(src, /handleFeedbackPost/);
+    assert.match(src, /feedbackMethodNotAllowedResponse/);
   });
 });

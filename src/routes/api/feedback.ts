@@ -1,40 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { clientKeyFromHeaders, submitFeedback } from "@/lib/feedback-submit";
-import type { FeedbackRawInput } from "@/lib/feedback";
+import { feedbackMethodNotAllowedResponse, handleFeedbackPost } from "@/lib/feedback-http";
 
+const methodNotAllowed = ({ request }: { request: Request }) =>
+  feedbackMethodNotAllowedResponse(request.method);
+
+/**
+ * POST is the only intake. GET/OPTIONS/HEAD/ANY are registered on purpose:
+ * a missing method falls through to page rendering and errors without a submit.
+ */
 export const Route = createFileRoute("/api/feedback")({
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        let body: FeedbackRawInput = {};
-        try {
-          body = (await request.json()) as FeedbackRawInput;
-        } catch {
-          return Response.json(
-            { ok: false, error: "Send JSON with kind and message.", status: 400 },
-            { status: 400 },
-          );
-        }
-
-        const headers = request.headers;
-        const userAgent =
-          typeof body.userAgent === "string" && body.userAgent.trim()
-            ? body.userAgent
-            : (headers.get("user-agent") ?? undefined);
-
-        const result = await submitFeedback(
-          { ...body, userAgent },
-          { clientKey: clientKeyFromHeaders(headers) },
-        );
-
-        if (result.ok) {
-          return Response.json({ ok: true }, { status: 200 });
-        }
-        return Response.json(
-          { ok: false, error: result.error, status: result.status },
-          { status: result.status },
-        );
-      },
+      POST: ({ request }) => handleFeedbackPost(request),
+      GET: methodNotAllowed,
+      OPTIONS: methodNotAllowed,
+      PUT: methodNotAllowed,
+      PATCH: methodNotAllowed,
+      DELETE: methodNotAllowed,
+      HEAD: methodNotAllowed,
+      ANY: methodNotAllowed,
     },
   },
 });
