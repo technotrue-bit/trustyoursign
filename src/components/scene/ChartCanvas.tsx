@@ -310,6 +310,8 @@ export function ChartCanvas() {
           gl.clear(true, true, false);
           const el = gl.domElement;
           if (el) {
+            el.tabIndex = -1;
+            el.setAttribute("aria-hidden", "true");
             el.style.background = "#0c0b0a";
             el.addEventListener(
               "webglcontextlost",

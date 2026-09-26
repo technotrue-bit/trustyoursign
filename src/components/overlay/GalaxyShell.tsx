@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { SIGN_INSIGHTS, insightToneLabel } from "@/lib/galaxy/signInsights";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
@@ -35,6 +35,27 @@ export function GalaxyShell() {
   const exploreWorldFade = useGalaxy((s) => s.explore.worldFade);
   const asking = introVeil > 0.04;
   const titleAnimating = !introDone && introTitle > 0.08;
+  const exploring = explorePhase !== "idle";
+  const worldFade = exploring ? exploreWorldFade : 1;
+  const focusChrome = useRef(false);
+  // Header Skip only exists once the top row is on screen. During the ask
+  // veil that row is unmounted, so Skip lives in the corner instead.
+  const headerSkipSlot = born && !asking && !exploring && worldFade > 0.08;
+  const showCornerSkip = !exploring && !headerSkipSlot && (asking || introSkip) && !introDone;
+  // Keep the belt out of the tab order until it is actually visible.
+  const dockLive = !asking && !exploring && (introDone || introChrome >= 0.35);
+  const titleLive = moved || (!asking && introTitle >= 0.35);
+
+  const onSkipIntro = () => {
+    if (!skipIntro({ explicit: true })) return;
+    focusChrome.current = true;
+  };
+
+  useEffect(() => {
+    if (!focusChrome.current || !introDone) return;
+    focusChrome.current = false;
+    document.getElementById("sky-chrome")?.focus({ preventScroll: true });
+  }, [introDone]);
   // I5: motion preference is persisted, so the button opens in the state the
   // viewer left it (VaultApp applies the stored value to the sky on mount).
   const [paused, setPausedState] = useState(
@@ -53,8 +74,6 @@ export function GalaxyShell() {
   }, [paused]);
 
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
-  const exploring = explorePhase !== "idle";
-  const worldFade = exploring ? exploreWorldFade : 1;
 
   if (!born) {
     return (
@@ -66,6 +85,19 @@ export function GalaxyShell() {
 
   return (
     <div className="vault-overlay pointer-events-none absolute inset-0 z-30">
+      {showCornerSkip ? (
+        <div className="pointer-events-none absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[70]">
+          <button
+            type="button"
+            data-no-fly
+            onClick={onSkipIntro}
+            className="sky-hud-btn pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] uppercase"
+            aria-label="Skip the introduction"
+          >
+            Skip
+          </button>
+        </div>
+      ) : null}
       <div className="galaxy-vignette" aria-hidden style={{ opacity: worldFade }} />
       {asking ? (
         <div
@@ -82,8 +114,9 @@ export function GalaxyShell() {
         </div>
       ) : null}
       {!asking && !exploring && worldFade > 0.08 ? (
-        <div
+        <header
           data-no-fly
+          aria-label="Sky controls"
           className="pointer-events-none absolute inset-x-0 top-[var(--chrome-top)] z-[60] grid h-[var(--hud-row)] grid-cols-[auto_minmax(2.75rem,1fr)_auto] items-center gap-x-2 px-[max(0.5rem,var(--safe-left))] pr-[max(0.5rem,var(--safe-right))]"
           style={{ opacity: worldFade }}
         >
@@ -109,15 +142,17 @@ export function GalaxyShell() {
             {introSkip ? (
               <button
                 type="button"
-                onClick={() => skipIntro()}
+                data-no-fly
+                onClick={onSkipIntro}
                 className="sky-hud-btn sky-hud-veil sky-hud-veil--chip pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] uppercase"
+                aria-label="Skip the introduction"
               >
                 Skip
               </button>
             ) : null}
             <AuthSlot />
           </div>
-        </div>
+        </header>
       ) : null}
 
       {exploring ? <SignGalaxyHud /> : null}
@@ -127,6 +162,7 @@ export function GalaxyShell() {
           <div
             className="galaxy-title-slot absolute inset-x-0 top-[var(--hud-below-row)] px-4 text-center md:right-24 md:left-24 md:px-0"
             onPointerDown={noteControl}
+            inert={!titleLive ? true : undefined}
             style={{
               opacity: asking || moved ? undefined : introTitle,
               visibility: asking ? "hidden" : undefined,
@@ -177,40 +213,49 @@ export function GalaxyShell() {
 
       <div
         className="galaxy-chrome pointer-events-none absolute inset-x-0 bottom-[var(--hud-bottom)] flex flex-col items-center gap-1.5 px-3 pb-[max(0.15rem,env(safe-area-inset-bottom,0px))] md:bottom-8 md:gap-3 md:px-0"
-        // Leave the tab order while claim/dive chrome owns the screen.
-        inert={asking || exploring ? true : undefined}
+        // Leave the tab order while the belt is invisible or another surface owns the screen.
+        inert={!dockLive ? true : undefined}
         style={{
           opacity: asking || exploring ? 0 : introChrome * worldFade,
           animation: "none",
-          pointerEvents: asking || exploring ? "none" : undefined,
+          pointerEvents: dockLive ? undefined : "none",
         }}
       >
         <LegalFooter />
-        <SignStrip />
-        {moved ? (
-          <button
-            type="button"
-            onClick={() => {
-              if (!sign) return;
-              if (enterSignGalaxy(signIndex) || exploringSign()) return;
-              // Refused only while the intro/birth is still playing — the tap
-              // is the viewer's answer to that, so finish it and go.
-              skipIntro();
-              skipBirth();
-              useGalaxy.getState().markBorn();
-              enterSignGalaxy(signIndex);
-            }}
-            className="sign-claim pointer-events-auto inline-flex min-h-11 w-auto items-center px-5 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent active:text-accent md:min-h-12 md:px-6"
-          >
-            Enter this sign
-          </button>
-        ) : null}
+        <nav
+          id="sky-chrome"
+          aria-label="Choose a sign"
+          tabIndex={-1}
+          className="flex w-full flex-col items-center gap-1.5 outline-none md:gap-3"
+        >
+          <p className="sr-only">Arrow keys move between signs. Then choose Enter this sign.</p>
+          <SignStrip />
+          {moved ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!sign) return;
+                if (enterSignGalaxy(signIndex) || exploringSign()) return;
+                // Refused only while the intro/birth is still playing — the tap
+                // is the viewer's answer to that, so finish it and go.
+                skipIntro({ explicit: true });
+                skipBirth();
+                useGalaxy.getState().markBorn();
+                enterSignGalaxy(signIndex);
+              }}
+              aria-label={sign ? `Enter this sign, ${sign.name}` : "Enter this sign"}
+              className="sign-claim pointer-events-auto inline-flex min-h-11 w-auto items-center px-5 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent active:text-accent md:min-h-12 md:px-6"
+            >
+              Enter this sign
+            </button>
+          ) : null}
+        </nav>
         <p className="sky-hud-kicker px-2 text-center text-[0.68rem] tracking-wide md:px-4 md:text-xs">
           <span className="md:hidden">
             Slide to fly. Tap a sign to choose it, then tap Enter this sign. Swipe names to jump.
           </span>
           <span className="hidden md:inline">
-            Slide to fly. Click a sign to choose it, then Enter this sign.
+            Slide to fly. Click a sign, or use the arrow keys, then Enter this sign.
           </span>
         </p>
         <details className="chart-talks pointer-events-auto relative mx-auto w-full max-w-md px-2" data-no-fly>
