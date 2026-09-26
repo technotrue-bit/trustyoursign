@@ -17,6 +17,7 @@ import { SignStrip } from "./SignStrip";
 import { AuthSlot } from "./AuthSlot";
 import { LegalFooter } from "./LegalFooter";
 import { SignGalaxyHud } from "./SignGalaxyHud";
+import { FeedbackOrb } from "./FeedbackOrb";
 import { siteVersionChrome } from "@/lib/site-version";
 
 export function GalaxyShell() {
@@ -81,20 +82,21 @@ export function GalaxyShell() {
         </div>
       ) : null}
       {!asking && !exploring && worldFade > 0.08 ? (
-        <>
+        <div
+          data-no-fly
+          className="pointer-events-none absolute inset-x-0 top-[var(--chrome-top)] z-[60] grid h-[var(--hud-row)] grid-cols-[auto_minmax(2.75rem,1fr)_auto] items-center gap-x-2 px-[max(0.5rem,var(--safe-left))] pr-[max(0.5rem,var(--safe-right))]"
+          style={{ opacity: worldFade }}
+        >
           <p
-            data-no-fly
-            className="sky-hud-kicker sky-hud-veil sky-hud-veil--tight pointer-events-none absolute top-[var(--chrome-top)] left-[max(0.5rem,var(--safe-left))] z-[60] flex min-h-[var(--hud-row)] max-w-[4.75rem] items-center text-[0.62rem] leading-tight tracking-[0.18em] uppercase md:block md:min-h-0 md:max-w-none"
-            style={{ opacity: worldFade }}
+            className="sky-hud-kicker sky-hud-veil sky-hud-veil--tight pointer-events-none flex max-w-[4.75rem] items-center text-[0.62rem] leading-tight tracking-[0.18em] uppercase md:max-w-none"
             aria-label={versionChrome.ariaLabel}
           >
             {versionChrome.text}
           </p>
-          <div
-            data-no-fly
-            className="absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[60] flex items-center gap-2 md:gap-1"
-            style={{ opacity: worldFade }}
-          >
+          <div className="flex justify-center">
+            <FeedbackOrb />
+          </div>
+          <div data-no-fly className="flex items-center gap-2 md:gap-1">
             <button
               type="button"
               onClick={togglePaused}
@@ -115,7 +117,7 @@ export function GalaxyShell() {
             ) : null}
             <AuthSlot />
           </div>
-        </>
+        </div>
       ) : null}
 
       {exploring ? <SignGalaxyHud /> : null}
@@ -123,7 +125,7 @@ export function GalaxyShell() {
       {!exploring ? (
         <GlossRoot>
           <div
-            className="galaxy-title-slot absolute inset-x-0 top-[var(--hud-below-row)] px-4 text-center md:top-[max(2.5rem,var(--safe-top))] md:right-24 md:left-24 md:px-0"
+            className="galaxy-title-slot absolute inset-x-0 top-[var(--hud-below-row)] px-4 text-center md:right-24 md:left-24 md:px-0"
             onPointerDown={noteControl}
             style={{
               opacity: asking || moved ? undefined : introTitle,
