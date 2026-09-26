@@ -103,7 +103,9 @@ Behaviour worth knowing:
 
 - Codes are **6 digits, expire in 5 minutes, work once, and are stored hashed**
   (`verification.value` never holds a usable code). Five attempt limit.
-- The send path is rate-limited to **3/minute per IP** (verify: 5/minute).
+- The send path is rate-limited to **3/minute per IP** (verify: 5/minute). Counters
+  live in Postgres (`"rateLimit"`, migration `0010`), shared across serverless
+  instances — not in process memory.
 - **Acceptance is required before a code is sent.** A first-time code creates the
   account, so the age and terms boxes must be ticked to be emailed a code — on
   both tabs, not just _Create account_. They are hidden again once a code is out,

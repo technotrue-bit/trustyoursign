@@ -38,6 +38,7 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie, getRequest } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { ensureDbReady, getNeonPool, getPglite } from "../db.server";
+import { authRateLimit } from "./rate-limit";
 import {
   emailDeliveryConfigured,
   sendOtpEmail,
@@ -371,25 +372,10 @@ export const auth = betterAuth({
     },
   },
 
-  // Login / auth abuse controls — enabled in all environments (fail closed on brute force).
-  rateLimit: {
-    enabled: true,
-    window: 60,
-    max: 60,
-    customRules: {
-      "/sign-in/email": { window: 60, max: 5 },
-      "/sign-up/email": { window: 60, max: 3 },
-      "/request-password-reset": { window: 60, max: 3 },
-      "/forget-password": { window: 60, max: 3 },
-      // One-time codes cost money to send and are worth brute-forcing, so the
-      // send path is capped harder than the verify path.
-      "/email-otp/send-verification-otp": { window: 60, max: 3 },
-      "/sign-in/email-otp": { window: 60, max: 5 },
-      "/sign-in/passkey": { window: 60, max: 10 },
-      "/passkey/generate-authenticate-options": { window: 60, max: 10 },
-      "/passkey/generate-register-options": { window: 60, max: 5 },
-    },
-  },
+  // Login / auth abuse controls — enabled in all environments (fail closed on
+  // brute force). Counters live in Postgres `"rateLimit"` so every serverless
+  // instance shares them. See `./rate-limit`.
+  rateLimit: authRateLimit,
 
   plugins: [
     gateIdentitySessions(),
