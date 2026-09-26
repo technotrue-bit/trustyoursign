@@ -96,6 +96,7 @@ export function AccountMenu() {
         type="button"
         onClick={refetchSession}
         title="Couldn't check your sign-in — tap to try again"
+        aria-label="Reconnect. Couldn't check your sign-in. Try again."
         className="auth-sign-in pointer-events-auto inline-flex min-h-11 items-center px-3 text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
       >
         Reconnect

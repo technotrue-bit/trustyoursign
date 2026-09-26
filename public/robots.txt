@@ -1,4 +1,6 @@
 # Closed beta — nothing here should be indexed while the product is still private.
-# When the beta opens, replace this with the normal allow rules and add a sitemap.
+# When the beta opens, replace Disallow with the normal allow rules and uncomment Sitemap.
+# The file is already at https://trustyoursign.com/sitemap.xml (public pages only).
+# Sitemap: https://trustyoursign.com/sitemap.xml
 User-agent: *
 Disallow: /

@@ -26,7 +26,12 @@ export function useDialogFocus<T extends HTMLElement>(active: boolean) {
 
     const id = window.requestAnimationFrame(() => {
       const list = focusables(node);
-      (list[0] ?? node).focus();
+      const preferred = node.querySelector<HTMLElement>("[data-initial-focus]:not([disabled])");
+      const start =
+        preferred && !preferred.hasAttribute("disabled") && list.includes(preferred)
+          ? preferred
+          : list[0];
+      (start ?? node).focus();
     });
 
     const onKey = (e: KeyboardEvent) => {

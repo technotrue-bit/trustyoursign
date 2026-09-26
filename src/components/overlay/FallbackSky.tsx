@@ -839,7 +839,7 @@ export function FallbackSky({ note }: { note?: string }) {
 
   return (
     <div className="canvas-root" style={{ background: "#0c0b0a" }}>
-      <canvas ref={canvasRef} className="h-full w-full touch-none" aria-hidden />
+      <canvas ref={canvasRef} className="h-full w-full touch-none" aria-hidden tabIndex={-1} />
       {note ? (
         <p
           role="status"
