@@ -290,11 +290,12 @@ glob so the stage actually runs.
 
 ---
 
-### R7 — Personal data is tracked in git · LOW (contained)
+### R7 — Personal data was tracked in git · LOW
 
-`src/lib/chart/nativities/joey.ts` (717 lines) and `saige.ts` are real natal charts, committed.
-Repo is **private**, so this is contained — but it becomes a disclosure the moment the repo goes
-public or a fork/snapshot leaves the org. R1 turns it into a live API exposure.
+`src/lib/chart/nativities/joey.ts` and `saige.ts` were real natal charts in git.
+They are removed from the tracked tree (history is not rewritten) and loaded
+from `research_nativity`, seeded from gitignored `seeds/private/`. See
+`docs/security/research-nativities.md`. Confirm before that change merges.
 
 ---
 
