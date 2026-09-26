@@ -102,7 +102,7 @@
     position: absolute;
     top: 0.75rem;
     left: 0.75rem;
-    z-index: 100;
+    z-index: 200;
     padding: 0.65rem 1rem;
     border-radius: var(--radius-md);
     background: var(--color-bg-elevated);

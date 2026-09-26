@@ -13,9 +13,11 @@ function asChartId(id: string): ResearchChartId {
 export const listResearchLibrary = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const { assertResearchOwner, listResearchLibrary: list } = await import("./nativities/load.server");
+    const { assertResearchOwner, listResearchLibrary: list } =
+      await import("./nativities/load.server");
+    const { AppRls } = await import("@/lib/db-rls.server");
     await assertResearchOwner(context.userId);
-    return list();
+    return AppRls.bypass(() => list());
   });
 
 export const getResearchChart = createServerFn({ method: "GET" })
@@ -23,6 +25,7 @@ export const getResearchChart = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }): Promise<Nativity> => {
     const { assertResearchOwner, loadResearchNativity } = await import("./nativities/load.server");
+    const { AppRls } = await import("@/lib/db-rls.server");
     await assertResearchOwner(context.userId);
-    return loadResearchNativity(data);
+    return AppRls.bypass(() => loadResearchNativity(data));
   });

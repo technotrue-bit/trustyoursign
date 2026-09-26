@@ -15,7 +15,10 @@ export function LegalFooter() {
   }, []);
   if (!show) {
     return (
-      <p className="sky-hud-footer pointer-events-auto px-2 text-center text-[0.6rem] leading-snug tracking-wide md:px-3 md:text-[0.62rem] md:leading-relaxed">
+      <nav
+        aria-label="House"
+        className="sky-hud-footer pointer-events-auto px-2 text-center text-[0.6rem] leading-snug tracking-wide md:px-3 md:text-[0.62rem] md:leading-relaxed"
+      >
         <Link to="/about" className="hover:text-fg">
           About
         </Link>
@@ -43,7 +46,7 @@ export function LegalFooter() {
         <Link to="/terms" className="hover:text-fg">
           Terms
         </Link>
-      </p>
+      </nav>
     );
   }
   return (
@@ -58,6 +61,7 @@ export function LegalFooter() {
       </p>
       <button
         type="button"
+        aria-label="OK. Dismiss cookie notice."
         className="min-h-11 min-w-11 shrink-0 px-2 text-fg underline"
         onClick={() => {
           try {

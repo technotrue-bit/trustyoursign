@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { CALENDAR_SIGN_INDICES, CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { galaxyTravel, noteControl, seekSign } from "@/lib/galaxy/travel";
@@ -168,6 +168,37 @@ export function SignStrip() {
     centerItem(signIndex, smooth);
   }, [signIndex, moved]);
 
+  const moveBelt = (next: number) => {
+    fromStrip.current = true;
+    noteControl();
+    jumpTo(next);
+    centerItem(next, true);
+    scrollerRef.current
+      ?.querySelector<HTMLElement>(`[data-sign-index="${next}"] button`)
+      ?.focus();
+  };
+
+  const onBeltKeyDown = (e: ReactKeyboardEvent<HTMLUListElement>) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft" && e.key !== "Home" && e.key !== "End") {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    const pos = Math.max(0, CALENDAR_SIGN_INDICES.indexOf(signIndex));
+    const last = CALENDAR_SIGN_INDICES.length - 1;
+    const nextPos =
+      e.key === "Home"
+        ? 0
+        : e.key === "End"
+          ? last
+          : e.key === "ArrowRight"
+            ? (pos + 1) % CALENDAR_SIGN_INDICES.length
+            : (pos - 1 + CALENDAR_SIGN_INDICES.length) % CALENDAR_SIGN_INDICES.length;
+    const next = CALENDAR_SIGN_INDICES[nextPos];
+    if (next == null) return;
+    moveBelt(next);
+  };
+
   const onScroll = () => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -191,6 +222,7 @@ export function SignStrip() {
         ref={scrollerRef}
         className="sign-strip"
         aria-label="The twelve signs"
+        onKeyDown={onBeltKeyDown}
         onScroll={onScroll}
         onPointerDown={(e) => {
           e.stopPropagation();

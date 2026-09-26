@@ -25,4 +25,4 @@ export type ReadingDef = {
   street?: string;
 };
 
-/** Public module — natal gates/readings live under `nativities/saige-copy.ts`. */
+/** Public module — natal gates/readings are not in the tracked tree. */

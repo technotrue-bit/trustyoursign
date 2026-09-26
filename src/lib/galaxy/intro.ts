@@ -233,9 +233,15 @@ export function introCanSkip() {
   return templeIntro.t >= 0.4;
 }
 
-export function skipIntro() {
+/**
+ * Finish the opening. Pointer noise still waits out the 0.4s accidental-tap
+ * gate. An explicit Skip control passes `{ explicit: true }` so keyboard and
+ * screen-reader users are not stuck on the veil.
+ */
+export function skipIntro(opts?: { explicit?: boolean }) {
   if (templeIntro.done) return false;
-  if (!introCanSkip() && templeIntro.t < 0.4 && templeIntro.askT < 0.4) return false;
+  const early = templeIntro.t < 0.4 && templeIntro.askT < 0.4;
+  if (!opts?.explicit && !introCanSkip() && early) return false;
   templeIntro.asking = false;
   templeIntro.askT = ASK;
   templeIntro.t = templeIntro.duration;

@@ -75,6 +75,18 @@ export function BirthChat() {
   const dialogRef = useDialogFocus<HTMLDivElement>(true);
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // A native month/day/year menu uses Escape to close itself. Don't also
+      // dismiss the dialog on that same key.
+      if (e.target instanceof HTMLSelectElement) return;
+      closeClaim();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closeClaim]);
+
+  useEffect(() => {
     const root = dialogRef.current;
     if (!root) return;
     const onFocus = (event: FocusEvent) => {
@@ -219,32 +231,22 @@ export function BirthChat() {
         aria-modal="true"
         aria-labelledby="birth-chat-title"
         tabIndex={-1}
-        className="birth-chat pointer-events-auto relative w-full max-w-md px-5 pt-[var(--chrome-top)] pb-[calc(var(--chrome-bottom)+0.75rem)] outline-none md:px-12 md:pt-16"
+        className="birth-chat pointer-events-auto relative flex w-full max-w-md flex-col px-5 pt-[var(--chrome-top)] pb-[calc(var(--chrome-bottom)+0.75rem)] outline-none md:px-12 md:pt-16"
       >
         <p className="text-xs tracking-[0.28em] text-fg-muted uppercase">{temple.month}</p>
-        <h2
+        <h1
           id="birth-chat-title"
           className="mt-2 font-display text-[2.15rem] leading-[1.08] font-medium tracking-tight text-fg italic md:text-5xl"
         >
           {sign.name}.
-        </h2>
+        </h1>
         <p className="mt-2 text-[0.7rem] tracking-[0.2em] text-fg-subtle uppercase">
           {temple.element} · {temple.modality}
         </p>
-        <p className="mt-3 max-w-sm text-sm leading-relaxed text-fg-muted md:text-base">
-          <GlossRoot>
-            <Gloss>{temple.essence}</Gloss>
-          </GlossRoot>
-        </p>
-        <ul className="mt-4 max-w-sm space-y-2 text-sm leading-relaxed text-fg-muted">
-          {temple.lines.slice(0, 2).map((line) => (
-            <li key={line.slice(0, 24)}>{line}</li>
-          ))}
-        </ul>
 
         {!birth ? (
           <form
-            className="mt-8 space-y-5"
+            className="order-2 mt-8 space-y-5"
             onSubmit={(e) => {
               e.preventDefault();
               submit();
@@ -258,6 +260,7 @@ export function BirthChat() {
                 <select
                   value={month}
                   onChange={(e) => pickMonth(e.target.value)}
+                  data-initial-focus
                   className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
                   required
                 >
@@ -335,7 +338,7 @@ export function BirthChat() {
             </ul>
           </form>
         ) : step === "offer" ? (
-          <div className="mt-8 space-y-5">
+          <div className="order-2 mt-8 space-y-5">
             <p className="text-sm leading-relaxed text-fg-muted md:text-base">
               {formatBirth(birth.month, birth.day, birth.year)}.
             </p>
@@ -347,6 +350,7 @@ export function BirthChat() {
             </p>
             <button
               type="button"
+              data-initial-focus
               onClick={() => setStep("deeper")}
               className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase hover:bg-fg md:min-h-11"
             >
@@ -363,7 +367,7 @@ export function BirthChat() {
           </div>
         ) : step === "deeper" ? (
           <form
-            className="mt-8 space-y-5"
+            className="order-2 mt-8 space-y-5"
             onSubmit={(e) => {
               e.preventDefault();
               submitDeeper();
@@ -379,6 +383,7 @@ export function BirthChat() {
                 <select
                   value={hour12}
                   onChange={(e) => setHour12(e.target.value)}
+                  data-initial-focus
                   className="path-field min-h-12 w-full rounded-md border border-border bg-bg-elevated px-2 text-fg"
                   required
                 >
@@ -450,7 +455,7 @@ export function BirthChat() {
             </button>
           </form>
         ) : (
-          <div className="mt-8 space-y-5">
+          <div className="order-2 mt-8 space-y-5">
             <p className="text-sm leading-relaxed text-fg-muted md:text-base">
               {formatBirth(birth.month, birth.day, birth.year)}
               {birth.hour != null && birth.minute != null ? ` · ${formatClock(birth.hour, birth.minute)}` : ""}
@@ -478,6 +483,7 @@ export function BirthChat() {
             ) : null}
             <button
               type="button"
+              data-initial-focus
               onClick={() => {
                 const s = sketch();
                 if (s) openShelf(s);
@@ -553,6 +559,18 @@ export function BirthChat() {
             )}
           </div>
         )}
+        <div className="order-1">
+          <p className="mt-3 max-w-sm text-sm leading-relaxed text-fg-muted md:text-base">
+            <GlossRoot>
+              <Gloss>{temple.essence}</Gloss>
+            </GlossRoot>
+          </p>
+          <ul className="mt-4 max-w-sm space-y-2 text-sm leading-relaxed text-fg-muted">
+            {temple.lines.slice(0, 2).map((line) => (
+              <li key={line.slice(0, 24)}>{line}</li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   );

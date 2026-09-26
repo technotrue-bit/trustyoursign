@@ -37,7 +37,9 @@ export const askTheChart = createServerFn({ method: "POST" })
       : [];
     const history = Array.isArray(input.history)
       ? input.history
-          .filter((h) => h && (h.role === "user" || h.role === "vault") && typeof h.text === "string")
+          .filter(
+            (h) => h && (h.role === "user" || h.role === "vault") && typeof h.text === "string",
+          )
           .slice(-8)
       : [];
     const focus = typeof input.focus === "string" ? input.focus.trim().slice(0, 80) : "";
@@ -46,8 +48,9 @@ export const askTheChart = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const { assertResearchOwner, loadResearchNativity } = await import("./nativities/load.server");
+    const { AppRls } = await import("@/lib/db-rls.server");
     await assertResearchOwner(context.userId);
-    const nativity = loadResearchNativity(data.chartId);
+    const nativity = await AppRls.bypass(() => loadResearchNativity(data.chartId));
     const bones = answerFromBones(nativity, data.question, data.focus);
     const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) return { ok: true as const, text: bones, from: "bones" as const };

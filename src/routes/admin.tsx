@@ -356,8 +356,10 @@ function AiDeskForm() {
             onClick={async () => {
               setMsg(null);
               try {
-                await grantSkyPass({ data: { userId: passId, entitlement: passKind } });
-                setMsg("Pass granted.");
+                const granted = await grantSkyPass({
+                  data: { userId: passId, entitlement: passKind },
+                });
+                setMsg(granted.ok ? "Pass granted." : granted.error);
               } catch (err) {
                 setMsg(err instanceof Error ? err.message : "Could not grant");
               }

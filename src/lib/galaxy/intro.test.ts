@@ -7,6 +7,7 @@ import {
   ariesConstellationReveal,
   bootIntro,
   resetIntroForTests,
+  skipIntro,
   templeIntro,
 } from "./intro.ts";
 test("Aries constellation reveal is hidden before the silhouette gathers", () => {
@@ -128,6 +129,16 @@ describe("bootIntro returning visitors", () => {
     assert.equal(templeIntro.asking, false);
     // Completing also dual-writes so future visits survive a new tab.
     assert.equal(local.getItem(INTRO_KEY), "1");
+  });
+
+  it("explicit skip finishes the ask before the accidental-tap gate", () => {
+    bootIntro();
+    assert.equal(templeIntro.asking, true);
+    assert.equal(templeIntro.done, false);
+    assert.equal(skipIntro(), false);
+    assert.equal(skipIntro({ explicit: true }), true);
+    assert.equal(templeIntro.done, true);
+    assert.equal(templeIntro.asking, false);
   });
 
   it("is idempotent once booted", () => {

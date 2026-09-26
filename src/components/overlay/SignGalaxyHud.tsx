@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { insightToneLabel } from "@/lib/galaxy/signInsights";
@@ -56,10 +56,16 @@ export function SignGalaxyHud() {
     sign?.id ?? null,
     { pointIndex: explore.pointIndex, isHub: point?.isHub ?? false },
   );
+  const inside = explore.phase === "inside";
+  const focusAfterSkip = useRef(false);
+
+  useEffect(() => {
+    if (!inside || !focusAfterSkip.current) return;
+    focusAfterSkip.current = false;
+    document.getElementById("sign-galaxy-back")?.focus({ preventScroll: true });
+  }, [inside]);
 
   if (explore.phase === "idle" || explore.signIndex == null || !sign || !galaxy) return null;
-
-  const inside = explore.phase === "inside";
   const phaseEntering = explore.phase === "fading" || explore.phase === "diving";
   const entering = phaseEntering || explore.skipPhase !== "idle";
   /** Non-hub star still behind a gate (legacy; lore is open for everyone). */
@@ -96,8 +102,12 @@ export function SignGalaxyHud() {
           {phaseEntering && explore.skipPhase === "idle" ? (
             <button
               type="button"
-              onClick={() => skipEnterGalaxy()}
+              onClick={() => {
+                if (!skipEnterGalaxy()) return;
+                focusAfterSkip.current = true;
+              }}
               className="pointer-events-auto min-h-11 px-3 text-xs tracking-[0.2em] text-fg-subtle uppercase hover:text-fg"
+              aria-label="Skip the entrance"
             >
               Skip
             </button>
@@ -114,10 +124,14 @@ export function SignGalaxyHud() {
           inside ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       >
-        <div className="grid shrink-0 grid-cols-[minmax(4.75rem,auto)_minmax(0,1fr)_minmax(4.75rem,auto)] items-start gap-x-3 gap-y-1">
+        <header
+          aria-label={`${sign.name} galaxy`}
+          className="grid shrink-0 grid-cols-[minmax(4.75rem,auto)_minmax(0,1fr)_minmax(4.75rem,auto)] items-start gap-x-3 gap-y-1"
+        >
           <div className="justify-self-start">
             <button
               type="button"
+              id="sign-galaxy-back"
               onClick={() => {
                 // Pop the entry enter pushed, so Back and this button leave the
                 // same way. With no prior entry, unwind in place.
@@ -141,7 +155,7 @@ export function SignGalaxyHud() {
           <div className="pointer-events-auto flex min-h-11 min-w-[4.75rem] justify-end justify-self-end">
             <AuthSlot />
           </div>
-        </div>
+        </header>
 
         <div className="min-h-0 flex-1" aria-hidden />
 
@@ -245,6 +259,7 @@ export function SignGalaxyHud() {
               <button
                 type="button"
                 onClick={() => openClaim(sign.id)}
+                aria-label={`Begin birth chart for ${sign.name}`}
                 className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent"
               >
                 Begin birth chart
