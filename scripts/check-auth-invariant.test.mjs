@@ -90,8 +90,11 @@ test("only a divergence warns the smoke verdict", () => {
   }
 });
 
-test("the build side resolves the template's shipped app-env", () => {
-  assert.equal(buildAuthEnabled(projectRoot(), {}), false);
+test("this app leaves sign-in on unless the host sets VITE_AUTH_ENABLED=false", () => {
+  // Trust Your Sign does not ship `.grok/app-env.json` with auth off.
+  // Unset means on (`!== "false"`). An explicit false still turns it off.
+  assert.equal(buildAuthEnabled(projectRoot(), {}), true);
+  assert.equal(buildAuthEnabled(projectRoot(), { VITE_AUTH_ENABLED: "false" }), false);
   assert.equal(buildAuthEnabled(projectRoot(), { VITE_AUTH_ENABLED: "true" }), true);
 });
 
