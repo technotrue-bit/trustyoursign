@@ -68,8 +68,20 @@ export async function submitFeedback(
   }
 
   const now = deps.now ?? Date.now();
-  const store = deps.rateLimitStore ?? (await getDefaultFeedbackRateLimitStore());
-  const allowed = await store.consume(deps.clientKey, now);
+  // A limiter failure must not fall through to the mailer, and must not surface
+  // as the 502 we reserve for "Resend rejected a real note".
+  let allowed: boolean;
+  try {
+    const store = deps.rateLimitStore ?? (await getDefaultFeedbackRateLimitStore());
+    allowed = await store.consume(deps.clientKey, now);
+  } catch (err) {
+    console.error("[feedback] rate limit check failed:", err);
+    return {
+      ok: false,
+      error: "Feedback is temporarily unavailable. Try again in a bit, or email directly.",
+      status: 503,
+    };
+  }
   if (!allowed) {
     return {
       ok: false,
