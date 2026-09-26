@@ -83,6 +83,7 @@ import {
   introAries,
   skipIntro,
   stepIntro,
+  templeIntro,
   uAssemble,
   uBirth,
 } from "@/lib/galaxy/intro";
@@ -658,17 +659,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       }
     };
   }, [coreMat, starGeo, artTex]);
-
-  useEffect(() => {
-    if (artTex) return;
-    // Background warm for a station the viewer isn't near yet — low priority
-    // so it never competes with the current plate's bytes on a slow link.
-    const id = window.setTimeout(
-      () => setArtTex(loadSignArt(sign.id, "low")),
-      420 + index * 85,
-    );
-    return () => window.clearTimeout(id);
-  }, [artTex, index, sign.id]);
 
   const shellMats = useRef<{ opacity?: number; transparent?: boolean }[]>([]);
   useEffect(() => {
@@ -1714,8 +1704,16 @@ function TempleRig() {
         scene.fog.density = 0.01;
       }
     }
+    // The Aries life clip cannot play during the ask (dwellClipMayPlay refuses
+    // while the intro is running). Hold the ~1MB fetch until the veil lifts so
+    // it does not compete with first paint. Priming still starts during the
+    // gather, with the full intro left to buffer, so the clip is not marked
+    // done just because the element does not exist yet.
+    const holdClipForAsk = introPlaying() && templeIntro.asking;
     syncDwellPrefetch(
-      prefersReducedMotion() || exploringSign() ? null : (TEMPLE_SIGNS[aimedIndex()]?.id ?? null),
+      prefersReducedMotion() || exploringSign() || holdClipForAsk
+        ? null
+        : (TEMPLE_SIGNS[aimedIndex()]?.id ?? null),
     );
     galaxyTravel.t = t;
     written.current = t;
