@@ -579,6 +579,12 @@
 }
 
 /* Home HUD — starlight orb between the beta chip and Pause / Sign in. */
+.feedback-orb-slot {
+  position: relative;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
 .feedback-orb {
   display: grid;
   width: 2.75rem;
@@ -596,6 +602,13 @@
     0 0 28px rgba(8, 7, 6, 0.55),
     inset 0 0 10px rgba(255, 228, 180, 0.22);
   animation: feedback-orb-breathe 4.8s ease-in-out infinite;
+}
+
+/* First look: the orb settles in, then the label breathes out beside it. */
+.feedback-orb.feedback-orb--arrive {
+  animation:
+    feedback-orb-arrive 0.9s cubic-bezier(0.16, 1, 0.3, 1) both,
+    feedback-orb-breathe 4.8s ease-in-out 0.9s infinite;
 }
 
 .feedback-orb-mark {
@@ -642,9 +655,169 @@ html.sky-paused .feedback-orb {
   animation: none;
 }
 
+html.sky-paused .feedback-orb.feedback-orb--arrive {
+  animation: feedback-orb-arrive 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Glass label. Pops out of the orb’s left side — Pause and Sign in own the
+   right — holds for three seconds, then draws back in. On a phone the row
+   has no free band beside the orb, so the label drops just under it, still
+   reaching left, and the headline makes a little room (support-hint-room). */
+.feedback-orb-hint-anchor {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  pointer-events: none;
+  top: calc(100% + 0.4rem);
+  right: -0.15rem;
+}
+
+.feedback-orb-hint {
+  position: relative;
+  padding: 0.34rem 0.7rem 0.36rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, #e8d2a4 40%, transparent);
+  background: color-mix(in oklab, #120f0c 38%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
+  box-shadow:
+    0 0 0 1px rgba(8, 7, 6, 0.18),
+    0 10px 28px rgba(8, 7, 6, 0.22);
+  color: #f6edd8;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-shadow:
+    0 1px 2px rgba(8, 7, 6, 0.9),
+    0 0 10px rgba(8, 7, 6, 0.65);
+  transform-origin: 78% 0;
+  animation: feedback-orb-hint 4.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  user-select: none;
+}
+
+.feedback-orb-hint::after {
+  content: "";
+  position: absolute;
+  top: -0.22rem;
+  right: 0.72rem;
+  width: 0.48rem;
+  height: 0.48rem;
+  rotate: 45deg;
+  border-top: 1px solid color-mix(in oklab, #e8d2a4 40%, transparent);
+  border-left: 1px solid color-mix(in oklab, #e8d2a4 40%, transparent);
+  background: color-mix(in oklab, #120f0c 46%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+@media (max-width: 767px) {
+  html[data-support-hint] .galaxy-title-slot {
+    animation: support-hint-room 4.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@media (min-width: 768px) {
+  .feedback-orb-hint-anchor {
+    top: 0;
+    bottom: 0;
+    right: calc(100% + 0.6rem);
+    align-items: center;
+  }
+
+  .feedback-orb-hint {
+    transform-origin: right center;
+  }
+
+  .feedback-orb-hint::after {
+    top: 50%;
+    right: -0.22rem;
+    translate: 0 -50%;
+    border-top: 1px solid color-mix(in oklab, #e8d2a4 40%, transparent);
+    border-right: 1px solid color-mix(in oklab, #e8d2a4 40%, transparent);
+    border-left: 0;
+  }
+}
+
+@keyframes support-hint-room {
+  0% {
+    translate: 0 0;
+  }
+  14.4% {
+    translate: 0 2.15rem;
+  }
+  90.7% {
+    translate: 0 2.15rem;
+  }
+  100% {
+    translate: 0 0;
+  }
+}
+
+@keyframes feedback-orb-arrive {
+  0% {
+    opacity: 0;
+    transform: scale(0.84);
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes feedback-orb-hint {
+  0%,
+  14.4% {
+    opacity: 0;
+    transform: scale(0.62);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.035);
+  }
+  24% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  90.7% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .feedback-orb {
-    animation: none;
+  .feedback-orb,
+  .feedback-orb.feedback-orb--arrive,
+  html.sky-paused .feedback-orb,
+  html.sky-paused .feedback-orb.feedback-orb--arrive {
+    animation: none !important;
+    filter: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  /* The global reduced-motion rule collapses every animation to 0.01ms,
+     which would finish this label before it can be read. Hold it still;
+     FeedbackOrb removes it after three seconds. */
+  .feedback-orb-hint {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+  html[data-support-hint] .galaxy-title-slot {
+    animation: none !important;
+    translate: 0 2.15rem;
   }
 }
 
@@ -1073,7 +1246,12 @@ html.sky-paused .stagger-in > * {
   max-width: 100%;
   min-height: 4.75rem;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 2.75rem calc(100% - 2.75rem), transparent);
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 2.75rem calc(100% - 2.75rem),
+    transparent
+  );
   mask-image: linear-gradient(90deg, transparent, #000 2.75rem calc(100% - 2.75rem), transparent);
 }
 
@@ -1105,8 +1283,14 @@ html.sky-paused .stagger-in > * {
       color-mix(in oklab, #c9a15b calc(12% + var(--belt-rush) * 18%), transparent),
       transparent 70%
     ),
-    linear-gradient(180deg, color-mix(in oklab, #0c0b0a 12%, transparent) 0%, transparent 42%, transparent 100%);
-  box-shadow: inset 0 -1.25rem 2.4rem color-mix(in oklab, #c9a15b calc(var(--belt-rush) * 22%), transparent);
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, #0c0b0a 12%, transparent) 0%,
+      transparent 42%,
+      transparent 100%
+    );
+  box-shadow: inset 0 -1.25rem 2.4rem
+    color-mix(in oklab, #c9a15b calc(var(--belt-rush) * 22%), transparent);
   transition:
     box-shadow 0.35s ease-out,
     filter 0.35s ease-out;
@@ -1175,7 +1359,12 @@ html.sky-paused .stagger-in > * {
       color-mix(in oklab, #c9a15b calc(12% + var(--belt-rush) * 18%), transparent),
       transparent 70%
     ),
-    linear-gradient(180deg, color-mix(in oklab, #0c0b0a 12%, transparent) 0%, transparent 42%, transparent 100%);
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, #0c0b0a 12%, transparent) 0%,
+      transparent 42%,
+      transparent 100%
+    );
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1510,12 +1699,11 @@ html.sky-paused .stagger-in > * {
   letter-spacing: inherit;
   text-align: inherit;
   pointer-events: auto;
-  background:
-    linear-gradient(
-      transparent 78%,
-      color-mix(in oklab, var(--color-fg) 28%, transparent) 78% 83%,
-      transparent 83%
-    );
+  background: linear-gradient(
+    transparent 78%,
+    color-mix(in oklab, var(--color-fg) 28%, transparent) 78% 83%,
+    transparent 83%
+  );
   border: 0;
   border-radius: 5px;
   box-shadow: 0 0 0 0 transparent;
@@ -1623,7 +1811,8 @@ html.sky-paused .stagger-in > * {
 }
 
 .sky-guide-glow {
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent) 55%, transparent),
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-accent) 55%, transparent),
     0 0 24px color-mix(in oklab, var(--color-accent) 22%, transparent);
   border-radius: 0.75rem;
   transition: box-shadow 0.35s ease;
