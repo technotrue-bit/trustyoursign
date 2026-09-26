@@ -362,11 +362,7 @@ export const grantSkyPass = createServerFn({ method: "POST" })
     const desk = await import("./desk.server");
     await desk.assertOwner(context.userId);
     const { getSql } = await import("@/lib/db.server");
+    const { grantSkyPassForUser } = await import("./grant-sky-pass");
     const sql = await getSql();
-    await sql`
-      insert into sky_pass (user_id, entitlement, updated_at)
-      values (${data.userId}, ${data.entitlement}, now())
-      on conflict (user_id) do update set entitlement = ${data.entitlement}, updated_at = now()
-    `;
-    return { ok: true as const };
+    return grantSkyPassForUser(sql, data.userId, data.entitlement);
   });
