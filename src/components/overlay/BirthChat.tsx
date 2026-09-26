@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
@@ -12,6 +12,21 @@ import type { SkyNatal } from "@/lib/chart/ephemeris";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { cn } from "@/lib/utils";
 import { Gloss, GlossRoot } from "./Gloss";
+
+/** Scroll only the birth sheet, so a field or primary action clears the fold without moving the sky. */
+function revealInSheet(el: HTMLElement | null) {
+  if (!el) return;
+  const sheet = el.closest(".birth-chat");
+  if (!(sheet instanceof HTMLElement)) return;
+  const margin = 16;
+  const er = el.getBoundingClientRect();
+  const sr = sheet.getBoundingClientRect();
+  if (er.bottom > sr.bottom - margin) {
+    sheet.scrollTop += er.bottom - (sr.bottom - margin);
+  } else if (er.top < sr.top + margin) {
+    sheet.scrollTop -= sr.top + margin - er.top;
+  }
+}
 
 const MONTHS = [
   "January",
@@ -58,6 +73,29 @@ export function BirthChat() {
   const [casting, setCasting] = useState(false);
   const [castErr, setCastErr] = useState<string | null>(null);
   const dialogRef = useDialogFocus<HTMLDivElement>(true);
+
+  useEffect(() => {
+    const root = dialogRef.current;
+    if (!root) return;
+    const onFocus = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (!target.matches("input, select, textarea")) return;
+      revealInSheet(target);
+    };
+    root.addEventListener("focusin", onFocus);
+    return () => root.removeEventListener("focusin", onFocus);
+  }, [dialogRef]);
+
+  useEffect(() => {
+    const root = dialogRef.current;
+    if (!root) return;
+    const frame = window.requestAnimationFrame(() => {
+      const primary = root.querySelector<HTMLElement>("button.bg-accent, button[type='submit']");
+      revealInSheet(primary);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [dialogRef, step, birth]);
 
   const years = useMemo(() => {
     const y = new Date().getFullYear();
@@ -181,7 +219,7 @@ export function BirthChat() {
         aria-modal="true"
         aria-labelledby="birth-chat-title"
         tabIndex={-1}
-        className="birth-chat pointer-events-auto relative w-full max-w-md px-5 pt-[var(--chrome-top)] pb-[var(--chrome-bottom)] outline-none md:px-12 md:pt-16"
+        className="birth-chat pointer-events-auto relative w-full max-w-md px-5 pt-[var(--chrome-top)] pb-[calc(var(--chrome-bottom)+0.75rem)] outline-none md:px-12 md:pt-16"
       >
         <p className="text-xs tracking-[0.28em] text-fg-muted uppercase">{temple.month}</p>
         <h2
