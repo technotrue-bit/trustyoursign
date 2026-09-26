@@ -11,8 +11,20 @@ Never commit secrets. Set in the host environment:
 - `OWNER_PASSWORD` — owner desk email/password (**not** the legacy value `True`; treat that as compromised)
 - `GROK_PREVIEW_CLIENT_SECRET` or `PREVIEW_CLIENT_SECRET` — live-preview OAuth client secret
 - `GROK_AUTH_CLIENT_SECRET` — deployed per-app OAuth secret (overrides preview)
+- `ALLOW_PREVIEW_OWNER_BIND=1` — required before the live-preview / localhost
+  owner desk may sign in as the owner. Unset fails closed. Do not set this on
+  Vercel (Production or Preview). A preview host header alone is not enough.
 
 See `docs/security/p0-remediation-2026-09-06.md`.
+
+## Database (`DATABASE_URL`)
+
+Production must use Neon’s **pooled** connection string (PgBouncer). The host’s
+first label ends with `-pooler` (`ep-…-pooler.<region>.aws.neon.tech`). The
+direct compute host exhausts under serverless bursts — each instance keeps its
+own pool of 4 — and requests used to hang ~25s. Starved checkouts and queries
+now fail in about 8 seconds. Set the URL in Vercel only. Details:
+`docs/ops/neon-pool.md`.
 
 ## Owner authorization (immutable identity only)
 
@@ -30,8 +42,8 @@ either:
   account).
 
 Both resolve to the canonical `vault-owner-devin` row, which is authorised
-unconditionally — **no allow list is required for this path**. Use the *Sign in*
-tab, not *Create account*.
+unconditionally — **no allow list is required for this path**. Use the _Sign in_
+tab, not _Create account_.
 
 `OWNER_PASSWORD` is read from the environment on every boot and the credential
 hash is **rotated whenever it changes**, so changing the env var is a real
@@ -56,7 +68,7 @@ Order of authority: `OWNER_EMAILS` / `OWNER_ACCOUNTS` → the recorded binding i
 Once an identity is recognised it is recorded in `site_state.owner_user_id`, so
 later requests are decided by id alone.
 
-If the owner email is already held by a *different* account, bootstrap fails and
+If the owner email is already held by a _different_ account, bootstrap fails and
 logs `[owner] bootstrap FAILED — owner sign-in will not work until this is
 fixed`. Check before deploying:
 
@@ -76,7 +88,7 @@ when it fires. Set an allow list and remove it.
 visitor in with a 6-digit code instead of a password. A first-time code creates
 the account.
 
-Set in the host environment (**Production *and* Preview**) or the option simply
+Set in the host environment (**Production _and_ Preview**) or the option simply
 does not render — there is no half-configured state and no button that cannot
 complete:
 
@@ -91,10 +103,12 @@ Behaviour worth knowing:
 
 - Codes are **6 digits, expire in 5 minutes, work once, and are stored hashed**
   (`verification.value` never holds a usable code). Five attempt limit.
-- The send path is rate-limited to **3/minute per IP** (verify: 5/minute).
+- The send path is rate-limited to **3/minute per IP** (verify: 5/minute). Counters
+  live in Postgres (`"rateLimit"`, migration `0010`), shared across serverless
+  instances — not in process memory.
 - **Acceptance is required before a code is sent.** A first-time code creates the
   account, so the age and terms boxes must be ticked to be emailed a code — on
-  both tabs, not just *Create account*. They are hidden again once a code is out,
+  both tabs, not just _Create account_. They are hidden again once a code is out,
   since acceptance is what unlocked sending it.
 - Editing the address after a code is sent steps back to the send step, so the
   visitor is never left typing a code that cannot verify.

@@ -45,17 +45,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # `npm test` runs scripts/**/*.test.mjs (unquoted so Node receives the
+      # glob on Windows, where npm does not strip quotes or expand globs) and
+      # the app unit list. Both are blocking.
       - name: Unit tests
-        run: npm run test:app
-
-      # Advisory, NOT blocking. This suite carries pre-existing failures that
-      # assert the Grok app-builder template's own scaffolding (`.grok/app-env.json`,
-      # `.grok/skills/og/SKILL.md`) and symlink behaviour — neither of which exists
-      # in this repo. It stays visible here so the gap cannot quietly grow, without
-      # making every PR red for reasons unrelated to the app.
-      - name: Scripts suite (advisory)
-        continue-on-error: true
-        run: node --test scripts/*.test.mjs
+        run: npm test
 
       - name: Build
         run: npm run build

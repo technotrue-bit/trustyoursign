@@ -33,9 +33,42 @@ const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]", "::1"] as const;
  * `PREVIEW_ALLOWED_HOSTS`.
  *
  * This exists so that decision never rests on "a platform env var happened to be
- * absent": `previewDeskOpen` requires it, which keeps a stray self-host from
- * handing an owner session to whoever loads the page.
+ * absent": `previewDeskOpen` requires it AND `ALLOW_PREVIEW_OWNER_BIND=1`,
+ * which keeps a stray self-host from handing an owner session to whoever loads
+ * the page. Unset flag fails closed.
  */
+/**
+ * Positive opt-in for the owner preview desk. Anything other than `1`
+ * (unset, empty, `true`, `yes`, `0`) fails closed.
+ */
+export function previewOwnerBindFlagOn(value: string | null | undefined): boolean {
+  return value?.trim() === "1";
+}
+
+export type PreviewOwnerBindInput = {
+  /** `VERCEL` — set on every Vercel deployment, including Preview. */
+  vercel?: string | null;
+  grokAuthClientSecret?: string | null;
+  databaseUrl?: string | null;
+  /** `ALLOW_PREVIEW_OWNER_BIND`. Must be exactly `1`. */
+  allowFlag?: string | null;
+  /** `x-forwarded-host` or `host`, already reduced to one value. */
+  host?: string | null;
+};
+
+/**
+ * Owner preview bind is allowed only when every gate passes:
+ * not Vercel, not a configured deployed auth+database pair, the explicit
+ * `ALLOW_PREVIEW_OWNER_BIND=1` flag, and a preview/loopback host.
+ * Missing the flag fails closed even on localhost.
+ */
+export function canBindPreviewOwner(input: PreviewOwnerBindInput): boolean {
+  if (input.vercel) return false;
+  if (input.grokAuthClientSecret?.trim() && input.databaseUrl?.trim()) return false;
+  if (!previewOwnerBindFlagOn(input.allowFlag)) return false;
+  return isPreviewHost(input.host);
+}
+
 export function isPreviewHost(host: string | null | undefined): boolean {
   if (!host) return false;
   const raw = host.trim().toLowerCase();

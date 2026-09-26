@@ -455,7 +455,11 @@ function Login() {
 
   if (alreadySignedIn) {
     return (
-      <main className="grid vault-page place-items-center bg-bg px-5 text-fg">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="grid vault-page place-items-center bg-bg px-5 text-fg outline-none"
+      >
         <div className="mx-auto max-w-sm text-center">
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">Signed in</p>
           <h1 className="mt-2 font-display text-2xl text-fg italic">Taking you to your profile…</h1>
@@ -507,10 +511,11 @@ function Login() {
   return (
     <main
       id="main-content"
-      className="vault-page relative bg-bg px-5 pb-[var(--hud-bottom)] text-fg md:pb-0"
+      tabIndex={-1}
+      className="vault-page relative bg-bg px-5 pb-[var(--hud-bottom)] text-fg outline-none md:pb-0"
     >
       <div className="mx-auto w-full max-w-md pt-[var(--chrome-top)] pb-8 md:pb-[max(6.5rem,calc(var(--chrome-bottom)+4.25rem))]">
-        <div className="flex items-center justify-between gap-3">
+        <header className="flex items-center justify-between gap-3">
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">
             Trust Your Sign · {SITE_OWNER.name}
           </p>
@@ -520,7 +525,7 @@ function Login() {
           >
             Back to the sky
           </Link>
-        </div>
+        </header>
         <h1 className="mt-2 font-display text-4xl tracking-tight text-fg italic">Keep the sky.</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-muted">
           Sign in to save your chart, and the charts of people who gave you permission.
@@ -607,9 +612,10 @@ function Login() {
         )}
 
         <div className="mt-8 border-t border-border pt-6">
-          <div className="flex gap-2 text-xs tracking-[0.18em] uppercase">
+          <div className="flex gap-2 text-xs tracking-[0.18em] uppercase" role="group" aria-label="Account">
             <button
               type="button"
+              aria-pressed={mode === "in"}
               className={cn("min-h-11 px-2", mode === "in" ? "text-fg" : "text-fg-muted")}
               onClick={() => {
                 setMode("in");
@@ -622,6 +628,7 @@ function Login() {
             </button>
             <button
               type="button"
+              aria-pressed={mode === "up"}
               className={cn("min-h-11 px-2", mode === "up" ? "text-fg" : "text-fg-muted")}
               onClick={() => {
                 setMode("up");
@@ -635,6 +642,7 @@ function Login() {
           </div>
           <form
             className="relative mt-4 space-y-3"
+            aria-label={mode === "up" ? "Create account" : "Sign in"}
             onSubmit={(e) => {
               e.preventDefault();
               void (otpStage === "sent"

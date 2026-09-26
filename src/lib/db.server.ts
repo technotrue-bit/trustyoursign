@@ -1,16 +1,20 @@
 import pg from "pg";
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 import { AppRls } from "./db-rls.server";
+import {
+  databaseTimeoutError,
+  directNeonHostWarning,
+  neonHostKind,
+  neonPoolConfig,
+} from "./db-pool";
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
 
 // An empty/whitespace DATABASE_URL (an easy misconfig in deploy UIs) must mean
 // "unset" — otherwise production would silently run on the PGLite fallback.
-const rawDatabaseUrl =
-  typeof process !== "undefined" ? process.env.DATABASE_URL : undefined;
-const databaseUrl =
-  rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined;
+const rawDatabaseUrl = typeof process !== "undefined" ? process.env.DATABASE_URL : undefined;
+const databaseUrl = rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined;
 
 /**
  * Active backend: real **Neon** when `DATABASE_URL` is set (deployed / configured
@@ -29,14 +33,8 @@ export const dbSource: DbSource = databaseUrl ? "neon" : "pglite";
  *   const rows2 = await sql.query("select * from todos where id = $1", [id]);
  */
 export interface Sql {
-  <T = Record<string, unknown>>(
-    strings: TemplateStringsArray,
-    ...values: unknown[]
-  ): Promise<T[]>;
-  query<T = Record<string, unknown>>(
-    text: string,
-    params?: unknown[],
-  ): Promise<T[]>;
+  <T = Record<string, unknown>>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T[]>;
+  query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
 }
 
 /**
@@ -50,6 +48,7 @@ const globalRef = globalThis as typeof globalThis & {
   __pgSqlPromise__?: Promise<Sql>;
   __neonPool__?: import("pg").Pool;
   __neonTypesConfigured__?: boolean;
+  __neonPoolWarned__?: boolean;
   __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
   __pgliteMigrateChain__?: Promise<void>;
 };
@@ -72,15 +71,23 @@ const OID_INTERVAL = 1186;
 const identity = (v: string) => v;
 
 /**
- * One shared Neon `pg.Pool` for the process (modest max). Used by `getSql()` and
+ * One shared Neon `pg.Pool` for the process (max 4). Used by `getSql()` and
  * Better Auth so they do not open competing pools against the same DATABASE_URL.
  * Throws when DATABASE_URL is unset (PGLite path). Sync so auth can bind at boot.
+ *
+ * `DATABASE_URL` must be Neon's pooled (PgBouncer) string in production — see
+ * `docs/ops/neon-pool.md`. Checkout and query timeouts fail fast (~8s).
  */
 export function getNeonPool(): import("pg").Pool {
   if (!databaseUrl) {
     throw new Error("getNeonPool() requires DATABASE_URL");
   }
   if (globalRef.__neonPool__) return globalRef.__neonPool__;
+  if (!globalRef.__neonPoolWarned__) {
+    globalRef.__neonPoolWarned__ = true;
+    const warning = directNeonHostWarning(neonHostKind(databaseUrl));
+    if (warning) console.warn(warning);
+  }
   // `pg` is imported STATICALLY at the top of this file — deliberately, not via
   // `createRequire`. A runtime require is invisible to the bundler, so the
   // driver never made it into the deployed function and the Neon path died with
@@ -94,7 +101,7 @@ export function getNeonPool(): import("pg").Pool {
     types.setTypeParser(OID_INTERVAL, identity);
     globalRef.__neonTypesConfigured__ = true;
   }
-  globalRef.__neonPool__ = new Pool({ connectionString: databaseUrl, max: 4 });
+  globalRef.__neonPool__ = new Pool(neonPoolConfig(databaseUrl));
   return globalRef.__neonPool__;
 }
 
@@ -115,7 +122,6 @@ function toSql(run: Run): Sql {
     run<T>(text, params);
   return sql;
 }
-
 
 /** Apply request-scoped RLS GUCs on a connected client (SET LOCAL). */
 async function applyRlsGucs(query: (text: string, params?: unknown[]) => Promise<unknown>) {
@@ -138,30 +144,35 @@ function createNeonSql(): Promise<Sql> {
     // Regular Postgres driver: node-postgres (`pg`) — works directly with Neon's
     // pooled endpoint. One shared pool per process (see getNeonPool).
     const pool = getNeonPool();
-    return toSql(async <T>(text: string, params: unknown[]) => {
-      const ctx = AppRls.current();
-      if (!ctx) {
-        const res = await pool.query(text, params);
-        return res.rows as T[];
-      }
-      const client = await pool.connect();
+    const run = async <T>(text: string, params: unknown[]): Promise<T[]> => {
       try {
-        await client.query("BEGIN");
-        await applyRlsGucs((sql, p) => client.query(sql, p as unknown[] | undefined));
-        const res = await client.query(text, params);
-        await client.query("COMMIT");
-        return res.rows as T[];
-      } catch (err) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {
-          /* keep original */
+        const ctx = AppRls.current();
+        if (!ctx) {
+          const res = await pool.query(text, params);
+          return res.rows as T[];
         }
-        throw err;
-      } finally {
-        client.release();
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          await applyRlsGucs((sql, p) => client.query(sql, p as unknown[] | undefined));
+          const res = await client.query(text, params);
+          await client.query("COMMIT");
+          return res.rows as T[];
+        } catch (err) {
+          try {
+            await client.query("ROLLBACK");
+          } catch {
+            /* keep original */
+          }
+          throw err;
+        } finally {
+          client.release();
+        }
+      } catch (err) {
+        throw databaseTimeoutError(err) ?? err;
       }
-    });
+    };
+    return toSql(run);
   })().catch((err) => {
     globalRef.__pgSqlPromise__ = undefined;
     throw err;
@@ -206,9 +217,7 @@ async function createPgliteSql(): Promise<Sql> {
       import: "default",
       eager: true,
     }) as Record<string, string>;
-    const doneRows = await pg.query<{ name: string }>(
-      "select name from _migrations",
-    );
+    const doneRows = await pg.query<{ name: string }>("select name from _migrations");
     const done = doneRows.rows.map((r) => r.name);
     for (const { name, path } of pendingMigrations(Object.keys(migrations), done)) {
       // Apply + record atomically (parity with scripts/migrate.mjs) so a failed

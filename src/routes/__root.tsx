@@ -81,7 +81,21 @@ export const Route = createRootRoute({
         />
       </head>
       <body style={{ background: PWA_THEME_COLOR, color: "#efe8dc", margin: 0 }}>
-        <a href="#main-content" className="skip-to-content">
+        <a
+          href="#main-content"
+          className="skip-to-content"
+          onClick={(e) => {
+            const chrome = document.getElementById("sky-chrome");
+            // While the dock is inert (opening veil, dive), land on main so the
+            // next Tab reaches Skip. Once the dock is live, land on it.
+            const dockLive = chrome != null && chrome.closest("[inert]") == null;
+            const target = dockLive ? chrome : document.getElementById("main-content");
+            if (!target) return;
+            e.preventDefault();
+            if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+            target.focus();
+          }}
+        >
           Skip to content
         </a>
         <PreviewHostBridge />

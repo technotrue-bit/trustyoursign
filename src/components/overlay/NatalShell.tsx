@@ -71,9 +71,12 @@ function Chrome() {
     <>
       <div className="pointer-events-none absolute inset-0 z-0" data-sky-guide="sky" aria-hidden />
       {mode !== "bones" ? (
-        <header className="pointer-events-none absolute top-0 right-0 left-0 z-20 flex items-start justify-between gap-4 p-4 pt-[var(--chrome-top)] pl-[max(4.75rem,calc(var(--safe-left)+3.5rem))] md:p-6 md:pt-[max(1.25rem,var(--safe-top))] md:pl-32">
+        <header
+          aria-label="Chart"
+          className="pointer-events-none absolute top-0 right-0 left-0 z-20 flex items-start justify-between gap-4 p-4 pt-[var(--chrome-top)] pl-[max(4.75rem,calc(var(--safe-left)+3.5rem))] md:p-6 md:pt-[max(1.25rem,var(--safe-top))] md:pl-32"
+        >
           <div>
-            <p className="font-display text-xl tracking-tight text-fg italic">{title}</p>
+            <h1 className="font-display text-xl tracking-tight text-fg italic">{title}</h1>
             <p className="hidden mt-0.5 text-xs tracking-[0.16em] text-fg-muted uppercase md:block">{who}</p>
           </div>
           <p className="hidden max-w-56 text-right text-xs leading-relaxed text-fg-subtle md:block">
@@ -134,7 +137,7 @@ function Chrome() {
                     tourRoom && m.id === tourRoom ? "ring-1 ring-accent" : "",
                   )}
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-4" aria-hidden />
                   <span>{m.label}</span>
                 </button>
               </li>
