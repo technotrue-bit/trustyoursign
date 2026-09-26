@@ -43,7 +43,7 @@ async function main() {
   // Request-path timeouts live on the app pool (src/lib/db-pool.ts). Migrations
   // keep a single connection and no 8s query cap so a file is not cut off.
   // Production DATABASE_URL should still be the Neon pooled host — see
-  // docs/ops/neon-pool.md. This log does not print the URL.
+  // docs/ops/neon-pool.md. Do not print the URL.
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
   const client = await pool.connect();
   try {
