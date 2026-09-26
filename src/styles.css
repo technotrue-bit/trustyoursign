@@ -578,6 +578,76 @@
     0 0 20px color-mix(in oklab, #c9a15b 18%, transparent);
 }
 
+/* Home HUD — starlight orb between the beta chip and Pause / Sign in. */
+.feedback-orb {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, #e4c98a 62%, transparent);
+  background:
+    radial-gradient(circle at 36% 30%, rgba(255, 236, 196, 0.72), transparent 36%),
+    radial-gradient(circle at 50% 58%, rgba(201, 161, 91, 0.42), transparent 58%),
+    radial-gradient(circle at 50% 50%, #2a241c 0%, #0c0b0a 70%);
+  box-shadow:
+    0 0 0 1px rgba(8, 7, 6, 0.72),
+    0 0 14px rgba(201, 161, 91, 0.38),
+    0 0 28px rgba(8, 7, 6, 0.55),
+    inset 0 0 10px rgba(255, 228, 180, 0.22);
+  animation: feedback-orb-breathe 4.8s ease-in-out infinite;
+}
+
+.feedback-orb-mark {
+  width: 0.95rem;
+  height: 0.95rem;
+  fill: #f6edd8;
+  filter: drop-shadow(0 0 4px rgba(255, 228, 180, 0.85));
+}
+
+.feedback-orb:hover,
+.feedback-orb:focus-visible {
+  border-color: #f0d7a2;
+  box-shadow:
+    0 0 0 1px rgba(8, 7, 6, 0.72),
+    0 0 18px rgba(228, 196, 130, 0.62),
+    0 0 32px rgba(8, 7, 6, 0.5),
+    inset 0 0 12px rgba(255, 236, 200, 0.35);
+}
+
+.feedback-orb:focus-visible {
+  outline: 2px solid #f5efe3;
+  outline-offset: 3px;
+}
+
+@keyframes feedback-orb-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(8, 7, 6, 0.72),
+      0 0 10px rgba(201, 161, 91, 0.28),
+      0 0 22px rgba(8, 7, 6, 0.5),
+      inset 0 0 8px rgba(255, 228, 180, 0.16);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(8, 7, 6, 0.72),
+      0 0 18px rgba(228, 196, 130, 0.55),
+      0 0 30px rgba(8, 7, 6, 0.45),
+      inset 0 0 12px rgba(255, 236, 200, 0.32);
+  }
+}
+
+html.sky-paused .feedback-orb {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feedback-orb {
+    animation: none;
+  }
+}
+
 .sky-hud-footer {
   color: color-mix(in oklab, #efe8dc 68%, var(--color-fg-subtle));
   font-weight: 600;
