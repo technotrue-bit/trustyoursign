@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { PREVIEW_HISTORY_ROOT_KEY } from "@/lib/preview-host-bridge";
 import {
   hasInsideHistoryEntry,
+  claimClosesOnHistoryLeave,
   historyModeForPlace,
   historyStateIsRoot,
   markInsideHistoryEntry,
@@ -151,6 +152,66 @@ describe("historyModeForPlace", () => {
     assert.equal(
       historyModeForPlace({ kind: "home" }, { kind: "inside", signId: "aries", star: 0 }),
       "push",
+    );
+  });
+
+  it("closes an in-galaxy birth sheet when Back leaves that galaxy", () => {
+    assert.equal(
+      claimClosesOnHistoryLeave({
+        nextKind: "belt",
+        exploring: true,
+        hasClaim: true,
+        hasSession: false,
+      }),
+      true,
+    );
+    assert.equal(
+      claimClosesOnHistoryLeave({
+        nextKind: "home",
+        exploring: true,
+        hasClaim: true,
+        hasSession: false,
+      }),
+      true,
+    );
+  });
+
+  it("keeps a claim that is not riding an open galaxy", () => {
+    assert.equal(
+      claimClosesOnHistoryLeave({
+        nextKind: "inside",
+        exploring: true,
+        hasClaim: true,
+        hasSession: false,
+      }),
+      false,
+    );
+    assert.equal(
+      claimClosesOnHistoryLeave({
+        nextKind: "belt",
+        exploring: false,
+        hasClaim: true,
+        hasSession: false,
+      }),
+      false,
+    );
+    assert.equal(
+      claimClosesOnHistoryLeave({
+        nextKind: "belt",
+        exploring: true,
+        hasClaim: true,
+        hasSession: true,
+      }),
+      false,
+    );
+    assert.equal(
+      claimClosesOnHistoryLeave({
+        nextKind: "belt",
+        exploring: true,
+        hasClaim: false,
+        hasSession: false,
+      }),
+      false,
     );
   });
 

@@ -130,6 +130,21 @@ export function historyModeForPlace(
   return "replace";
 }
 
+/**
+ * The birth sheet is not its own history entry. Browser Back pops the galaxy
+ * URL underneath it. While that galaxy is still open, the sheet has to close
+ * with the leave — otherwise it stays over the belt after the exit finishes.
+ * A claim restored on the belt (no explore in progress) is left alone.
+ */
+export function claimClosesOnHistoryLeave(input: {
+  nextKind: SkyPlace["kind"];
+  exploring: boolean;
+  hasClaim: boolean;
+  hasSession: boolean;
+}): boolean {
+  return input.nextKind !== "inside" && input.exploring && input.hasClaim && !input.hasSession;
+}
+
 /** True when this entry is the preview Back floor, or the only entry in the stack. */
 export function historyStateIsRoot(state: unknown, historyLength: number): boolean {
   if (

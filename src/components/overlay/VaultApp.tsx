@@ -33,6 +33,7 @@ import { readGuestDraft } from "@/lib/ui/guestDraft";
 import { readMotionPaused } from "@/lib/ui/motionPreference";
 import {
   historyEntryIsRoot,
+  claimClosesOnHistoryLeave,
   historyModeForPlace,
   markInsideHistoryEntry,
   placeFromLiveState,
@@ -111,6 +112,17 @@ function applyBootPlace(place: SkyPlace): Promise<boolean> {
 
 /** Apply a history pop / forward. An open galaxy unwinds; it is not snapped shut. */
 function followHistoryPlace(place: SkyPlace) {
+  const st = useSessionStore.getState();
+  if (
+    claimClosesOnHistoryLeave({
+      nextKind: place.kind,
+      exploring: exploringSign(),
+      hasClaim: st.claim != null,
+      hasSession: st.session != null,
+    })
+  ) {
+    st.closeClaim();
+  }
   if (place.kind !== "inside" && exploringSign()) {
     leaveSignGalaxy();
     return;
