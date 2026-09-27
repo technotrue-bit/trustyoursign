@@ -739,16 +739,17 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         uHubUv: { value: Vector2 };
         uAspect: { value: number };
         uLifeKey: { value: number };
+        uDwellVideo: { value: Texture | null };
+        uPoseMap: { value: Texture | null };
+        uPoseReady: { value: number };
+        uDwellBlend: { value: number };
+        uCoverRepeat: { value: Vector2 };
+        uCoverOffset: { value: Vector2 };
       })
     | null
   >(null);
   const dwellTex = useRef<VideoTexture | null>(null);
   const dwellPoseRt = useRef<WebGLRenderTarget | null>(null);
-  const dwellPoseUniforms = useRef<{
-    uStillMap: { value: CanvasTexture | null };
-    uPoseMap: { value: Texture | null };
-    uPoseReady: { value: number };
-  } | null>(null);
   const dwellStall = useRef(0);
   const dwellBlend = useRef(0);
   const dwellPhase = useRef<"idle" | "wait" | "in" | "play" | "out">("idle");
@@ -850,11 +851,20 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const mat = plateMat.current;
     if (!mat || plateBurst.current) return;
     const params = burstParams(sign.id, sign.palette);
+    const fallback = dwellPoseFallbackTexture();
     const uniforms = {
       uDissolve: { value: 0 },
       uHubUv: { value: new Vector2(0.5, 0.5) },
       uAspect: { value: 16 / 9 },
       uLifeKey: { value: 0 },
+      // Motion is added on this plate. A second mesh that redraws the painting
+      // changes the way back even when the clip frame matches the still.
+      uDwellVideo: { value: fallback as Texture | null },
+      uPoseMap: { value: fallback as Texture | null },
+      uPoseReady: { value: 0 },
+      uDwellBlend: { value: 0 },
+      uCoverRepeat: { value: new Vector2(1, 1) },
+      uCoverOffset: { value: new Vector2(0, 0) },
       // Mask numbers (and the seed derivation) come from signBurst — the same
       // ones dissolveMaskDistance is tested with. Never hand-build these.
       ...plateDissolveUniforms(params),
@@ -880,6 +890,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             "uniform float uRadius;",
             "uniform float uAspect;",
             "uniform float uLifeKey;",
+            "uniform sampler2D uDwellVideo;",
+            "uniform sampler2D uPoseMap;",
+            "uniform float uPoseReady;",
+            "uniform float uDwellBlend;",
+            "uniform vec2 uCoverRepeat;",
+            "uniform vec2 uCoverOffset;",
           ].join("\n"),
         )
         .replace(
@@ -893,64 +909,23 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             "  float lifeLuma = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));",
             "  diffuseColor.a *= smoothstep(0.02, 0.06, lifeLuma);",
             "}",
-          ].join("\n"),
-        );
-    };
-    // Only this material carries the dissolve; keep the program cache honest.
-    mat.customProgramCacheKey = () => "tys-plate-dissolve-life";
-    mat.needsUpdate = true;
-  }, [sign.id, sign.palette]);
-
-  // The painted plate is mostly transparent, so the starfield shows through.
-  // The clip is an opaque black frame. Mask it with the still's alpha or the
-  // fade covers the stars with a black rectangle.
-  useEffect(() => {
-    const mat = lifeMat.current;
-    if (!mat || !artTex) return;
-    const uniforms = {
-      uStillMap: { value: artTex as CanvasTexture | null },
-      uPoseMap: { value: dwellPoseRt.current?.texture ?? dwellPoseFallbackTexture() },
-      uPoseReady: { value: dwellPoseRt.current ? 1 : 0 },
-    };
-    dwellPoseUniforms.current = uniforms;
-    mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uStillMap = uniforms.uStillMap;
-      shader.uniforms.uPoseMap = uniforms.uPoseMap;
-      shader.uniforms.uPoseReady = uniforms.uPoseReady;
-      shader.vertexShader = shader.vertexShader
-        .replace("#include <common>", "#include <common>\nvarying vec2 vTysStillUv;")
-        .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvTysStillUv = uv;");
-      shader.fragmentShader = shader.fragmentShader
-        .replace(
-          "#include <common>",
-          [
-            "#include <common>",
-            "varying vec2 vTysStillUv;",
-            "uniform sampler2D uStillMap;",
-            "uniform sampler2D uPoseMap;",
-            "uniform float uPoseReady;",
-          ].join("\n"),
-        )
-        .replace(
-          "#include <map_fragment>",
-          [
-            "#include <map_fragment>",
-            "{",
-            "  vec4 tysStill = texture2D(uStillMap, vTysStillUv);",
-            "  #ifdef USE_MAP",
-            "    if (uPoseReady > 0.5) {",
-            "      vec4 tysPose = texture2D(uPoseMap, vMapUv);",
-            "      diffuseColor.rgb = clamp(tysStill.rgb + (diffuseColor.rgb - tysPose.rgb), 0.0, 1.0);",
-            "    }",
-            "  #endif",
-            "  diffuseColor.a *= tysStill.a;",
+            // Cover UV matches fitDwellCoverUv. The pose is already linear.
+            // The video is not an sRGB texture, so decode it the same way the
+            // plate decodes a clip. Blend 0, or a frame that matches the pose,
+            // leaves this write identical to the painting.
+            "if (uPoseReady > 0.5 && uDwellBlend > 0.001) {",
+            "  vec2 tysVideoUv = vTysPlateUv * uCoverRepeat + uCoverOffset;",
+            "  vec3 tysVid = sRGBTransferEOTF(texture2D(uDwellVideo, tysVideoUv)).rgb;",
+            "  vec3 tysPose = texture2D(uPoseMap, tysVideoUv).rgb;",
+            "  diffuseColor.rgb = clamp(diffuseColor.rgb + (tysVid - tysPose) * uDwellBlend, 0.0, 1.0);",
             "}",
           ].join("\n"),
         );
     };
-    mat.customProgramCacheKey = () => "tys-dwell-motion-delta";
+    // Only this material carries the dissolve; keep the program cache honest.
+    mat.customProgramCacheKey = () => "tys-plate-dwell-delta";
     mat.needsUpdate = true;
-  }, [artTex]);
+  }, [sign.id, sign.palette]);
 
   useFrame(({ clock, camera, gl }, dt) => {
     const g = group.current;
@@ -959,10 +934,13 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const clearDwellPose = () => {
       const tex = dwellPoseRt.current;
       dwellPoseRt.current = null;
-      const uniforms = dwellPoseUniforms.current;
+      const uniforms = plateBurst.current;
       if (uniforms) {
         uniforms.uPoseReady.value = 0;
-        uniforms.uPoseMap.value = dwellPoseFallbackTexture();
+        uniforms.uDwellBlend.value = 0;
+        const fallback = dwellPoseFallbackTexture();
+        uniforms.uPoseMap.value = fallback;
+        uniforms.uDwellVideo.value = fallback;
       }
       if (!tex) return;
       try {
@@ -1235,7 +1213,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
                 dwellPhase.current = "wait";
                 dwellStall.current += dt;
               } else {
-                const uniforms = dwellPoseUniforms.current;
+                const uniforms = plateBurst.current;
                 const videoTex = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
                 dwellTex.current = videoTex;
                 const poseTex = uniforms ? renderDwellPose(gl, videoTex, dwellPoseRt) : null;
@@ -1245,13 +1223,9 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
                 } else {
                   uniforms.uPoseMap.value = poseTex;
                   uniforms.uPoseReady.value = 1;
-                  if (lifeMat.current) {
-                    if (lifeMat.current.map !== videoTex) {
-                      lifeMat.current.map = videoTex;
-                      lifeMat.current.needsUpdate = true;
-                    }
-                    lifeMat.current.visible = true;
-                  }
+                  uniforms.uDwellVideo.value = videoTex;
+                  uniforms.uCoverRepeat.value.set(videoTex.repeat.x, videoTex.repeat.y);
+                  uniforms.uCoverOffset.value.set(videoTex.offset.x, videoTex.offset.y);
                   dwellStall.current = 0;
                   dwellHold.current = false;
                   dwellPhase.current = "in";
@@ -1331,38 +1305,35 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           index === 0 && !reducedMotion
             ? 0.985 + Math.sin(galaxyTravel.shaderTime * 0.9 + 0.6) * 0.015
             : 1;
-        // The still stays under the clip the whole time. Dropping it when the
-        // blend hits 1 lets the sky through the strokes, which is the hitch
-        // at both cuts. Life opacity alone does the fade.
+        // One plate write. The blend only scales the clip's motion, so a frame
+        // that matches the held pose is the painting. The second mesh stays
+        // hidden: drawing it on top redraws the strokes and darkens the return.
         mat.opacity = plateOp * stillMul;
         mat.map = artTex;
-        if (lifeArt.current && lifeMat.current) {
-          const lifeOp = plateOp * dwellBlend.current * stillMul;
-          const showLife = lifeOp > 0.004;
-          lifeArt.current.visible = showLife;
-          lifeArt.current.scale.set(plane.x * ariesBreath, plane.y * ariesBreath, 1);
-          const clipVideo = primeDwellClip(sign.id);
-          if (clipVideo && dwellVideoFrameReady(clipVideo) && dwellBlend.current > 0.001) {
+        const burst = plateBurst.current;
+        if (burst) {
+          burst.uDwellBlend.value = dwellBlend.current;
+          const clipVideo =
+            burst.uPoseReady.value > 0.5 && dwellBlend.current > 0.001
+              ? primeDwellClip(sign.id)
+              : null;
+          if (clipVideo && dwellVideoFrameReady(clipVideo)) {
             dwellTex.current = bindDwellTexture(clipVideo, dwellTex.current, aspect, sign.id);
             if (dwellTex.current) {
-              if (lifeMat.current.map !== dwellTex.current) {
-                lifeMat.current.map = dwellTex.current;
-                lifeMat.current.needsUpdate = true;
-              }
-              fitDwellCoverUv(dwellTex.current, clipVideo, aspect, sign.id);
+              burst.uDwellVideo.value = dwellTex.current;
+              burst.uCoverRepeat.value.set(dwellTex.current.repeat.x, dwellTex.current.repeat.y);
+              burst.uCoverOffset.value.set(dwellTex.current.offset.x, dwellTex.current.offset.y);
               // Playback presents frames through requestVideoFrameCallback.
               // A held pose does not, so the paused frame never reaches the GPU
               // unless we ask for the upload ourselves.
               if (clipVideo.paused || dwellPhase.current === "in") dwellTex.current.needsUpdate = true;
             }
           }
-          lifeMat.current.opacity = lifeOp;
-          // releaseLife sets material.visible false, and Three skips the draw
-          // even when the mesh is visible. Leo is hidden during the intro, so
-          // without this the still holds and then pops off when the blend hits 1.
-          lifeMat.current.visible = showLife;
-          lifeMat.current.depthTest = false;
-          lifeMat.current.alphaTest = 0.04;
+        }
+        if (lifeArt.current) lifeArt.current.visible = false;
+        if (lifeMat.current) {
+          lifeMat.current.visible = false;
+          lifeMat.current.opacity = 0;
         }
         // Measured evidence for M11: what the entered sign's plate is actually
         // drawn at. Only the entered station publishes, so a neighbour's frame
