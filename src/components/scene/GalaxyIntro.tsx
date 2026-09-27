@@ -758,6 +758,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const dwellHold = useRef(false);
   /** Still plate after the fade, before the walk. The sky must not move on the cut. */
   const dwellRest = useRef(0);
+  /** currentTime last pushed to the GPU. A paused clip must not re-upload. */
+  const dwellUploadedAt = useRef(-1);
   const lifeArt = useRef<Mesh>(null);
   const lifeMat = useRef<MeshBasicMaterial | null>(null);
   const shellWrap = useRef<Group>(null);
@@ -942,6 +944,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         uniforms.uPoseMap.value = fallback;
         uniforms.uDwellVideo.value = fallback;
       }
+      if (dwellPoseStage) dwellPoseStage.mat.uniforms.tMap!.value = dwellPoseFallbackTexture();
+      dwellUploadedAt.current = -1;
       if (!tex) return;
       try {
         tex.dispose();
@@ -1324,9 +1328,17 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
               burst.uCoverRepeat.value.set(dwellTex.current.repeat.x, dwellTex.current.repeat.y);
               burst.uCoverOffset.value.set(dwellTex.current.offset.x, dwellTex.current.offset.y);
               // Playback presents frames through requestVideoFrameCallback.
-              // A held pose does not, so the paused frame never reaches the GPU
-              // unless we ask for the upload ourselves.
-              if (clipVideo.paused || dwellPhase.current === "in") dwellTex.current.needsUpdate = true;
+              // The opening fade still has to push the parked frame. Once the
+              // clip is paused, that frame is already on the GPU — uploading
+              // it again hits an empty element (texImage2D: no video).
+              const opening = dwellPhase.current === "in" || dwellPhase.current === "wait";
+              if (opening && dwellVideoFrameReady(clipVideo)) {
+                const stamp = clipVideo.currentTime;
+                if (Math.abs(stamp - dwellUploadedAt.current) > 0.0005) {
+                  dwellTex.current.needsUpdate = true;
+                  dwellUploadedAt.current = stamp;
+                }
+              }
             }
           }
         }
