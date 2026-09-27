@@ -1008,7 +1008,6 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           !galaxyTravel.dwellClipDone &&
           Boolean(dwellClipFor(sign.id));
         const mayPlay = dwellClipMayPlay(index);
-        const fadeStep = dt / Math.max(0.001, DWELL_CROSSFADE_SEC);
         // One stalled paint must not swallow the whole fade. 60fps is unchanged.
         const inStep = Math.min(dt, 1 / 30) / Math.max(0.001, DWELL_CROSSFADE_SEC);
         const winding =
@@ -1103,24 +1102,26 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             if (dwellBlend.current >= 1) dwellPhase.current = "play";
           } else if (dwellPhase.current === "play") {
             dwellBlend.current = 1;
-            if (video && video.paused && !video.ended) void video.play().catch(() => {});
+            if (video && video.paused && !video.ended && !dwellEnded.current) {
+              void video.play().catch(() => {});
+            }
             const dur = video && Number.isFinite(video.duration) ? video.duration : 0;
             const remain = video ? dur - video.currentTime : 99;
-            // The clip eases back into the pose. Fade across that settle
-            // instead of freezing the last frame and then cutting.
-            const settling =
-              !!video && video.currentTime > 0.4 && dur > 1 && remain <= DWELL_CROSSFADE_SEC;
-            if (video?.ended || settling) {
+            // Hold the pose the clip settles on, then fade. Fading across the
+            // last 200ms of the file lets one long paint swallow the return.
+            const poseBack =
+              !!video && video.currentTime > 0.4 && dur > 1 && remain <= 0.05;
+            if (poseBack || video?.ended) {
+              if (video && !video.ended) video.pause();
               dwellEnded.current = true;
               dwellPhase.current = "out";
             }
           }
         } else if (winding) {
-          if (galaxyTravel.paused) pauseDwellClip(sign.id);
+          if (galaxyTravel.paused || dwellEnded.current) pauseDwellClip(sign.id);
           if (dwellPhase.current !== "out") dwellPhase.current = "out";
-          // A swipe can land in one long paint. Cap that fade the same way
-          // as the start. The natural end still tracks the last 200ms of the file.
-          const outStep = dwellEnded.current ? fadeStep : inStep;
+          // A swipe or a stalled paint must not swallow the fade.
+          const outStep = inStep;
           dwellBlend.current = Math.max(0, dwellBlend.current - outStep);
           if (dwellBlend.current <= 0) {
             finishDwellFade(dwellEnded.current, galaxyTravel.paused && lifeOwns);
