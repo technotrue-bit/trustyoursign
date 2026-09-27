@@ -119,12 +119,22 @@ export function primeDwellClip(id: SignId): HTMLVideoElement | null {
   return video;
 }
 
-/** Keep a paused element only for the aimed sign. Drops every other clip. */
+/**
+ * Keep a paused element only for the aimed sign. Drops every other clip that
+ * has not started. A clip that has left frame 0 stays until the station fade
+ * calls `stopDwellClip` — removing src here uploads an empty frame.
+ */
 export function syncDwellPrefetch(id: SignId | null) {
   if (typeof document === "undefined") return;
   const tracked = new Set([...videos.keys(), ...primeArmedAt.keys()]);
   for (const key of tracked) {
-    if (key !== id) stopDwellClip(key);
+    if (key === id) continue;
+    const video = videos.get(key);
+    if (video && video.currentTime > 0.02) {
+      video.pause();
+      continue;
+    }
+    stopDwellClip(key);
   }
   if (id && DWELL_CLIPS[id]) primeDwellClip(id);
 }
