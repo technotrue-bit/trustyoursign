@@ -586,6 +586,73 @@ function fitDwellCoverUv(
   }
 }
 
+let dwellPoseFallback: CanvasTexture | null = null;
+
+function dwellPoseFallbackTexture(): CanvasTexture {
+  if (dwellPoseFallback) return dwellPoseFallback;
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = LinearFilter;
+  tex.magFilter = LinearFilter;
+  dwellPoseFallback = tex;
+  return tex;
+}
+
+/**
+ * Frame 0 of the clip, full video pixels. The life shader adds only the
+ * change from this pose onto the painting, so a darker first frame does not
+ * dim the plate when the fade starts or ends.
+ */
+function snapshotDwellPose(video: HTMLVideoElement): CanvasTexture | null {
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (w < 3 || h < 3) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  try {
+    ctx.drawImage(video, 0, 0, w, h);
+  } catch {
+    return null;
+  }
+  const size = 24;
+  const spots = [
+    [w * 0.5, h * 0.5],
+    [w * 0.3, h * 0.4],
+    [w * 0.7, h * 0.4],
+    [w * 0.5, h * 0.72],
+  ];
+  let max = 0;
+  for (const [sx, sy] of spots) {
+    const x = Math.max(0, Math.min(w - size, Math.floor(sx - size / 2)));
+    const y = Math.max(0, Math.min(h - size, Math.floor(sy - size / 2)));
+    const data = ctx.getImageData(x, y, size, size).data;
+    for (let i = 0; i < data.length; i += 16) {
+      const luma = data[i]! > data[i + 1]! ? data[i]! : data[i + 1]!;
+      if (luma > max) max = luma;
+    }
+    if (max > 24) break;
+  }
+  // A blank grab would paint the whole clip on top of the still.
+  if (max < 12) return null;
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = LinearFilter;
+  tex.magFilter = LinearFilter;
+  tex.wrapS = ClampToEdgeWrapping;
+  tex.wrapT = ClampToEdgeWrapping;
+  tex.flipY = true;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 function releaseDwellTexture(
   mat: MeshBasicMaterial | null,
   still: CanvasTexture | null,
@@ -633,6 +700,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     | null
   >(null);
   const dwellTex = useRef<VideoTexture | null>(null);
+  const dwellPoseTex = useRef<CanvasTexture | null>(null);
+  const dwellPoseUniforms = useRef<{
+    uStillMap: { value: CanvasTexture | null };
+    uPoseMap: { value: CanvasTexture | null };
+    uPoseReady: { value: number };
+  } | null>(null);
   const dwellStall = useRef(0);
   const dwellBlend = useRef(0);
   const dwellPhase = useRef<"idle" | "wait" | "in" | "play" | "out">("idle");
@@ -791,16 +864,29 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   useEffect(() => {
     const mat = lifeMat.current;
     if (!mat || !artTex) return;
-    const uniforms = { uStillMap: { value: artTex } };
+    const uniforms = {
+      uStillMap: { value: artTex as CanvasTexture | null },
+      uPoseMap: { value: dwellPoseTex.current ?? dwellPoseFallbackTexture() },
+      uPoseReady: { value: dwellPoseTex.current ? 1 : 0 },
+    };
+    dwellPoseUniforms.current = uniforms;
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uStillMap = uniforms.uStillMap;
+      shader.uniforms.uPoseMap = uniforms.uPoseMap;
+      shader.uniforms.uPoseReady = uniforms.uPoseReady;
       shader.vertexShader = shader.vertexShader
         .replace("#include <common>", "#include <common>\nvarying vec2 vTysStillUv;")
         .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvTysStillUv = uv;");
       shader.fragmentShader = shader.fragmentShader
         .replace(
           "#include <common>",
-          "#include <common>\nvarying vec2 vTysStillUv;\nuniform sampler2D uStillMap;",
+          [
+            "#include <common>",
+            "varying vec2 vTysStillUv;",
+            "uniform sampler2D uStillMap;",
+            "uniform sampler2D uPoseMap;",
+            "uniform float uPoseReady;",
+          ].join("\n"),
         )
         .replace(
           "#include <map_fragment>",
@@ -808,12 +894,18 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             "#include <map_fragment>",
             "{",
             "  vec4 tysStill = texture2D(uStillMap, vTysStillUv);",
+            "  #ifdef USE_MAP",
+            "    if (uPoseReady > 0.5) {",
+            "      vec4 tysPose = texture2D(uPoseMap, vMapUv);",
+            "      diffuseColor.rgb = clamp(tysStill.rgb + (diffuseColor.rgb - tysPose.rgb), 0.0, 1.0);",
+            "    }",
+            "  #endif",
             "  diffuseColor.a *= tysStill.a;",
             "}",
           ].join("\n"),
         );
     };
-    mat.customProgramCacheKey = () => "tys-dwell-still-mask";
+    mat.customProgramCacheKey = () => "tys-dwell-motion-delta";
     mat.needsUpdate = true;
   }, [artTex]);
 
@@ -821,6 +913,21 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const g = group.current;
     const mesh = cores.current;
     if (!g || !mesh) return;
+    const clearDwellPose = () => {
+      const tex = dwellPoseTex.current;
+      dwellPoseTex.current = null;
+      const uniforms = dwellPoseUniforms.current;
+      if (uniforms) {
+        uniforms.uPoseReady.value = 0;
+        uniforms.uPoseMap.value = dwellPoseFallbackTexture();
+      }
+      if (!tex) return;
+      try {
+        tex.dispose();
+      } catch {
+        /* already detached */
+      }
+    };
     const releaseLife = () => {
       if (galaxyTravel.dwellClipIndex === index) pauseDwellClip(sign.id);
       dwellBlend.current = 0;
@@ -828,6 +935,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       dwellEnded.current = false;
       dwellHold.current = false;
       dwellRest.current = 0;
+      clearDwellPose();
       releaseDwellTexture(lifeMat.current, null, dwellTex);
       if (plateMat.current) plateMat.current.map = artTex;
       if (lifeMat.current) {
@@ -1021,6 +1129,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           dwellBlend.current = 0;
           dwellPhase.current = "idle";
           dwellEnded.current = false;
+          clearDwellPose();
           releaseDwellTexture(lifeMat.current, null, dwellTex);
           if (lifeMat.current) {
             lifeMat.current.opacity = 0;
@@ -1083,18 +1192,38 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
                 dwellPhase.current = "wait";
                 dwellStall.current += dt;
               } else {
-                dwellTex.current = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
-                if (lifeMat.current && dwellTex.current) {
-                  lifeMat.current.map = dwellTex.current;
-                  lifeMat.current.needsUpdate = true;
-                  lifeMat.current.visible = true;
+                const poseTex = snapshotDwellPose(video);
+                const uniforms = dwellPoseUniforms.current;
+                if (!poseTex || !uniforms) {
+                  dwellPhase.current = "wait";
+                  dwellStall.current += dt;
+                } else {
+                  const prevPose = dwellPoseTex.current;
+                  dwellPoseTex.current = poseTex;
+                  uniforms.uPoseMap.value = poseTex;
+                  uniforms.uPoseReady.value = 1;
+                  if (prevPose && prevPose !== poseTex) {
+                    try {
+                      prevPose.dispose();
+                    } catch {
+                      /* already detached */
+                    }
+                  }
+                  dwellTex.current = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
+                  if (lifeMat.current && dwellTex.current) {
+                    if (lifeMat.current.map !== dwellTex.current) {
+                      lifeMat.current.map = dwellTex.current;
+                      lifeMat.current.needsUpdate = true;
+                    }
+                    lifeMat.current.visible = true;
+                  }
+                  dwellStall.current = 0;
+                  dwellHold.current = false;
+                  dwellPhase.current = "in";
+                  // Motion starts inside the fade. A held pose that then plays
+                  // is a frame you can point at.
+                  if (video.paused && !video.ended) void video.play().catch(() => {});
                 }
-                dwellStall.current = 0;
-                dwellHold.current = false;
-                dwellPhase.current = "in";
-                // Motion starts inside the fade. A held pose that then plays
-                // is a frame you can point at.
-                if (video.paused && !video.ended) void video.play().catch(() => {});
               }
             }
           }
@@ -1181,8 +1310,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           if (clipVideo && dwellVideoFrameReady(clipVideo) && dwellBlend.current > 0.001) {
             dwellTex.current = bindDwellTexture(clipVideo, dwellTex.current, aspect, sign.id);
             if (dwellTex.current) {
-              lifeMat.current.map = dwellTex.current;
-              lifeMat.current.needsUpdate = true;
+              if (lifeMat.current.map !== dwellTex.current) {
+                lifeMat.current.map = dwellTex.current;
+                lifeMat.current.needsUpdate = true;
+              }
               fitDwellCoverUv(dwellTex.current, clipVideo, aspect, sign.id);
               // Playback presents frames through requestVideoFrameCallback.
               // A held pose does not, so the paused frame never reaches the GPU
