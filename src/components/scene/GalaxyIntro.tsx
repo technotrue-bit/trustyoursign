@@ -8,6 +8,7 @@ import {
   CanvasTexture,
   ClampToEdgeWrapping,
   Color,
+  DataTexture,
   DoubleSide,
   FogExp2,
   Group,
@@ -18,9 +19,11 @@ import {
   PerspectiveCamera,
   Points,
   SRGBColorSpace,
+  Texture,
   Vector2,
   Vector3,
   VideoTexture,
+  WebGLRenderer,
 } from "three";
 import { isSmallGpu } from "@/lib/gpu";
 import { CONSTELLATIONS, ELEMENT_TINT, pairFigures } from "@/lib/galaxy/constellations";
@@ -602,54 +605,39 @@ function dwellPoseFallbackTexture(): CanvasTexture {
 }
 
 /**
- * Frame 0 of the clip, full video pixels. The life shader adds only the
- * change from this pose onto the painting, so a darker first frame does not
- * dim the plate when the fade starts or ends.
+ * GPU-side copy of frame 0. A canvas grab is not the same texels the video
+ * texture uploads, and that gap is the brightness step at both cuts.
  */
-function snapshotDwellPose(video: HTMLVideoElement): CanvasTexture | null {
+function makeDwellPoseTexture(video: HTMLVideoElement): DataTexture | null {
   const w = video.videoWidth;
   const h = video.videoHeight;
   if (w < 3 || h < 3) return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
-  try {
-    ctx.drawImage(video, 0, 0, w, h);
-  } catch {
-    return null;
-  }
-  const size = 24;
-  const spots = [
-    [w * 0.5, h * 0.5],
-    [w * 0.3, h * 0.4],
-    [w * 0.7, h * 0.4],
-    [w * 0.5, h * 0.72],
-  ];
-  let max = 0;
-  for (const [sx, sy] of spots) {
-    const x = Math.max(0, Math.min(w - size, Math.floor(sx - size / 2)));
-    const y = Math.max(0, Math.min(h - size, Math.floor(sy - size / 2)));
-    const data = ctx.getImageData(x, y, size, size).data;
-    for (let i = 0; i < data.length; i += 16) {
-      const luma = data[i]! > data[i + 1]! ? data[i]! : data[i + 1]!;
-      if (luma > max) max = luma;
-    }
-    if (max > 24) break;
-  }
-  // A blank grab would paint the whole clip on top of the still.
-  if (max < 12) return null;
-  const tex = new CanvasTexture(canvas);
+  const tex = new DataTexture(new Uint8Array(w * h * 4), w, h);
   tex.colorSpace = SRGBColorSpace;
   tex.generateMipmaps = false;
   tex.minFilter = LinearFilter;
   tex.magFilter = LinearFilter;
   tex.wrapS = ClampToEdgeWrapping;
   tex.wrapT = ClampToEdgeWrapping;
-  tex.flipY = true;
+  tex.flipY = false;
   tex.needsUpdate = true;
   return tex;
+}
+
+function copyDwellPose(gl: WebGLRenderer, videoTex: VideoTexture, pose: DataTexture): boolean {
+  const ctx = gl.getContext();
+  while (ctx.getError() !== ctx.NO_ERROR) {
+    /* drop a stale error so this copy is judged on its own */
+  }
+  try {
+    videoTex.needsUpdate = true;
+    gl.initTexture(videoTex);
+    gl.initTexture(pose);
+    gl.copyTextureToTexture(videoTex, pose);
+  } catch {
+    return false;
+  }
+  return ctx.getError() === ctx.NO_ERROR;
 }
 
 function releaseDwellTexture(
@@ -699,10 +687,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     | null
   >(null);
   const dwellTex = useRef<VideoTexture | null>(null);
-  const dwellPoseTex = useRef<CanvasTexture | null>(null);
+  const dwellPoseTex = useRef<DataTexture | null>(null);
   const dwellPoseUniforms = useRef<{
     uStillMap: { value: CanvasTexture | null };
-    uPoseMap: { value: CanvasTexture | null };
+    uPoseMap: { value: Texture | null };
     uPoseReady: { value: number };
   } | null>(null);
   const dwellStall = useRef(0);
@@ -908,7 +896,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     mat.needsUpdate = true;
   }, [artTex]);
 
-  useFrame(({ clock, camera }, dt) => {
+  useFrame(({ clock, camera, gl }, dt) => {
     const g = group.current;
     const mesh = cores.current;
     if (!g || !mesh) return;
@@ -1191,9 +1179,16 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
                 dwellPhase.current = "wait";
                 dwellStall.current += dt;
               } else {
-                const poseTex = snapshotDwellPose(video);
                 const uniforms = dwellPoseUniforms.current;
-                if (!poseTex || !uniforms) {
+                const videoTex = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
+                dwellTex.current = videoTex;
+                const freshPose = dwellPoseTex.current == null;
+                const poseTex = dwellPoseTex.current ?? makeDwellPoseTexture(video);
+                const copied = Boolean(
+                  uniforms && poseTex && copyDwellPose(gl, videoTex, poseTex),
+                );
+                if (!copied || !uniforms || !poseTex) {
+                  if (freshPose) poseTex?.dispose();
                   dwellPhase.current = "wait";
                   dwellStall.current += dt;
                 } else {
@@ -1201,17 +1196,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
                   dwellPoseTex.current = poseTex;
                   uniforms.uPoseMap.value = poseTex;
                   uniforms.uPoseReady.value = 1;
-                  if (prevPose && prevPose !== poseTex) {
-                    try {
-                      prevPose.dispose();
-                    } catch {
-                      /* already detached */
-                    }
-                  }
-                  dwellTex.current = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
-                  if (lifeMat.current && dwellTex.current) {
-                    if (lifeMat.current.map !== dwellTex.current) {
-                      lifeMat.current.map = dwellTex.current;
+                  if (prevPose && prevPose !== poseTex) prevPose.dispose();
+                  if (lifeMat.current) {
+                    if (lifeMat.current.map !== videoTex) {
+                      lifeMat.current.map = videoTex;
                       lifeMat.current.needsUpdate = true;
                     }
                     lifeMat.current.visible = true;
