@@ -22,6 +22,7 @@ import {
   Points,
   SRGBColorSpace,
   Scene,
+  ShaderMaterial,
   Texture,
   Vector2,
   Vector3,
@@ -612,15 +613,30 @@ function dwellPoseFallbackTexture(): CanvasTexture {
 let dwellPoseStage: {
   scene: Scene;
   cam: OrthographicCamera;
-  mat: MeshBasicMaterial;
+  mat: ShaderMaterial;
 } | null = null;
 
 function dwellPoseStageOnce() {
   if (dwellPoseStage) return dwellPoseStage;
-  const mat = new MeshBasicMaterial({
-    toneMapped: false,
+  const mat = new ShaderMaterial({
+    uniforms: { tMap: { value: null } },
     depthTest: false,
     depthWrite: false,
+    toneMapped: false,
+    vertexShader: [
+      "varying vec2 vUv;",
+      "void main() {",
+      "  vUv = uv;",
+      "  gl_Position = vec4(position.xy, 0.0, 1.0);",
+      "}",
+    ].join("\n"),
+    fragmentShader: [
+      "uniform sampler2D tMap;",
+      "varying vec2 vUv;",
+      "void main() {",
+      "  gl_FragColor = texture2D(tMap, vUv);",
+      "}",
+    ].join("\n"),
   });
   const scene = new Scene();
   scene.add(new Mesh(new PlaneGeometry(2, 2), mat));
@@ -665,14 +681,7 @@ function renderDwellPose(
     slot.current = rt;
   }
   const stage = dwellPoseStageOnce();
-  const offsetX = videoTex.offset.x;
-  const offsetY = videoTex.offset.y;
-  const repeatX = videoTex.repeat.x;
-  const repeatY = videoTex.repeat.y;
-  videoTex.offset.set(0, 0);
-  videoTex.repeat.set(1, 1);
-  videoTex.updateMatrix();
-  stage.mat.map = videoTex;
+  stage.mat.uniforms.tMap!.value = videoTex;
   const prevTone = gl.toneMapping;
   const prevTarget = gl.getRenderTarget();
   gl.toneMapping = NoToneMapping;
@@ -680,9 +689,6 @@ function renderDwellPose(
   gl.render(stage.scene, stage.cam);
   gl.setRenderTarget(prevTarget);
   gl.toneMapping = prevTone;
-  videoTex.offset.set(offsetX, offsetY);
-  videoTex.repeat.set(repeatX, repeatY);
-  videoTex.updateMatrix();
   return rt.texture;
 }
 
