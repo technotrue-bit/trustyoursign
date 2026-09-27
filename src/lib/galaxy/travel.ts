@@ -6,8 +6,8 @@ import {
   SETTLE_DIST,
   dwellClipFor,
   pauseDwellClip,
+  retireDwellClip,
   settledOnSign,
-  stopDwellClip,
 } from "./dwellClip";
 import { primeSignArt } from "./signArt";
 import { primeSignVolumeNear } from "./signVolume";
@@ -364,12 +364,12 @@ function restIdle() {
   galaxyTravel.idleAt = nowMs();
 }
 
-/** Drop an armed life clip. Leaves a prefetch alone so the still hold can buffer. */
+/** Drop an armed life clip. Keeps the element so the plate can fade back to the still. */
 function clearDwellClip() {
   if (galaxyTravel.dwellClipIndex == null && !galaxyTravel.dwellClipDone) return;
   galaxyTravel.dwellClipIndex = null;
   galaxyTravel.dwellClipDone = false;
-  stopDwellClip();
+  retireDwellClip();
 }
 
 /** Kill the life clip now; the still plate takes the frame back. */
@@ -392,7 +392,7 @@ export function cameraSettledOn(index: number) {
 
 /** The life clip may run on this station right now. Refuses unless the camera is SETTLED. */
 export function dwellClipMayPlay(index: number) {
-  if (prefersReducedMotion() || exploringSign() || introPlaying()) return false;
+  if (prefersReducedMotion() || exploringSign() || introPlaying() || galaxyTravel.paused) return false;
   if (galaxyTravel.dwellClipIndex !== index || galaxyTravel.dwellClipDone) return false;
   return cameraSettledOn(index);
 }
