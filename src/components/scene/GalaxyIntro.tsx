@@ -639,6 +639,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   const dwellEnded = useRef(false);
   /** True while a hidden play/pause is decoding frame 0. The fade stays on the still. */
   const dwellHold = useRef(false);
+  /** Still plate after the fade, before the walk. The sky must not move on the cut. */
+  const dwellRest = useRef(0);
   const lifeArt = useRef<Mesh>(null);
   const lifeMat = useRef<MeshBasicMaterial | null>(null);
   const shellWrap = useRef<Group>(null);
@@ -825,6 +827,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
       dwellPhase.current = "idle";
       dwellEnded.current = false;
       dwellHold.current = false;
+      dwellRest.current = 0;
       releaseDwellTexture(lifeMat.current, null, dwellTex);
       if (plateMat.current) plateMat.current.map = artTex;
       if (lifeMat.current) {
@@ -1026,12 +1029,20 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           if (lifeArt.current) lifeArt.current.visible = false;
           dwellStall.current = 0;
           dwellHold.current = false;
+          dwellRest.current = markDone ? 0.4 : 0;
           if (keepVideo) pauseDwellClip(sign.id);
           else stopDwellClip(sign.id);
-          if (markDone) galaxyTravel.dwellClipDone = true;
         };
 
-        if (lifeOwns && mayPlay && !reducedMotion && dwellPhase.current !== "out") {
+        if (dwellRest.current > 0 && !lifeOwns) {
+          dwellRest.current = 0;
+        } else if (dwellRest.current > 0 && lifeOwns && mayPlay) {
+          dwellRest.current = Math.max(0, dwellRest.current - dt);
+          if (dwellRest.current <= 0) galaxyTravel.dwellClipDone = true;
+        } else if (dwellRest.current > 0 && lifeOwns) {
+          dwellRest.current = 0;
+          galaxyTravel.dwellClipDone = true;
+        } else if (lifeOwns && mayPlay && !reducedMotion && dwellPhase.current !== "out") {
           const video = primeDwellClip(sign.id);
           if (dwellPhase.current === "idle" || dwellPhase.current === "wait") {
             if (!video) {
@@ -1156,11 +1167,10 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           index === 0 && !reducedMotion
             ? 0.985 + Math.sin(galaxyTravel.shaderTime * 0.9 + 0.6) * 0.015
             : 1;
-        // Life fades on top of the still. Fading the still out at the same time
-        // lets the sky through at the midpoint, which is the hitch at both cuts.
-        // The still steps aside only once the clip fully covers it.
-        const blending = dwellBlend.current > 0 && dwellBlend.current < 1;
-        mat.opacity = plateOp * (blending ? 1 : 1 - dwellBlend.current) * stillMul;
+        // The still stays under the clip the whole time. Dropping it when the
+        // blend hits 1 lets the sky through the strokes, which is the hitch
+        // at both cuts. Life opacity alone does the fade.
+        mat.opacity = plateOp * stillMul;
         mat.map = artTex;
         if (lifeArt.current && lifeMat.current) {
           const lifeOp = plateOp * dwellBlend.current * stillMul;
