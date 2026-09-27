@@ -1,9 +1,12 @@
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Outlet, Scripts, redirect } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AndroidInstallCapture } from "@/components/AndroidInstallCapture";
 import { StageLock } from "@/components/StageLock";
 import { OwnerBind } from "@/components/OwnerBind";
+import { MaintenanceWatch } from "@/components/MaintenanceWatch";
+import { getMaintenanceGate } from "@/lib/maintenance";
+import { isMaintenanceExemptPath } from "@/lib/maintenance-paths";
 import {
   PWA_ICON_PATHS,
   PWA_STATUS_BAR_STYLE,
@@ -15,6 +18,11 @@ const APP_NAME = "Trust Your Sign";
 const GFONTS_LINK_ID = "gfonts-css";
 
 export const Route = createRootRoute({
+  beforeLoad: async ({ location }) => {
+    if (isMaintenanceExemptPath(location.pathname)) return;
+    const gate = await getMaintenanceGate();
+    if (gate.on && !gate.bypass) throw redirect({ to: "/maintenance" });
+  },
   head: () => ({
     // Values come from scripts/grok-pwa-chrome.mjs (re-exported by grok-pwa-shared
     // for the Vite plugin / Nitro middleware). Omit legacy *-web-app-capable metas —
@@ -103,6 +111,7 @@ export const Route = createRootRoute({
         <StageLock />
         <AuthProvider>
           <OwnerBind />
+          <MaintenanceWatch />
           <Outlet />
         </AuthProvider>
         <Scripts />

@@ -35,6 +35,7 @@ import { bearer, genericOAuth, captcha, magicLink } from "better-auth/plugins";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { passkey } from "@better-auth/passkey";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
+import { userAdditionalFields } from "./user-fields";
 import { getCookie, getRequest } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { ensureDbReady, getNeonPool, getPglite } from "../db.server";
@@ -319,6 +320,7 @@ export const auth = betterAuth({
   },
 
   user: {
+    additionalFields: userAdditionalFields,
     changeEmail: {
       enabled: true,
       // Allow immediate updates when the address is not yet verified (common

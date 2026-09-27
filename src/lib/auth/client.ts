@@ -1,4 +1,4 @@
-import { emailOTPClient, genericOAuthClient } from "better-auth/client/plugins";
+import { emailOTPClient, genericOAuthClient, inferAdditionalFields } from "better-auth/client/plugins";
 import { passkeyClient } from "@better-auth/passkey/client";
 import { createAuthClient } from "better-auth/react";
 import { runPreSignInSignOut, runSignOut } from "../../../scripts/sign-out-plan.mjs";
@@ -9,6 +9,7 @@ import {
   writeSessionBearerToken,
 } from "./bearer-storage";
 import { clearStickySession } from "./session-sticky";
+import { userAdditionalFields } from "./user-fields";
 
 /**
  * Better Auth client for this React SPA (browser-side).
@@ -25,7 +26,12 @@ import { clearStickySession } from "./session-sticky";
  * the visitor stays signed in.
  */
 export const authClient = createAuthClient({
-  plugins: [genericOAuthClient(), emailOTPClient(), passkeyClient()],
+  plugins: [
+    genericOAuthClient(),
+    emailOTPClient(),
+    passkeyClient(),
+    inferAdditionalFields({ user: userAdditionalFields }),
+  ],
   // Focus/visibility refetch is how a warm session gets wiped on iPhone: Safari
   // flaps visibility (app switcher, Face ID sheet, menu), `/get-session` briefly
   // answers empty, and Better Auth replaces the atom with null — Profile clicks

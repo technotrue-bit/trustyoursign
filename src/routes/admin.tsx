@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
 import { RedirectToSignIn, SessionUnavailable } from "@/lib/auth/gates";
 import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -7,6 +7,7 @@ import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { claimSite } from "@/lib/site";
 import { PRIVACY_VERSION, TERMS_VERSION, CONTACT_HANDLE } from "@/lib/legal";
 import { getAiDesk, grantSkyPass, saveAiDesk } from "@/lib/chart/sky";
+import { getMaintenanceGate, setMaintenance } from "@/lib/maintenance";
 import { listResearchLibrary } from "@/lib/chart/research";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
 
@@ -71,6 +72,7 @@ function Admin() {
           This is your vault. Charts people save stay on their own accounts — you do not get a dump
           of their birth dates. That is the privacy we promised them.
         </p>
+        <MaintenanceSwitch />
         <dl className="mt-8 space-y-3 text-sm">
           <div className="flex justify-between gap-4 border-b border-border py-2">
             <dt className="text-fg-subtle">Site</dt>
@@ -98,6 +100,7 @@ function Admin() {
           </div>
         </dl>
         <div className="mt-8 flex flex-wrap gap-4 text-xs tracking-[0.18em] uppercase">
+          <Link to="/admin/users">Accounts</Link>
           <Link to="/account">Your charts</Link>
           <Link to="/privacy">Privacy</Link>
           <Link to="/terms">Terms</Link>
@@ -107,6 +110,72 @@ function Admin() {
         <AiDeskForm />
       </div>
     </main>
+  );
+}
+
+function MaintenanceSwitch() {
+  const router = useRouter();
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    getMaintenanceGate()
+      .then((gate) => setOn(gate.on))
+      .catch(() => setOn(false));
+  }, []);
+
+  async function flip() {
+    if (on === null || busy) return;
+    const next = !on;
+    setBusy(true);
+    setErr(null);
+    setOn(next);
+    try {
+      const saved = await setMaintenance({ data: { on: next } });
+      setOn(saved.on);
+      await router.invalidate();
+    } catch {
+      setOn(!next);
+      setErr("Could not change that. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-8 rounded-md border border-border bg-bg-elevated/80 px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-[0.7rem] tracking-[0.22em] text-accent uppercase">Maintenance</p>
+          {on === null ? (
+            <div className="mt-3 h-8 w-48 animate-pulse rounded-md bg-bg-subtle" />
+          ) : (
+            <h2 className="mt-2 font-display text-3xl tracking-tight text-fg italic">
+              {on ? "On — the sky is closed" : "Off — the sky is open"}
+            </h2>
+          )}
+          <p className="mt-2 text-sm leading-relaxed text-fg-muted">
+            When this is on, everyone but you sees a holding screen. You still walk the site,
+            including this desk.
+          </p>
+          {err ? (
+            <p role="alert" className="mt-2 text-sm text-wine">
+              {err}
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          aria-pressed={on === true}
+          disabled={on === null || busy}
+          onClick={() => void flip()}
+          className="min-h-11 rounded-md border border-border px-4 text-xs tracking-[0.18em] uppercase disabled:opacity-50"
+        >
+          {on === null ? "…" : on ? "Open the sky" : "Close the sky"}
+        </button>
+      </div>
+    </section>
   );
 }
 

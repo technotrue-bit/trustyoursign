@@ -17,11 +17,13 @@ import { Route as ContactRouteImport } from './routes/contact'
 import { Route as FaqRouteImport } from './routes/faq'
 import { Route as HowThisWorksRouteImport } from './routes/how-this-works'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MaintenanceRouteImport } from './routes/maintenance'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as AdminUsersRouteImport } from './routes/admin_.users'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -65,6 +67,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MaintenanceRoute = MaintenanceRouteImport.update({
+  id: '/maintenance',
+  path: '/maintenance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -90,6 +97,11 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/admin_/users',
+  path: '/admin/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
   id: '/api/feedback',
   path: '/api/feedback',
@@ -110,11 +122,13 @@ export interface FileRoutesByFullPath {
   '/faq': typeof FaqRoute
   '/how-this-works': typeof HowThisWorksRoute
   '/login': typeof LoginRoute
+  '/maintenance': typeof MaintenanceRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -127,11 +141,13 @@ export interface FileRoutesByTo {
   '/faq': typeof FaqRoute
   '/how-this-works': typeof HowThisWorksRoute
   '/login': typeof LoginRoute
+  '/maintenance': typeof MaintenanceRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -145,11 +161,13 @@ export interface FileRoutesById {
   '/faq': typeof FaqRoute
   '/how-this-works': typeof HowThisWorksRoute
   '/login': typeof LoginRoute
+  '/maintenance': typeof MaintenanceRoute
   '/privacy': typeof PrivacyRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/admin_/users': typeof AdminUsersRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -164,11 +182,13 @@ export interface FileRouteTypes {
     | '/faq'
     | '/how-this-works'
     | '/login'
+    | '/maintenance'
     | '/privacy'
     | '/register'
     | '/reset-password'
     | '/signup'
     | '/terms'
+    | '/admin/users'
     | '/api/feedback'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
@@ -181,11 +201,13 @@ export interface FileRouteTypes {
     | '/faq'
     | '/how-this-works'
     | '/login'
+    | '/maintenance'
     | '/privacy'
     | '/register'
     | '/reset-password'
     | '/signup'
     | '/terms'
+    | '/admin/users'
     | '/api/feedback'
     | '/api/auth/$'
   id:
@@ -198,11 +220,13 @@ export interface FileRouteTypes {
     | '/faq'
     | '/how-this-works'
     | '/login'
+    | '/maintenance'
     | '/privacy'
     | '/register'
     | '/reset-password'
     | '/signup'
     | '/terms'
+    | '/admin_/users'
     | '/api/feedback'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
@@ -216,11 +240,13 @@ export interface RootRouteChildren {
   FaqRoute: typeof FaqRoute
   HowThisWorksRoute: typeof HowThisWorksRoute
   LoginRoute: typeof LoginRoute
+  MaintenanceRoute: typeof MaintenanceRoute
   PrivacyRoute: typeof PrivacyRoute
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   TermsRoute: typeof TermsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
@@ -283,6 +309,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/maintenance': {
+      id: '/maintenance'
+      path: '/maintenance'
+      fullPath: '/maintenance'
+      preLoaderRoute: typeof MaintenanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/privacy': {
       id: '/privacy'
       path: '/privacy'
@@ -318,6 +351,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/users': {
+      id: '/admin_/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/feedback': {
       id: '/api/feedback'
       path: '/api/feedback'
@@ -344,11 +384,13 @@ const rootRouteChildren: RootRouteChildren = {
   FaqRoute: FaqRoute,
   HowThisWorksRoute: HowThisWorksRoute,
   LoginRoute: LoginRoute,
+  MaintenanceRoute: MaintenanceRoute,
   PrivacyRoute: PrivacyRoute,
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   TermsRoute: TermsRoute,
+  AdminUsersRoute: AdminUsersRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
