@@ -76,7 +76,10 @@ function readStoredSticky(now: number): AppUser | null {
       store.removeItem(STICKY_STORAGE_KEY);
       return null;
     }
-    return parsed.user;
+    return {
+      ...parsed.user,
+      role: parsed.user.role === "beta" ? "beta" : "user",
+    };
   } catch {
     try {
       store.removeItem(STICKY_STORAGE_KEY);

@@ -21,6 +21,7 @@ const alice: AppUser = {
   primaryEmail: "a@example.com",
   profileImageUrl: null,
   isDevFallback: false,
+  role: "user",
 };
 
 /** Minimal localStorage stub for node:test (no jsdom). */

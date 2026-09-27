@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { asAccountRole, type AccountRole } from "./account-role";
 import { authClient, authEnabled } from "./client";
 import { softRecoverSession } from "./session-recover";
 import {
@@ -16,6 +17,8 @@ export type AppUser = {
   profileImageUrl: string | null;
   /** True when this is the sandbox/dev fallback (auth not configured). */
   isDevFallback: boolean;
+  /** Account cohort. `beta` is stored for later and does not unlock anything yet. */
+  role: AccountRole;
 };
 
 /**
@@ -31,6 +34,7 @@ export const DEV_USER: AppUser = {
   primaryEmail: "dev@example.com",
   profileImageUrl: null,
   isDevFallback: true,
+  role: "user",
 };
 
 /** `useCurrentUserState()` result: the user plus the session-loading flag. */
@@ -63,6 +67,7 @@ function mapUser(user: {
   name?: string | null;
   email?: string | null;
   image?: string | null;
+  role?: string | null;
 }): AppUser {
   return {
     id: user.id,
@@ -70,6 +75,7 @@ function mapUser(user: {
     primaryEmail: user.email ?? null,
     profileImageUrl: user.image ?? null,
     isDevFallback: false,
+    role: asAccountRole(user.role),
   };
 }
 
