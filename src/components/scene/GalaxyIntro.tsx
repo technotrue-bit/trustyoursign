@@ -8,22 +8,26 @@ import {
   CanvasTexture,
   ClampToEdgeWrapping,
   Color,
-  DataTexture,
   DoubleSide,
   FogExp2,
   Group,
   LinearFilter,
+  LinearSRGBColorSpace,
   Mesh,
   MeshBasicMaterial,
   NoToneMapping,
+  OrthographicCamera,
   PerspectiveCamera,
+  PlaneGeometry,
   Points,
   SRGBColorSpace,
+  Scene,
   Texture,
   Vector2,
   Vector3,
   VideoTexture,
   WebGLRenderer,
+  WebGLRenderTarget,
 } from "three";
 import { isSmallGpu } from "@/lib/gpu";
 import { CONSTELLATIONS, ELEMENT_TINT, pairFigures } from "@/lib/galaxy/constellations";
@@ -605,40 +609,81 @@ function dwellPoseFallbackTexture(): CanvasTexture {
   return tex;
 }
 
-/**
- * GPU-side copy of frame 0. A canvas grab is not the same texels the video
- * texture uploads, and that gap is the brightness step at both cuts.
- */
-function makeDwellPoseTexture(video: HTMLVideoElement): DataTexture | null {
-  const w = video.videoWidth;
-  const h = video.videoHeight;
-  if (w < 3 || h < 3) return null;
-  const tex = new DataTexture(new Uint8Array(w * h * 4), w, h);
-  tex.colorSpace = SRGBColorSpace;
-  tex.generateMipmaps = false;
-  tex.minFilter = LinearFilter;
-  tex.magFilter = LinearFilter;
-  tex.wrapS = ClampToEdgeWrapping;
-  tex.wrapT = ClampToEdgeWrapping;
-  tex.flipY = false;
-  tex.needsUpdate = true;
-  return tex;
+let dwellPoseStage: {
+  scene: Scene;
+  cam: OrthographicCamera;
+  mat: MeshBasicMaterial;
+} | null = null;
+
+function dwellPoseStageOnce() {
+  if (dwellPoseStage) return dwellPoseStage;
+  const mat = new MeshBasicMaterial({
+    toneMapped: false,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const scene = new Scene();
+  scene.add(new Mesh(new PlaneGeometry(2, 2), mat));
+  dwellPoseStage = {
+    scene,
+    cam: new OrthographicCamera(-1, 1, 1, -1, 0, 1),
+    mat,
+  };
+  return dwellPoseStage;
 }
 
-function copyDwellPose(gl: WebGLRenderer, videoTex: VideoTexture, pose: DataTexture): boolean {
-  const ctx = gl.getContext();
-  while (ctx.getError() !== ctx.NO_ERROR) {
-    /* drop a stale error so this copy is judged on its own */
+/**
+ * Draw frame 0 through the same sampler the plate uses, into a linear target.
+ * A canvas grab and a raw texture copy are different texels, and that gap is
+ * the brightness step at both cuts.
+ */
+function renderDwellPose(
+  gl: WebGLRenderer,
+  videoTex: VideoTexture,
+  slot: { current: WebGLRenderTarget | null },
+): Texture | null {
+  const video = videoTex.image as HTMLVideoElement;
+  const w = video?.videoWidth ?? 0;
+  const h = video?.videoHeight ?? 0;
+  if (w < 3 || h < 3) return null;
+  let rt = slot.current;
+  if (!rt || rt.width !== w || rt.height !== h) {
+    rt?.dispose();
+    rt = new WebGLRenderTarget(w, h, {
+      depthBuffer: false,
+      stencilBuffer: false,
+      generateMipmaps: false,
+      minFilter: LinearFilter,
+      magFilter: LinearFilter,
+    });
+    rt.texture.colorSpace = LinearSRGBColorSpace;
+    rt.texture.generateMipmaps = false;
+    rt.texture.minFilter = LinearFilter;
+    rt.texture.magFilter = LinearFilter;
+    rt.texture.wrapS = ClampToEdgeWrapping;
+    rt.texture.wrapT = ClampToEdgeWrapping;
+    slot.current = rt;
   }
-  try {
-    videoTex.needsUpdate = true;
-    gl.initTexture(videoTex);
-    gl.initTexture(pose);
-    gl.copyTextureToTexture(videoTex, pose);
-  } catch {
-    return false;
-  }
-  return ctx.getError() === ctx.NO_ERROR;
+  const stage = dwellPoseStageOnce();
+  const offsetX = videoTex.offset.x;
+  const offsetY = videoTex.offset.y;
+  const repeatX = videoTex.repeat.x;
+  const repeatY = videoTex.repeat.y;
+  videoTex.offset.set(0, 0);
+  videoTex.repeat.set(1, 1);
+  videoTex.updateMatrix();
+  stage.mat.map = videoTex;
+  const prevTone = gl.toneMapping;
+  const prevTarget = gl.getRenderTarget();
+  gl.toneMapping = NoToneMapping;
+  gl.setRenderTarget(rt);
+  gl.render(stage.scene, stage.cam);
+  gl.setRenderTarget(prevTarget);
+  gl.toneMapping = prevTone;
+  videoTex.offset.set(offsetX, offsetY);
+  videoTex.repeat.set(repeatX, repeatY);
+  videoTex.updateMatrix();
+  return rt.texture;
 }
 
 function releaseDwellTexture(
@@ -688,7 +733,7 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     | null
   >(null);
   const dwellTex = useRef<VideoTexture | null>(null);
-  const dwellPoseTex = useRef<DataTexture | null>(null);
+  const dwellPoseRt = useRef<WebGLRenderTarget | null>(null);
   const dwellPoseUniforms = useRef<{
     uStillMap: { value: CanvasTexture | null };
     uPoseMap: { value: Texture | null };
@@ -854,8 +899,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     if (!mat || !artTex) return;
     const uniforms = {
       uStillMap: { value: artTex as CanvasTexture | null },
-      uPoseMap: { value: dwellPoseTex.current ?? dwellPoseFallbackTexture() },
-      uPoseReady: { value: dwellPoseTex.current ? 1 : 0 },
+      uPoseMap: { value: dwellPoseRt.current?.texture ?? dwellPoseFallbackTexture() },
+      uPoseReady: { value: dwellPoseRt.current ? 1 : 0 },
     };
     dwellPoseUniforms.current = uniforms;
     mat.onBeforeCompile = (shader) => {
@@ -902,8 +947,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const mesh = cores.current;
     if (!g || !mesh) return;
     const clearDwellPose = () => {
-      const tex = dwellPoseTex.current;
-      dwellPoseTex.current = null;
+      const tex = dwellPoseRt.current;
+      dwellPoseRt.current = null;
       const uniforms = dwellPoseUniforms.current;
       if (uniforms) {
         uniforms.uPoseReady.value = 0;
@@ -1183,21 +1228,13 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
                 const uniforms = dwellPoseUniforms.current;
                 const videoTex = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
                 dwellTex.current = videoTex;
-                const freshPose = dwellPoseTex.current == null;
-                const poseTex = dwellPoseTex.current ?? makeDwellPoseTexture(video);
-                const copied = Boolean(
-                  uniforms && poseTex && copyDwellPose(gl, videoTex, poseTex),
-                );
-                if (!copied || !uniforms || !poseTex) {
-                  if (freshPose) poseTex?.dispose();
+                const poseTex = uniforms ? renderDwellPose(gl, videoTex, dwellPoseRt) : null;
+                if (!uniforms || !poseTex) {
                   dwellPhase.current = "wait";
                   dwellStall.current += dt;
                 } else {
-                  const prevPose = dwellPoseTex.current;
-                  dwellPoseTex.current = poseTex;
                   uniforms.uPoseMap.value = poseTex;
                   uniforms.uPoseReady.value = 1;
-                  if (prevPose && prevPose !== poseTex) prevPose.dispose();
                   if (lifeMat.current) {
                     if (lifeMat.current.map !== videoTex) {
                       lifeMat.current.map = videoTex;
