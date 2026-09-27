@@ -633,7 +633,7 @@ function dwellPoseStageOnce() {
       "uniform sampler2D tMap;",
       "varying vec2 vUv;",
       "void main() {",
-      "  gl_FragColor = texture2D(tMap, vUv);",
+      "  gl_FragColor = sRGBTransferEOTF(texture2D(tMap, vUv));",
       "}",
     ].join("\n"),
   });
@@ -681,6 +681,10 @@ function renderDwellPose(
   }
   const stage = dwellPoseStageOnce();
   stage.mat.uniforms.tMap!.value = videoTex;
+  // Upload the held frame before the quad samples it. The first draw otherwise
+  // stores black, and the fade adds the whole clip on top of the painting.
+  videoTex.needsUpdate = true;
+  gl.initTexture(videoTex);
   const prevTone = gl.toneMapping;
   const prevTarget = gl.getRenderTarget();
   gl.toneMapping = NoToneMapping;
