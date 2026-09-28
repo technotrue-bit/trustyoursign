@@ -51,8 +51,8 @@ describe("research natal data stays off public chart modules", () => {
     const natDir = join(chartDir, "nativities");
     const names = readdirSync(natDir);
     assert.deepEqual(
-      names.filter((name) => name.endsWith(".ts")),
-      ["load.server.ts"],
+      names.filter((name) => name.endsWith(".ts")).sort(),
+      ["load.server.ts", "read.ts"],
     );
     const loader = readFileSync(join(natDir, "load.server.ts"), "utf8");
     assert.equal(loader.includes("./joey"), false);

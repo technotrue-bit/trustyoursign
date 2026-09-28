@@ -46,13 +46,15 @@ function Intro() {
     } catch (err) {
       const kind = classifyOwnerFetchError(err);
       console.error("[library] openResearch failed", kind, err);
-      if (kind !== "unreachable") forgetOwnerVerdict(user?.id);
+      if (kind !== "unreachable" && kind !== "unseeded") forgetOwnerVerdict(user?.id);
       setError(
         kind === "signed_out"
           ? "Your sign-in lapsed. Sign in again to open the desk."
           : kind === "not_owner"
             ? "The desk isn’t unlocked for this sign-in."
-            : "That chart wouldn’t open. Try again in a moment.",
+            : kind === "unseeded"
+              ? "That chart isn’t on the desk yet."
+              : "That chart wouldn’t open. Try again in a moment.",
       );
     } finally {
       setBusyId(null);
