@@ -1,4 +1,5 @@
 import { getSql, type Sql } from "@/lib/db.server";
+import { AppRls } from "@/lib/db-rls.server";
 import {
   accountKey,
   isSiteOwnerIdentity,
@@ -60,12 +61,18 @@ async function readSiteState(sql: Sql): Promise<SiteStateRow | null> {
  * never reassign a site that is already bound to a different user.
  */
 async function bindOwner(sql: Sql, userId: string): Promise<void> {
-  await sql`
-    update site_state
-    set owner_user_id = ${userId}, claimed_at = coalesce(claimed_at, now())
-    where id = 'vault'
-      and (owner_user_id is null or owner_user_id = ${OWNER_USER_ID})
-  `;
+  // site_state writes require the bypass (or the canonical owner flag). This
+  // runs after the identity check, inside the caller's user context, where
+  // that flag is only set for the placeholder row. Without the bypass the
+  // update matches nothing and Claim stays on Waiting.
+  await AppRls.bypass(
+    () => sql`
+      update site_state
+      set owner_user_id = ${userId}, claimed_at = coalesce(claimed_at, now())
+      where id = 'vault'
+        and (owner_user_id is null or owner_user_id = ${OWNER_USER_ID})
+    `,
+  );
 }
 
 /** True while no real identity has been bound (canonical placeholder or empty). */

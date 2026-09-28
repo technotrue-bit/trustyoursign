@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   isSiteOwner,
   isSiteOwnerIdentity,
@@ -177,6 +180,27 @@ describe("legacy name heuristic is narrow (opt-in bootstrap only)", () => {
     assert.equal(looksLikeOwnerByName({ displayName: "Joey Devin Norris" }), false);
     assert.equal(looksLikeOwnerByName({ displayName: "Jane Doe" }), false);
     assert.equal(looksLikeOwnerByName(null), false);
+  });
+});
+
+describe("research desk", () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
+
+  it("writes the owner binding with the row-level bypass", () => {
+    const text = readFileSync(join(root, "src/lib/owner.server.ts"), "utf8");
+    const start = text.indexOf("async function bindOwner");
+    const end = text.indexOf("function isUnbound");
+    assert.ok(start >= 0 && end > start);
+    assert.match(text.slice(start, end), /AppRls\.bypass/);
+  });
+
+  it("lists research charts by their own names, without a combined heading", () => {
+    const admin = readFileSync(join(root, "src/routes/admin.tsx"), "utf8");
+    assert.equal(admin.includes("Saige and Joey"), false);
+    assert.match(admin, /Research charts/);
+    assert.match(admin, /No research charts are on this desk yet/);
+    assert.match(admin, /The third/);
+    assert.match(admin, /claimed !== true/);
   });
 });
 

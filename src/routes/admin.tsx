@@ -9,6 +9,7 @@ import { PRIVACY_VERSION, TERMS_VERSION, CONTACT_HANDLE } from "@/lib/legal";
 import { getAiDesk, grantSkyPass, saveAiDesk } from "@/lib/chart/sky";
 import { getMaintenanceGate, setMaintenance } from "@/lib/maintenance";
 import { listResearchLibrary } from "@/lib/chart/research";
+import { classifyOwnerFetchError } from "@/lib/owner-state";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
 
 export const Route = createFileRoute("/admin")({ component: Admin });
@@ -106,7 +107,7 @@ function Admin() {
           <Link to="/terms">Terms</Link>
           <Link to="/">The sky</Link>
         </div>
-        <ResearchBooks />
+        <ResearchBooks claimed={claimed} />
         <AiDeskForm />
       </div>
     </main>
@@ -181,18 +182,39 @@ function MaintenanceSwitch() {
 
 type ResearchBook = { id: "saige" | "joey"; title: string; oneCut: string; date: string };
 
-function ResearchBooks() {
+function ResearchBooks({ claimed }: { claimed: boolean | null }) {
   const [books, setBooks] = useState<ResearchBook[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
+    // The page can open on a name/email glance. The library itself stays behind
+    // the server bind, so don't ask until that bind says yes — a no used to
+    // surface as "the research desk could not be opened."
+    if (claimed !== true) return;
+    let cancelled = false;
     listResearchLibrary()
-      .then((rows) => setBooks(rows as ResearchBook[]))
-      .catch(() => setErr("The research desk could not be opened."));
-  }, []);
+      .then((rows) => {
+        if (!cancelled) setBooks(rows);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const kind = classifyOwnerFetchError(error);
+        setBooks([]);
+        setErr(
+          kind === "signed_out"
+            ? "Your sign-in lapsed. Sign in again to open the desk."
+            : kind === "not_owner"
+              ? "This sign-in isn’t unlocked for the research desk."
+              : "The research desk could not be opened.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [claimed]);
+  const empty = claimed === true && books !== null && books.length === 0 && !err;
   return (
     <section id="research" className="mt-10 scroll-mt-24 border-t border-border pt-8">
-      <p className="text-[0.7rem] tracking-[0.22em] text-accent uppercase">Research charts</p>
-      <h2 className="mt-2 font-display text-3xl tracking-tight text-fg italic">Saige and Joey</h2>
+      <h2 className="text-[0.7rem] tracking-[0.22em] text-accent uppercase">Research charts</h2>
       <p className="mt-2 text-sm leading-relaxed text-fg-muted">
         Timed nativities. Owner only. These do not appear for anyone else.
       </p>
@@ -202,24 +224,33 @@ function ResearchBooks() {
         </p>
       ) : null}
       <ul className="mt-5 space-y-3">
-        {books === null ? (
+        {claimed === null || (claimed === true && books === null && !err) ? (
           <li className="h-20 animate-pulse rounded-md bg-bg-subtle" />
-        ) : (
-          books.map((book) => (
-            <li key={book.id}>
-              <a
-                href={`/?desk=${book.id}`}
-                className="block rounded-md border border-border bg-bg-elevated/80 px-4 py-4 hover:bg-bg-subtle"
-              >
-                <p className="font-display text-xl tracking-tight text-fg italic">{book.title}</p>
-                <p className="mt-1 text-sm text-fg-muted">{book.oneCut}</p>
-                <p className="mt-1 text-xs tracking-wide text-fg-subtle uppercase">
-                  {book.id === "saige" ? "Premium house" : "Walkthrough"} · {book.date} · {book.id}
-                </p>
-              </a>
-            </li>
-          ))
-        )}
+        ) : null}
+        {books?.map((book) => (
+          <li key={book.id}>
+            <a
+              href={`/?desk=${book.id}`}
+              className="block rounded-md border border-border bg-bg-elevated/80 px-4 py-4 hover:bg-bg-subtle"
+            >
+              <p className="font-display text-xl tracking-tight text-fg italic">{book.title}</p>
+              <p className="mt-1 text-sm text-fg-muted">{book.oneCut}</p>
+              <p className="mt-1 text-xs tracking-wide text-fg-subtle uppercase">
+                {book.id === "saige" ? "Premium house" : "Walkthrough"} · {book.date} · {book.id}
+              </p>
+            </a>
+          </li>
+        ))}
+        {empty ? (
+          <li>
+            <p className="text-sm text-fg-muted">No research charts are on this desk yet.</p>
+          </li>
+        ) : null}
+        {claimed === false ? (
+          <li>
+            <p className="text-sm text-fg-muted">This sign-in isn’t bound to the desk.</p>
+          </li>
+        ) : null}
         <li>
           <div className="rounded-md border border-dashed border-border px-4 py-4">
             <p className="font-display text-xl tracking-tight text-fg italic">The third</p>

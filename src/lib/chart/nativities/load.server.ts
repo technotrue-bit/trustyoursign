@@ -34,11 +34,23 @@ export async function loadResearchNativity(id: ResearchChartId): Promise<Nativit
   return asNativity(id, rows[0].payload);
 }
 
+function isMissingResearchTable(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /research_nativity/i.test(message) && /does not exist|undefined_table|42P01/i.test(message);
+}
+
 export async function listResearchLibrary() {
   const sql = await getSql();
-  const rows = await sql<{ id: string; payload: unknown }>`
-    select id, payload from research_nativity order by id
-  `;
+  let rows: { id: string; payload: unknown }[];
+  try {
+    rows = await sql<{ id: string; payload: unknown }>`
+      select id, payload from research_nativity order by id
+    `;
+  } catch (err) {
+    // No table yet is an empty desk, not a failed open. Other errors still throw.
+    if (isMissingResearchTable(err)) return [];
+    throw err;
+  }
   const library: { id: ResearchChartId; title: string; oneCut: string; date: string }[] = [];
   for (const row of rows) {
     if (row.id !== "joey" && row.id !== "saige") continue;
