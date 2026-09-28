@@ -534,3 +534,13 @@ export const SIGN_INSIGHTS: Record<SignId, SignInsight[]> = {
 export function insightsForSign(signId: SignId): SignInsight[] {
   return SIGN_INSIGHTS[signId] ?? SIGN_INSIGHTS.aries;
 }
+
+/**
+ * The sky-dock sample for the sign on screen: that sign's Insight register.
+ * Callers must pass the current sign. A fixed sign here keeps the previous
+ * reading on the card after the viewer flies somewhere else.
+ */
+export function sampleInsightForSign(signId: SignId): SignInsight | undefined {
+  const insights = insightsForSign(signId);
+  return insights.find((item) => item.tone === "info") ?? insights[0];
+}
