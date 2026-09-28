@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { ChevronRight } from "lucide-react";
 import { clearBearerTokens } from "@/lib/auth/bearer-storage";
 import { signOut } from "@/lib/auth/client";
 import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
@@ -13,7 +14,12 @@ import { skipIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { skipBirth } from "@/lib/galaxy/travel";
 import { savePlaceSession } from "@/lib/ui/skyPlace";
-import { EMPTY_DESK_NOTE, ownerSkyLinks } from "@/lib/owner-menu";
+import {
+  EMPTY_DESK_NOTE,
+  YOUR_SKIES_LABEL,
+  ownerSkyLinks,
+  ownerSkyMenuMode,
+} from "@/lib/owner-menu";
 import {
   classifyOwnerFetchError,
   forgetOwnerVerdict,
@@ -85,7 +91,7 @@ export function AccountMenu() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<SkyTarget | null>(null);
   const [error, setError] = useState<{ kind: OwnerFetchFailure; retry: () => void } | null>(null);
-  const [panel, setPanel] = useState<"main" | "settings">("main");
+  const [panel, setPanel] = useState<"main" | "settings" | "skies">("main");
   const [leaving, setLeaving] = useState(false);
   // null until the desk answers. Never assume Joey and Saige are both seeded.
   const [deskIds, setDeskIds] = useState<ResearchChartId[] | null>(null);
@@ -93,6 +99,8 @@ export function AccountMenu() {
   const owner = useOwnerVerdict(user?.id) === true;
   const deskGen = useRef(0);
   const refreshDeskRef = useRef<() => void>(() => {});
+  const skiesBackRef = useRef<HTMLButtonElement>(null);
+  const skiesItemRef = useRef<HTMLDivElement>(null);
 
   refreshDeskRef.current = () => {
     if (!user?.id || !owner) return;
@@ -103,7 +111,9 @@ export function AccountMenu() {
         const links = ownerSkyLinks(rows.map((row) => row.id));
         setDeskIds(links.map((link) => link.id));
         setDeskEmpty(links.length === 0);
-        setError((prev) => (prev?.kind === "unseeded" || prev?.kind === "unreachable" ? null : prev));
+        setError((prev) =>
+          prev?.kind === "unseeded" || prev?.kind === "unreachable" ? null : prev,
+        );
       })
       .catch((err: unknown) => {
         if (gen !== deskGen.current) return;
@@ -136,6 +146,11 @@ export function AccountMenu() {
     refreshDeskRef.current();
   }, [owner, user?.id]);
 
+  useEffect(() => {
+    if (!open || panel !== "skies") return;
+    skiesBackRef.current?.focus();
+  }, [open, panel]);
+
   if (isPending) {
     return <div className="size-11 shrink-0 animate-pulse rounded-full bg-bg-subtle" aria-hidden />;
   }
@@ -166,6 +181,12 @@ export function AccountMenu() {
   const label = user.displayName ?? user.primaryEmail ?? "Account";
   const initial = label.charAt(0).toUpperCase();
   const locked = busy !== null || leaving;
+  const skyLinks = ownerSkyLinks(deskIds ?? []);
+  const skyMode = ownerSkyMenuMode({
+    ids: deskIds,
+    deskEmpty,
+    failed: error !== null,
+  });
 
   const close = () => setOpen(false);
 
@@ -267,34 +288,35 @@ export function AccountMenu() {
     );
   };
 
-  const errorRow = error && error.kind !== "unseeded" ? (
-    <div role="alert" className="flex items-center justify-between gap-3 px-4 pt-1 pb-2">
-      <p className="text-xs leading-snug text-wine">
-        {error.kind === "signed_out"
-          ? "Your sign-in lapsed. Sign in again to open the sky."
-          : error.kind === "not_owner"
-            ? "The desk isn’t unlocked for this sign-in."
-            : "The sky didn’t answer. Try again."}
-      </p>
-      {error.kind === "signed_out" ? (
-        <Link
-          to="/login"
-          onClick={close}
-          className="shrink-0 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
-        >
-          Sign in
-        </Link>
-      ) : (
-        <button
-          type="button"
-          className="shrink-0 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
-          onClick={error.retry}
-        >
-          Retry
-        </button>
-      )}
-    </div>
-  ) : null;
+  const errorRow =
+    error && error.kind !== "unseeded" ? (
+      <div role="alert" className="flex items-center justify-between gap-3 px-4 pt-1 pb-2">
+        <p className="text-xs leading-snug text-wine">
+          {error.kind === "signed_out"
+            ? "Your sign-in lapsed. Sign in again to open the sky."
+            : error.kind === "not_owner"
+              ? "The desk isn’t unlocked for this sign-in."
+              : "The sky didn’t answer. Try again."}
+        </p>
+        {error.kind === "signed_out" ? (
+          <Link
+            to="/login"
+            onClick={close}
+            className="shrink-0 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+          >
+            Sign in
+          </Link>
+        ) : (
+          <button
+            type="button"
+            className="shrink-0 text-[0.65rem] tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+            onClick={error.retry}
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    ) : null;
 
   return (
     <DropdownMenu.Root
@@ -323,7 +345,11 @@ export function AccountMenu() {
             className="grid size-11 place-items-center rounded-full border border-border bg-bg-elevated/90 text-sm tracking-wide text-fg hover:border-accent"
           >
             {user.profileImageUrl ? (
-              <img src={user.profileImageUrl} alt="" className="size-11 rounded-full object-cover" />
+              <img
+                src={user.profileImageUrl}
+                alt=""
+                className="size-11 rounded-full object-cover"
+              />
             ) : (
               initial
             )}
@@ -345,6 +371,34 @@ export function AccountMenu() {
           >
             {panel === "settings" ? (
               <AccountSettingsPanel onBack={() => setPanel("main")} onClose={close} />
+            ) : panel === "skies" ? (
+              <div className="flex max-h-[min(70vh,28rem)] flex-col">
+                <div className="flex items-center gap-2 border-b border-border px-2 py-1">
+                  <button
+                    ref={skiesBackRef}
+                    type="button"
+                    className="min-h-11 px-2 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+                    onClick={() => {
+                      setPanel("main");
+                      requestAnimationFrame(() => skiesItemRef.current?.focus());
+                    }}
+                  >
+                    Back
+                  </button>
+                  <p className="flex-1 truncate pr-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
+                    {YOUR_SKIES_LABEL}
+                  </p>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto py-1">
+                  {skyLinks.map((link) => skyRow(link.id, link.label, () => openDeskSky(link.id)))}
+                  {skyLinks.length === 0 && deskEmpty ? (
+                    <p className="px-4 pt-1 pb-2 text-xs leading-snug text-fg-muted">
+                      {EMPTY_DESK_NOTE}
+                    </p>
+                  ) : null}
+                  {errorRow}
+                </div>
+              </div>
             ) : (
               <>
                 <DropdownMenu.Label className="truncate px-4 pt-3 pb-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
@@ -352,14 +406,31 @@ export function AccountMenu() {
                 </DropdownMenu.Label>
                 {owner ? (
                   <>
-                    {ownerSkyLinks(deskIds ?? []).map((link) =>
-                      skyRow(link.id, link.label, () => openDeskSky(link.id)),
-                    )}
-                    {deskEmpty ? (
+                    {skyMode === "submenu" ? (
+                      <DropdownMenu.Item
+                        ref={skiesItemRef}
+                        className={cn(
+                          ITEM_CLASS,
+                          "justify-between gap-3",
+                          locked && "pointer-events-none opacity-50",
+                        )}
+                        disabled={locked}
+                        aria-haspopup="menu"
+                        onSelect={(e) => {
+                          // Keep the menu open so the sky list can replace this one.
+                          e.preventDefault();
+                          setPanel("skies");
+                        }}
+                      >
+                        {YOUR_SKIES_LABEL}
+                        <ChevronRight className="size-4 shrink-0 text-fg-subtle" aria-hidden />
+                      </DropdownMenu.Item>
+                    ) : null}
+                    {skyMode === "empty" ? (
                       <p className="px-4 pt-1 pb-2 text-xs leading-snug text-fg-muted">
                         {EMPTY_DESK_NOTE}
                       </p>
-                    ) : deskIds === null && !error ? (
+                    ) : skyMode === "checking" ? (
                       <p className="px-4 py-2 text-xs text-fg-subtle">Checking the desk…</p>
                     ) : null}
                   </>

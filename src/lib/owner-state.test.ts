@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { afterEach, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { RESEARCH_CHART_NOT_SEEDED, readResearchBook } from "./chart/nativities/read.ts";
-import { EMPTY_DESK_NOTE, ownerSkyLinks } from "./owner-menu.ts";
+import {
+  EMPTY_DESK_NOTE,
+  YOUR_SKIES_LABEL,
+  ownerSkyLinks,
+  ownerSkyMenuMode,
+} from "./owner-menu.ts";
 import {
   classifyOwnerFetchError,
   forgetOwnerVerdict,
@@ -121,12 +129,13 @@ describe("classifyOwnerFetchError", () => {
   it("treats a missing research book as an empty desk, not a dropped connection", () => {
     assert.equal(classifyOwnerFetchError(new Error(RESEARCH_CHART_NOT_SEEDED)), "unseeded");
     assert.equal(
-      classifyOwnerFetchError(
-        new Error('relation "research_nativity" does not exist'),
-      ),
+      classifyOwnerFetchError(new Error('relation "research_nativity" does not exist')),
       "unseeded",
     );
-    assert.equal(isMissingResearchTableMessage("relation \"research_nativity\" does not exist"), true);
+    assert.equal(
+      isMissingResearchTableMessage('relation "research_nativity" does not exist'),
+      true,
+    );
     assert.equal(isMissingResearchTableMessage("Failed to fetch"), false);
   });
 
@@ -153,6 +162,40 @@ describe("owner sky menu", () => {
   it("uses the calm empty sentence, not a retry", () => {
     assert.equal(EMPTY_DESK_NOTE, "No research charts are on this desk yet.");
     assert.equal(/retry/i.test(EMPTY_DESK_NOTE), false);
+  });
+
+  it("nests returned charts under Your Sky’s and keeps an empty desk quiet", () => {
+    assert.equal(YOUR_SKIES_LABEL, "Your Sky\u2019s");
+    assert.equal(
+      ownerSkyMenuMode({ ids: ["joey", "saige"], deskEmpty: false, failed: false }),
+      "submenu",
+    );
+    assert.equal(ownerSkyMenuMode({ ids: ["saige"], deskEmpty: false, failed: false }), "submenu");
+    assert.equal(ownerSkyMenuMode({ ids: [], deskEmpty: true, failed: false }), "empty");
+    assert.equal(ownerSkyMenuMode({ ids: null, deskEmpty: true, failed: false }), "empty");
+    assert.equal(ownerSkyMenuMode({ ids: null, deskEmpty: false, failed: false }), "checking");
+    assert.equal(ownerSkyMenuMode({ ids: null, deskEmpty: false, failed: true }), "hidden");
+    assert.equal(ownerSkyMenuMode({ ids: [], deskEmpty: false, failed: true }), "hidden");
+    // A stale list still opens the submenu; the error row is separate from this slot.
+    assert.equal(ownerSkyMenuMode({ ids: ["joey"], deskEmpty: false, failed: true }), "submenu");
+  });
+
+  it("lists named skies only inside the Your Sky’s panel", () => {
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const menu = readFileSync(join(root, "components/overlay/AccountMenu.tsx"), "utf8");
+    const skiesAt = menu.indexOf('panel === "skies"');
+    const mainAt = menu.indexOf(") : (", skiesAt);
+    assert.ok(skiesAt >= 0 && mainAt > skiesAt);
+    const skiesBlock = menu.slice(skiesAt, mainAt);
+    const mainBlock = menu.slice(mainAt, menu.indexOf("Profile", mainAt));
+    assert.match(skiesBlock, /skyLinks\.map/);
+    assert.match(skiesBlock, /YOUR_SKIES_LABEL/);
+    assert.match(skiesBlock, /Back/);
+    assert.equal(mainBlock.includes("skyLinks.map"), false);
+    assert.match(mainBlock, /YOUR_SKIES_LABEL/);
+    assert.match(mainBlock, /skyMode === "submenu"/);
+    assert.match(mainBlock, /skyMode === "empty"/);
+    assert.match(mainBlock, /EMPTY_DESK_NOTE/);
   });
 });
 
