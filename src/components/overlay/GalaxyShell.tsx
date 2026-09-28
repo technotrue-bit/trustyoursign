@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
-import { SIGN_INSIGHTS, insightToneLabel } from "@/lib/galaxy/signInsights";
+import { insightToneLabel, sampleInsightForSign } from "@/lib/galaxy/signInsights";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
 import {
   enterSignGalaxy,
@@ -74,6 +74,9 @@ export function GalaxyShell() {
   }, [paused]);
 
   const sign = CONSTELLATIONS[signIndex] ?? currentConstellation();
+  // Follows signIndex. The card used to read a fixed Taurus insight, so it
+  // stayed on Taurus after the viewer opened it and flew to another sign.
+  const sample = sign ? sampleInsightForSign(sign.id) : undefined;
 
   if (!born) {
     return (
@@ -263,24 +266,20 @@ export function GalaxyShell() {
           <summary className="sky-hud-kicker min-h-11 cursor-pointer list-none text-center tracking-[0.2em] uppercase hover:text-fg [&::-webkit-details-marker]:hidden">
             How a chart talks here
           </summary>
-          {(() => {
-            const sample = SIGN_INSIGHTS.taurus[0];
-            if (!sample) return null;
-            return (
-              <div className="chart-talks-pop absolute inset-x-2 bottom-full z-20 mb-2 rounded-md border border-border bg-bg/95 px-3.5 py-3 text-center shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-fg)_8%,transparent),0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-sm md:px-4 md:py-3.5">
-                <p className="text-[0.6rem] tracking-[0.22em] text-fg-subtle uppercase">
-                  Sample reading · {insightToneLabel(sample.tone)}
-                </p>
-                <p className="font-display mt-1.5 text-lg leading-snug text-fg italic">{sample.title}</p>
-                <p className="mt-2 text-sm leading-relaxed text-fg-muted">{sample.body}</p>
-                <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
-                  Every sky speaks in four registers — insight, spice, horror, warning. Inside any
-                  galaxy, the Tone control decides how dark it gets. Full readings belong to your
-                  own birth, not a sample.
-                </p>
-              </div>
-            );
-          })()}
+          {sample ? (
+            <div className="chart-talks-pop absolute inset-x-2 bottom-full z-20 mb-2 rounded-md border border-border bg-bg/95 px-3.5 py-3 text-center shadow-[0_0_0_1px_color-mix(in_oklab,var(--color-fg)_8%,transparent),0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-sm md:px-4 md:py-3.5">
+              <p className="text-[0.6rem] tracking-[0.22em] text-fg-subtle uppercase">
+                Sample reading · {insightToneLabel(sample.tone)}
+              </p>
+              <p className="font-display mt-1.5 text-lg leading-snug text-fg italic">{sample.title}</p>
+              <p className="mt-2 text-sm leading-relaxed text-fg-muted">{sample.body}</p>
+              <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
+                Every sky speaks in four registers — insight, spice, horror, warning. Inside any
+                galaxy, the Tone control decides how dark it gets. Full readings belong to your
+                own birth, not a sample.
+              </p>
+            </div>
+          ) : null}
         </details>
       </div>
     </div>
