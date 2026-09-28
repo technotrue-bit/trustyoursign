@@ -102,15 +102,17 @@ function previewAuthSecret(): string {
  * elsewhere. It also breaks Google/X sign-in, whose state cookies are signed the
  * same way.
  *
- * That failure is indistinguishable from "the site forgot me", so say it out
- * loud in the logs rather than degrading quietly.
+ * That failure is indistinguishable from "the site forgot me": sticky
+ * localStorage still shows a signed-in vault while every server function
+ * throws Unauthorized. On Vercel, refuse to start rather than mint a secret
+ * the next instance cannot verify.
  */
 function resolveAuthSecret(): string {
   const injected = env("BETTER_AUTH_SECRET");
   if (injected) return injected;
   if (process.env.VERCEL) {
-    console.error(
-      "[auth] BETTER_AUTH_SECRET is NOT set. Each serverless instance will use a different random secret, so sessions will not survive across instances and sign-ins will appear to be lost at random. Set BETTER_AUTH_SECRET (Production and Preview) to a stable random value.",
+    throw new Error(
+      "BETTER_AUTH_SECRET is required on Vercel. Set one stable value for Production and Preview. A per-instance random secret signs session cookies the next instance cannot verify.",
     );
   }
   return previewAuthSecret();

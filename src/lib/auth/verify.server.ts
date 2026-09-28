@@ -19,10 +19,11 @@ const databaseConfigured = Boolean(process.env.DATABASE_URL?.trim());
 export { authConfigured };
 
 if (databaseConfigured && !authConfigured) {
+  const forcedOff = process.env.VITE_AUTH_ENABLED?.trim() === "false";
   console.error(
-    "[auth] DATABASE_URL is set but auth is disabled (VITE_AUTH_ENABLED=false) " +
-      "— requireUserId() will reject every request (fail closed) rather than " +
-      "share one dev user on a real database.",
+    forcedOff
+      ? "[auth] DATABASE_URL is set and VITE_AUTH_ENABLED=false — requireUserId() will reject every request (fail closed) rather than share one dev user on a real database."
+      : "[auth] DATABASE_URL is set but GROK_AUTH_CLIENT_SECRET is missing, so federated Grok sign-in is off. Email and password sessions still verify when BETTER_AUTH_SECRET is set. This is not VITE_AUTH_ENABLED=false.",
   );
 }
 

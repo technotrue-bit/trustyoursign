@@ -221,16 +221,23 @@ async function persistChart(
 export const listCharts = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const { getSql } = await import("@/lib/db.server");
-    const sql = await getSql();
-    const rows = await sql<ChartRow>`
-      select id, label, relation, person_name, sign_id, birth_month, birth_day, birth_year,
-             birth_hour, birth_minute, birth_place, natal_json, tone, created_at
-      from charts
-      where user_id = ${context.userId}
-      order by created_at desc
-    `;
-    return rows.map(mapRow);
+    try {
+      const { getSql } = await import("@/lib/db.server");
+      const sql = await getSql();
+      const rows = await sql<ChartRow>`
+        select id, label, relation, person_name, sign_id, birth_month, birth_day, birth_year,
+               birth_hour, birth_minute, birth_place, natal_json, tone, created_at
+        from charts
+        where user_id = ${context.userId}
+        order by created_at desc
+      `;
+      return rows.map(mapRow);
+    } catch (err) {
+      // Message only — a chart row can carry a birth date, and this log must not.
+      const message = err instanceof Error ? err.message : "list failed";
+      console.error("[charts] listCharts failed", message.slice(0, 200));
+      throw err;
+    }
   });
 
 type ChartSummaryRow = {
