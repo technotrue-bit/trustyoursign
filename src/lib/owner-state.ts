@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { RESEARCH_CHART_NOT_SEEDED } from "./chart/nativities/read.ts";
 
 /**
  * Server-truth owner verdict, cached per signed-in user id.
@@ -86,11 +87,18 @@ export function refreshOwnerVerdict(userId: string | null | undefined): Promise<
  * between reloads); the owner gate throws "Not found" when the identity is
  * signed in but not the owner. Everything else is a network / cold-start miss.
  */
-export type OwnerFetchFailure = "signed_out" | "not_owner" | "unreachable";
+export type OwnerFetchFailure = "signed_out" | "not_owner" | "unseeded" | "unreachable";
+
+/** Postgres when migration 0011 has not been applied. An empty desk, not a dropped connection. */
+export function isMissingResearchTableMessage(message: string): boolean {
+  return /research_nativity/i.test(message) && /does not exist|undefined_table|42P01/i.test(message);
+}
 
 export function classifyOwnerFetchError(err: unknown): OwnerFetchFailure {
   const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "";
   if (/unauthori[sz]ed/i.test(msg) || /\b401\b/.test(msg)) return "signed_out";
+  // Checked before "not found": a missing book must not look like a refused owner.
+  if (msg === RESEARCH_CHART_NOT_SEEDED || isMissingResearchTableMessage(msg)) return "unseeded";
   if (/not found/i.test(msg) || /\b404\b/.test(msg)) return "not_owner";
   return "unreachable";
 }

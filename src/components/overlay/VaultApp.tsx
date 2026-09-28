@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ComponentType, lazy, Suspense } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { getResearchChart } from "@/lib/chart/research";
+import { classifyOwnerFetchError } from "@/lib/owner-state";
 import {
   useClaim,
   useSessionKind,
@@ -73,20 +74,23 @@ type VaultAppProps = {
 
 /** Copy for a `?desk=` deep link the server refused — the tap must not look dead. */
 const DESK_LOCKED_NOTE = "That desk isn’t unlocked for this sign-in — flying the open sky.";
+const DESK_EMPTY_NOTE = "That chart isn’t on the desk yet — flying the open sky.";
+
+type BootResult = "ok" | "locked" | "unseeded";
 
 /**
- * Apply a boot place. Resolves `false` only when a research deep link could not
- * be opened (owner gate refused, network) so the caller can clear the URL and
- * say so instead of pinning `?desk=` on a sky that never changed.
+ * Apply a boot place. Resolves `locked` or `unseeded` when a research deep link
+ * could not be opened, so the caller can clear the URL instead of pinning
+ * `?desk=` on a sky that never changed.
  */
-function applyBootPlace(place: SkyPlace): Promise<boolean> {
-  if (place.kind === "home") return Promise.resolve(true);
+function applyBootPlace(place: SkyPlace): Promise<BootResult> {
+  if (place.kind === "home") return Promise.resolve("ok");
   skipIntro();
   skipBirth();
   useGalaxy.getState().markBorn();
   if (place.kind === "library") {
     useSessionStore.getState().openLibrary();
-    return Promise.resolve(true);
+    return Promise.resolve("ok");
   }
   if (place.kind === "research") {
     return getResearchChart({ data: place.id })
@@ -96,18 +100,20 @@ function applyBootPlace(place: SkyPlace): Promise<boolean> {
         // Account-menu "The sky" deep links land on the planet wheel, not under the sheet.
         st.setMode("sky");
         st.foldSheet(true);
-        return true;
+        return "ok" as const;
       })
-      .catch(() => false);
+      .catch((err: unknown) =>
+        classifyOwnerFetchError(err) === "unseeded" ? "unseeded" : "locked",
+      );
   }
   const index = signIndexOf(place.signId);
-  if (index < 0) return Promise.resolve(true);
+  if (index < 0) return Promise.resolve("ok");
   if (place.kind === "belt") {
     snapToSign(index);
-    return Promise.resolve(true);
+    return Promise.resolve("ok");
   }
   restoreInsideSignGalaxy(index, place.star);
-  return Promise.resolve(true);
+  return Promise.resolve("ok");
 }
 
 /** Apply a history pop / forward. An open galaxy unwinds; it is not snapped shut. */
@@ -158,14 +164,14 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   // every refresh re-ran the same refused fetch and the sky never moved.
   const bootPlace = (place: SkyPlace) => {
     lastWritten.current = place;
-    void applyBootPlace(place).then((ok) => {
-      if (ok || place.kind !== "research") return;
+    void applyBootPlace(place).then((result) => {
+      if (result === "ok" || place.kind !== "research") return;
       const released = releaseFailedResearchPlace(lastWritten.current, place.id);
       if (!released) return;
       lastWritten.current = released;
       savePlaceSession(released);
       void navigate({ to: "/", search: (prev) => ({ ...prev, desk: undefined }), replace: true });
-      setDeskNotice(DESK_LOCKED_NOTE);
+      setDeskNotice(result === "unseeded" ? DESK_EMPTY_NOTE : DESK_LOCKED_NOTE);
       if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
       noticeTimer.current = window.setTimeout(() => setDeskNotice(null), 7000);
     });

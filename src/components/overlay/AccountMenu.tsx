@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { clearBearerTokens } from "@/lib/auth/bearer-storage";
 import { signOut } from "@/lib/auth/client";
-import { getResearchChart } from "@/lib/chart/research";
+import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
+import type { ResearchChartId } from "@/lib/chart/types";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { openSavedChart, useSessionStore } from "@/lib/chart/session";
 import { listCharts } from "@/lib/charts";
@@ -12,6 +13,7 @@ import { skipIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { skipBirth } from "@/lib/galaxy/travel";
 import { savePlaceSession } from "@/lib/ui/skyPlace";
+import { EMPTY_DESK_NOTE, ownerSkyLinks } from "@/lib/owner-menu";
 import {
   classifyOwnerFetchError,
   forgetOwnerVerdict,
@@ -85,7 +87,54 @@ export function AccountMenu() {
   const [error, setError] = useState<{ kind: OwnerFetchFailure; retry: () => void } | null>(null);
   const [panel, setPanel] = useState<"main" | "settings">("main");
   const [leaving, setLeaving] = useState(false);
+  // null until the desk answers. Never assume Joey and Saige are both seeded.
+  const [deskIds, setDeskIds] = useState<ResearchChartId[] | null>(null);
+  const [deskEmpty, setDeskEmpty] = useState(false);
   const owner = useOwnerVerdict(user?.id) === true;
+  const deskGen = useRef(0);
+  const refreshDeskRef = useRef<() => void>(() => {});
+
+  refreshDeskRef.current = () => {
+    if (!user?.id || !owner) return;
+    const gen = ++deskGen.current;
+    listResearchLibrary()
+      .then((rows) => {
+        if (gen !== deskGen.current) return;
+        const links = ownerSkyLinks(rows.map((row) => row.id));
+        setDeskIds(links.map((link) => link.id));
+        setDeskEmpty(links.length === 0);
+        setError((prev) => (prev?.kind === "unseeded" || prev?.kind === "unreachable" ? null : prev));
+      })
+      .catch((err: unknown) => {
+        if (gen !== deskGen.current) return;
+        const kind = classifyOwnerFetchError(err);
+        console.error("[account-menu] desk list failed", kind, err);
+        if (kind === "unseeded") {
+          setDeskIds([]);
+          setDeskEmpty(true);
+          setError(null);
+          return;
+        }
+        // A lapsed cookie or a non-owner is stale chrome. An empty desk is not.
+        if (kind !== "unreachable") forgetOwnerVerdict(user.id);
+        if (kind === "signed_out") refetchSession();
+        if (kind !== "unreachable") {
+          setDeskIds([]);
+          setDeskEmpty(false);
+        }
+        setError({ kind, retry: () => refreshDeskRef.current() });
+      });
+  };
+
+  useEffect(() => {
+    if (!user?.id || !owner) {
+      deskGen.current += 1;
+      setDeskIds(null);
+      setDeskEmpty(false);
+      return;
+    }
+    refreshDeskRef.current();
+  }, [owner, user?.id]);
 
   if (isPending) {
     return <div className="size-11 shrink-0 animate-pulse rounded-full bg-bg-subtle" aria-hidden />;
@@ -137,6 +186,11 @@ export function AccountMenu() {
   const fail = (err: unknown, retry: () => void) => {
     const kind = classifyOwnerFetchError(err);
     console.error("[account-menu] owner call failed", kind, err);
+    if (kind === "unseeded") {
+      setError(null);
+      refreshDeskRef.current();
+      return;
+    }
     if (kind !== "unreachable") forgetOwnerVerdict(user.id);
     if (kind === "signed_out") refetchSession();
     setError({ kind, retry });
@@ -213,7 +267,7 @@ export function AccountMenu() {
     );
   };
 
-  const errorRow = error ? (
+  const errorRow = error && error.kind !== "unseeded" ? (
     <div role="alert" className="flex items-center justify-between gap-3 px-4 pt-1 pb-2">
       <p className="text-xs leading-snug text-wine">
         {error.kind === "signed_out"
@@ -250,7 +304,10 @@ export function AccountMenu() {
         if (!next && busy !== null) return;
         // The verdict was asked once at mount; the cookie behind it can lapse
         // between then and now. Re-ask on every open, keeping rows steady.
-        if (next) void refreshOwnerVerdict(user.id);
+        if (next) {
+          void refreshOwnerVerdict(user.id);
+          if (owner) refreshDeskRef.current();
+        }
         setOpen(next);
         if (!next) {
           setPanel("main");
@@ -295,8 +352,16 @@ export function AccountMenu() {
                 </DropdownMenu.Label>
                 {owner ? (
                   <>
-                    {skyRow("joey", "The sky", () => openDeskSky("joey"))}
-                    {skyRow("saige", "Saige’s sky", () => openDeskSky("saige"))}
+                    {ownerSkyLinks(deskIds ?? []).map((link) =>
+                      skyRow(link.id, link.label, () => openDeskSky(link.id)),
+                    )}
+                    {deskEmpty ? (
+                      <p className="px-4 pt-1 pb-2 text-xs leading-snug text-fg-muted">
+                        {EMPTY_DESK_NOTE}
+                      </p>
+                    ) : deskIds === null && !error ? (
+                      <p className="px-4 py-2 text-xs text-fg-subtle">Checking the desk…</p>
+                    ) : null}
                   </>
                 ) : (
                   skyRow("mine", "The sky", openVisitorSky)

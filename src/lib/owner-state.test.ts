@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import { RESEARCH_CHART_NOT_SEEDED, readResearchBook } from "./chart/nativities/read.ts";
+import { EMPTY_DESK_NOTE, ownerSkyLinks } from "./owner-menu.ts";
 import {
   classifyOwnerFetchError,
   forgetOwnerVerdict,
+  isMissingResearchTableMessage,
   peekOwnerVerdict,
   refreshOwnerVerdict,
   resolveOwnerVerdict,
@@ -115,8 +118,58 @@ describe("classifyOwnerFetchError", () => {
     assert.equal(classifyOwnerFetchError(new Error("Not found")), "not_owner");
   });
 
+  it("treats a missing research book as an empty desk, not a dropped connection", () => {
+    assert.equal(classifyOwnerFetchError(new Error(RESEARCH_CHART_NOT_SEEDED)), "unseeded");
+    assert.equal(
+      classifyOwnerFetchError(
+        new Error('relation "research_nativity" does not exist'),
+      ),
+      "unseeded",
+    );
+    assert.equal(isMissingResearchTableMessage("relation \"research_nativity\" does not exist"), true);
+    assert.equal(isMissingResearchTableMessage("Failed to fetch"), false);
+  });
+
   it("treats anything else as unreachable", () => {
     assert.equal(classifyOwnerFetchError(new Error("Failed to fetch")), "unreachable");
     assert.equal(classifyOwnerFetchError(undefined), "unreachable");
+  });
+});
+
+describe("owner sky menu", () => {
+  it("offers a sky link only for a chart the desk returned", () => {
+    assert.deepEqual(
+      ownerSkyLinks(["joey", "saige"]).map((link) => link.label),
+      ["The sky", "Saige’s sky"],
+    );
+    assert.deepEqual(
+      ownerSkyLinks(["saige"]).map((link) => link.id),
+      ["saige"],
+    );
+    assert.deepEqual(ownerSkyLinks([]), []);
+    assert.deepEqual(ownerSkyLinks(["visitor", "other"]), []);
+  });
+
+  it("uses the calm empty sentence, not a retry", () => {
+    assert.equal(EMPTY_DESK_NOTE, "No research charts are on this desk yet.");
+    assert.equal(/retry/i.test(EMPTY_DESK_NOTE), false);
+  });
+});
+
+describe("readResearchBook", () => {
+  it("accepts a book whose id matches and refuses a torn or foreign payload", () => {
+    const book = readResearchBook("joey", {
+      id: "joey",
+      meta: { name: "Desk", date: "", oneCut: "" },
+    });
+    assert.equal(book?.id, "joey");
+    assert.equal(book?.meta.name, "Desk");
+    assert.equal(readResearchBook("joey", { id: "saige", meta: { name: "Desk" } }), null);
+    assert.equal(readResearchBook("joey", { meta: { name: "Desk" } }), null);
+    assert.equal(readResearchBook("saige", "not-json"), null);
+    assert.equal(
+      readResearchBook("saige", JSON.stringify({ id: "saige", meta: { name: "Desk" } }))?.id,
+      "saige",
+    );
   });
 });

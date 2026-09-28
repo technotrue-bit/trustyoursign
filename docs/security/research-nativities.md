@@ -4,9 +4,23 @@
 `src/lib/chart/nativities/*.ts`. This repo is public, so those files are
 **no longer tracked**. Git history is unchanged — this did not rewrite it.
 
-Joey should confirm this pull request before it merges. Until the private
-seed is loaded, the owner desk's research library is empty and a chart
-request answers `Research chart is not seeded`.
+Deploy creates the empty table. The books stay out of git until someone runs
+the one-time seed below. Until then, the owner menu shows a calm empty desk:
+no sky links and no retry. A request for a book that is not there still
+answers `Research chart is not seeded`.
+
+## One-time production seed
+
+Do this once, on a machine that already has the private JSON and
+`DATABASE_URL` in the environment (not in a committed file):
+
+```bash
+node scripts/seed-research-nativities.mjs
+```
+
+The script prints `upserted joey` / `upserted saige` and nothing else. After
+that, the owner menu shows those skies again. Re-run only when a book
+changes. Do not commit the JSON.
 
 ## Where they live now
 

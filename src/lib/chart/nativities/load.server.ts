@@ -2,36 +2,39 @@ import { getSql } from "@/lib/db.server";
 import { assertSiteOwner } from "@/lib/owner.server";
 import type { ResearchChartId } from "../types";
 import type { Nativity } from "../schema";
+import { readResearchBook, RESEARCH_CHART_NOT_SEEDED } from "./read";
 
 export const assertResearchOwner = assertSiteOwner;
 
-const NOT_SEEDED = "Research chart is not seeded";
-
-function parsePayload(payload: unknown): unknown {
-  if (typeof payload !== "string") return payload;
-  try {
-    return JSON.parse(payload);
-  } catch {
-    return null;
-  }
-}
-
-function asNativity(id: ResearchChartId, payload: unknown): Nativity {
-  const parsed = parsePayload(payload);
-  if (!parsed || typeof parsed !== "object") throw new Error(NOT_SEEDED);
-  const book = parsed as Nativity;
-  if (book.id !== id) throw new Error(NOT_SEEDED);
-  return book;
+function notSeeded(): never {
+  throw new Error(RESEARCH_CHART_NOT_SEEDED);
 }
 
 /** Owner-only. Books live in `research_nativity`, seeded from `seeds/private/`. */
 export async function loadResearchNativity(id: ResearchChartId): Promise<Nativity> {
   const sql = await getSql();
-  const rows = await sql<{ payload: unknown }>`
-    select payload from research_nativity where id = ${id} limit 1
-  `;
-  if (!rows[0]) throw new Error(NOT_SEEDED);
-  return asNativity(id, rows[0].payload);
+  let rows: { payload: unknown }[];
+  try {
+    rows = await sql<{ payload: unknown }>`
+      select payload from research_nativity where id = ${id} limit 1
+    `;
+  } catch (err) {
+    // No table yet is an empty desk. The menu must not treat it as a dropped connection.
+    if (isMissingResearchTable(err)) {
+      console.info("[research] chart table is not there yet");
+      notSeeded();
+    }
+    const message = err instanceof Error ? err.message : "chart read failed";
+    console.error("[research] chart read failed", message.slice(0, 200));
+    throw err;
+  }
+  const book = rows[0] ? readResearchBook(id, rows[0].payload) : null;
+  if (!book) {
+    // Id only — never the payload. Birth data stays in the row.
+    console.info("[research] chart is not on the desk", id);
+    notSeeded();
+  }
+  return book;
 }
 
 function isMissingResearchTable(err: unknown): boolean {
@@ -55,14 +58,13 @@ export async function listResearchLibrary() {
   for (const row of rows) {
     if (row.id !== "joey" && row.id !== "saige") continue;
     const id: ResearchChartId = row.id;
-    const parsed = parsePayload(row.payload);
-    if (!parsed || typeof parsed !== "object") continue;
-    const meta = (parsed as Nativity).meta;
+    const book = readResearchBook(id, row.payload);
+    if (!book) continue;
     library.push({
       id,
-      title: meta?.name ?? row.id,
-      oneCut: meta?.oneCut ?? "",
-      date: meta?.date ?? "",
+      title: book.meta.name || id,
+      oneCut: book.meta.oneCut ?? "",
+      date: book.meta.date ?? "",
     });
   }
   return library;

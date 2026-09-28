@@ -215,6 +215,11 @@ function ResearchBooks({ claimed }: { claimed: boolean | null }) {
       .catch((error) => {
         if (cancelled) return;
         const kind = classifyOwnerFetchError(error);
+        if (kind === "unseeded") {
+          setBooks([]);
+          setErr(null);
+          return;
+        }
         setBooks([]);
         setErr(
           kind === "signed_out"
