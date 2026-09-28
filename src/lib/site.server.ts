@@ -3,22 +3,12 @@ import { AppRls } from "@/lib/db-rls.server";
 import { getRequest } from "@tanstack/react-start/server";
 import { assertSiteOwner } from "./owner.server";
 import { SITE_OWNER, OWNER_USER_ID } from "./owner";
+import { readOwnerPassword } from "./owner-password.server";
 import { canBindPreviewOwner } from "./auth/preview";
 
 class OwnerPassword {
-  static readonly COMPROMISED = "True";
-
   static read(): string | undefined {
-    const value = process.env.OWNER_PASSWORD?.trim();
-    if (!value) return undefined;
-    if (value === OwnerPassword.COMPROMISED) {
-      console.error(
-        '[owner] OWNER_PASSWORD is the compromised legacy value "True" — ignoring it. ' +
-          "Set a new password in the host environment, or owner sign-in stays off.",
-      );
-      return undefined;
-    }
-    return value;
+    return readOwnerPassword();
   }
 
   static isProd(): boolean {

@@ -41,10 +41,16 @@ tab, never *Create account*: the owner row already exists, so signing up would
 just fail on the duplicate email.
 
 `OWNER_EMAILS` / `OWNER_ACCOUNTS` are for *federated* sign-in (Google/X), not
-for this. Email/password accounts are permanently `emailVerified: false` — no
-verification flow is configured — and `OWNER_EMAILS` deliberately matches
-verified addresses only, because sign-up is open and an unverified match would
-let someone register your address first.
+for the password path above. Email/password sign-up leaves `emailVerified`
+false, and an unverified allowlisted address does **not** open the desk —
+sign-up is open, so a matching address alone would let someone register it
+first. An email code to that address does verify it. A linked Google or gate
+account on that address counts as mailbox proof even if the stored flag was
+left false. X does not. A display name never does.
+
+If another account already holds the owner address, signing in with the owner
+password still opens the canonical owner row. Signing in with some other
+password on the squatting account stays unbound.
 
 ---
 
@@ -86,10 +92,12 @@ password nobody could see.)
 
 - **Stale password / lockout** — set `OWNER_PASSWORD` to what you want, redeploy.
   Rotation makes it the working password.
-- **Address squatted by another account** — sign in with the *previous* owner
-  address (the rename failing does not change the existing row's email), then
-  either free the address or point `SITE_OWNER.email` somewhere available.
-  The owner row is never hijacked by the collision.
+- **Address squatted by another account** — sign in with the owner password
+  on the owner address (or `ADMIN`). That session is the canonical owner row,
+  even though the rename could not move the address. A different password on
+  the squatting account stays "Not bound". You can still free the address
+  later. The owner row is never hijacked by the collision. `OWNER_NAME_CLAIM`
+  is not required for this.
 - **Last resort** — `OWNER_NAME_CLAIM=1` re-enables a narrow name-based
   bootstrap: whole compacted name, or the owner handle as a standalone token,
   one time only while nothing is bound, and it logs
@@ -102,7 +110,9 @@ password nobody could see.)
 
 Owner access is decided by immutable identity only: the canonical row, the
 recorded binding in `site_state.owner_user_id`, `OWNER_ACCOUNTS`
-(`providerId:accountId` from the `account` table, user-immutable), or
-`OWNER_EMAILS` (verified only). A display name is never consulted — that was a
-privilege-escalation hole, fixed in #37, where any account calling itself
-"Devin Norris" could reach the owner desk and the owner-only research charts.
+(`providerId:accountId` from the `account` table, user-immutable), an
+allowlisted email that is verified or proved by Google/gate, or the operator
+secret (`OWNER_PASSWORD`) on an allowlisted address. A display name is never
+consulted — that was a privilege-escalation hole, fixed in #37, where any
+account calling itself "Devin Norris" could reach the owner desk and the
+owner-only research charts.

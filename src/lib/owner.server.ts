@@ -1,8 +1,10 @@
 import { getSql, type Sql } from "@/lib/db.server";
 import { AppRls } from "@/lib/db-rls.server";
+import { readOwnerPassword } from "./owner-password.server";
 import {
   accountKey,
   isSiteOwnerIdentity,
+  linkedMailboxProof,
   looksLikeOwnerByName,
   ownerEmailAllowList,
   OWNER_USER_ID,
@@ -17,7 +19,11 @@ import {
  *   1. the canonical owner row id,
  *   2. the stored binding in `site_state.owner_user_id`,
  *   3. an allowlisted provider account (`OWNER_ACCOUNTS`, `providerId:accountId`),
- *   4. an allowlisted, VERIFIED email (`OWNER_EMAILS`).
+ *   4. an allowlisted email (`OWNER_EMAILS`) that is verified, or proved by a
+ *      linked Google / gate account (X never counts),
+ *   5. that same allowlisted email when this row's credential hash matches
+ *      `OWNER_PASSWORD` (the operator secret — not a display name, and not
+ *      an unverified signup on its own).
  *
  * A display name is never sufficient: it is attacker-controlled on every
  * sign-in path (email/password sign-up and the Google / X profile name behind
@@ -61,10 +67,10 @@ async function readSiteState(sql: Sql): Promise<SiteStateRow | null> {
  * never reassign a site that is already bound to a different user.
  */
 async function bindOwner(sql: Sql, userId: string): Promise<void> {
-  // site_state writes require the bypass (or the canonical owner flag). This
-  // runs after the identity check, inside the caller's user context, where
-  // that flag is only set for the placeholder row. Without the bypass the
-  // update matches nothing and Claim stays on Waiting.
+  // site_state writes need the bypass: the request flag is only set for the
+  // canonical row. This runs after a successful proof so the binding sticks.
+  // Claim stays on "Not bound" when the proof itself fails — a dropped update
+  // is not what keeps a recognised sign-in on Waiting.
   await AppRls.bypass(
     () => sql`
       update site_state
@@ -96,24 +102,46 @@ export async function assertSiteOwner(userId: string) {
   `;
   const row = rows[0] ?? null;
 
-  const allowedAccounts = ownerAccounts();
-  const linked = allowedAccounts.length
-    ? await sql<{ providerId: string; accountId: string }>`
-        select "providerId", "accountId" from "account" where "userId" = ${userId}
-      `
-    : [];
+  // Always load linked accounts. Mailbox proof needs the provider id even
+  // when OWNER_ACCOUNTS is unset.
+  const linked = await sql<{ providerId: string; accountId: string }>`
+    select "providerId", "accountId" from "account" where "userId" = ${userId}
+  `;
+  const accounts = linked.map((a) => ({ providerId: a.providerId, accountId: a.accountId }));
+  const emails = ownerEmails();
 
   const authorized = isSiteOwnerIdentity({
     userId,
     boundOwnerId: state?.owner_user_id ?? null,
     email: row?.email ?? null,
     emailVerified: Boolean(row?.emailVerified),
-    accounts: linked.map((a) => ({ providerId: a.providerId, accountId: a.accountId })),
-    ownerEmails: ownerEmails(),
-    ownerAccounts: allowedAccounts,
+    accounts,
+    ownerEmails: emails,
+    ownerAccounts: ownerAccounts(),
   });
 
   if (authorized) {
+    if (!row?.emailVerified && linkedMailboxProof(accounts)) {
+      // The provider already proved the mailbox; the stored flag was left false.
+      try {
+        await sql`
+          update "user" set "emailVerified" = true, "updatedAt" = now() where "id" = ${userId}
+        `;
+      } catch (err) {
+        console.warn(
+          "[owner] mailbox was proved but the verified flag could not be stored",
+          err instanceof Error ? err.name : "error",
+        );
+      }
+    }
+    if (state && state.owner_user_id !== userId) await bindOwner(sql, userId);
+    return;
+  }
+
+  // Operator secret on this row. Only when the address is already allowlisted,
+  // so a random claim does not pay for a password hash. Does not flip
+  // emailVerified — a password is not mailbox proof.
+  if (await credentialMatchesOwnerSecret(sql, userId, row?.email, emails)) {
     if (state && state.owner_user_id !== userId) await bindOwner(sql, userId);
     return;
   }
@@ -133,5 +161,47 @@ export async function assertSiteOwner(userId: string) {
     return;
   }
 
+  console.warn("[owner] desk refused", { reason: refusalReason(row, emails) });
   throw new Error("Not found");
+}
+
+/**
+ * True when this row's credential hash is the operator secret.
+ * Returns false immediately unless the address is allowlisted, so other
+ * claims never pay for a password hash.
+ */
+async function credentialMatchesOwnerSecret(
+  sql: Sql,
+  userId: string,
+  email: string | null | undefined,
+  emails: readonly string[],
+): Promise<boolean> {
+  const address = (email ?? "").trim().toLowerCase();
+  if (!address || !emails.includes(address)) return false;
+  const password = readOwnerPassword();
+  if (!password) return false;
+  const acc = await sql<{ password: string | null }>`
+    select "password" from "account"
+    where "userId" = ${userId} and "providerId" = 'credential'
+    limit 1
+  `;
+  const hash = acc[0]?.password;
+  if (!hash) return false;
+  try {
+    const { verifyPassword } = await import("better-auth/crypto");
+    return await verifyPassword({ hash, password });
+  } catch {
+    return false;
+  }
+}
+
+function refusalReason(
+  row: { email: string | null; emailVerified: boolean | null } | null,
+  emails: readonly string[],
+): "no-row" | "email-mismatch" | "unverified-email" | "no-proof" {
+  if (!row) return "no-row";
+  const address = (row.email ?? "").trim().toLowerCase();
+  if (!address || !emails.includes(address)) return "email-mismatch";
+  if (!row.emailVerified) return "unverified-email";
+  return "no-proof";
 }

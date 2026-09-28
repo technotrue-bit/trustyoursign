@@ -56,6 +56,7 @@ import { emailAndPasswordEnabled } from "./email-password";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { passkeyAvailable, passkeyRpConfig } from "./passkey-config";
 import { GROK_PROVIDERS } from "./providers";
+import { ownerCanonicalSignIn } from "./owner-sign-in.server.ts";
 import { hostSessionCookieEmit } from "./session-cookie.server.ts";
 import { SESSION_TOKEN_COOKIE } from "./session-cookie-names.ts";
 import {
@@ -381,6 +382,10 @@ export const auth = betterAuth({
 
   plugins: [
     gateIdentitySessions(),
+
+    // Owner password opens the canonical row even when another account holds
+    // the address. A display name is not consulted.
+    ownerCanonicalSignIn(),
 
     // Bot protection: Cloudflare Turnstile when TURNSTILE_SECRET_KEY is set.
     // Pair with VITE_TURNSTILE_SITE_KEY on the login form (see docs/security/turnstile.md).
