@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { SessionUnavailable } from "@/lib/auth/gates";
 import { resolveSessionGuardState } from "@/lib/auth/session-guard";
@@ -21,6 +21,8 @@ import { claimSite } from "@/lib/site";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
 import { authClient, signOut } from "@/lib/auth/client";
+import { clearStickySession } from "@/lib/auth/session-sticky";
+import { isUnauthorizedError } from "@/lib/auth/unauthorized";
 import { signInAvailability } from "@/lib/auth/email-otp";
 import { platformAuthenticatorAvailable } from "@/lib/auth/passkey-sign-in";
 import {
@@ -70,14 +72,26 @@ function Account() {
   const [signedOutGrace, setSignedOutGrace] = useState(true);
 
   const [chartsFailed, setChartsFailed] = useState(false);
+  const loadGen = useRef(0);
 
   const load = () => {
+    const gen = ++loadGen.current;
     setChartsFailed(false);
     listCharts()
       .then((rows) => {
+        if (gen !== loadGen.current) return;
         setCharts(rows);
+        setChartsFailed(false);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        if (gen !== loadGen.current) return;
+        // A cookie this instance cannot verify is a lapsed sign-in. Sticky
+        // storage would otherwise keep the vault looking signed in.
+        if (isUnauthorizedError(err)) {
+          clearStickySession();
+          window.location.assign("/login?from=account");
+          return;
+        }
         // An empty vault and a failed read must not look the same.
         setCharts((prev) => prev ?? []);
         setChartsFailed(true);

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { listCharts, type SavedChart } from "@/lib/charts";
+import { clearStickySession } from "@/lib/auth/session-sticky";
+import { isUnauthorizedError } from "@/lib/auth/unauthorized";
 import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
 import { openSavedChart, useSessionStore } from "@/lib/chart/session";
 import { isResearchChartId, type ChartId } from "@/lib/chart/types";
@@ -163,7 +165,14 @@ function SavedShelf() {
     }
     listCharts()
       .then(setRows)
-      .catch(() => setRows([]));
+      .catch((err: unknown) => {
+        if (isUnauthorizedError(err)) {
+          clearStickySession();
+          window.location.assign("/login?from=account");
+          return;
+        }
+        setRows([]);
+      });
   }, [userId]);
   if (!user) {
     return (
