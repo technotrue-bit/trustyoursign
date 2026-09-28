@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   isSiteOwner,
   isSiteOwnerIdentity,
   isOwnerLogin,
+  linkedMailboxProof,
   looksLikeOwnerByName,
   ownerEmailAllowList,
   OWNER_USER_ID,
@@ -90,6 +94,65 @@ describe("owner identity — immutable identifiers only", () => {
       }),
       false,
     );
+    // A linked X account does not prove the mailbox.
+    assert.equal(
+      isSiteOwnerIdentity({
+        userId: "u1",
+        ownerEmails,
+        email: "devin@gmail.com",
+        emailVerified: false,
+        accounts: [{ providerId: "grok-x", accountId: "99" }],
+      }),
+      false,
+    );
+  });
+
+  it("accepts an allowlisted email when Google or the gate proved the mailbox", () => {
+    const ownerEmails = [SITE_OWNER.email];
+    assert.equal(
+      isSiteOwnerIdentity({
+        userId: "google-row",
+        ownerEmails,
+        email: SITE_OWNER.email,
+        emailVerified: false,
+        accounts: [{ providerId: "grok-google", accountId: "1180" }],
+      }),
+      true,
+    );
+    assert.equal(
+      isSiteOwnerIdentity({
+        userId: "gate-row",
+        ownerEmails,
+        email: SITE_OWNER.email,
+        emailVerified: false,
+        accounts: [{ providerId: "grok-gate", accountId: "gate-1" }],
+      }),
+      true,
+    );
+    // The provider proof does not extend to some other address.
+    assert.equal(
+      isSiteOwnerIdentity({
+        userId: "google-row",
+        ownerEmails,
+        email: "someone-else@example.com",
+        emailVerified: false,
+        accounts: [{ providerId: "grok-google", accountId: "1180" }],
+      }),
+      false,
+    );
+    // A local password signup is not mailbox proof.
+    assert.equal(
+      isSiteOwnerIdentity({
+        userId: "cred-row",
+        ownerEmails,
+        email: SITE_OWNER.email,
+        emailVerified: false,
+        accounts: [{ providerId: "credential", accountId: "cred-row" }],
+      }),
+      false,
+    );
+    assert.equal(linkedMailboxProof([{ providerId: "grok-x" }]), false);
+    assert.equal(linkedMailboxProof([{ providerId: "grok-google" }]), true);
   });
 
   it("rejects empty / unknown identities", () => {
@@ -177,6 +240,50 @@ describe("legacy name heuristic is narrow (opt-in bootstrap only)", () => {
     assert.equal(looksLikeOwnerByName({ displayName: "Joey Devin Norris" }), false);
     assert.equal(looksLikeOwnerByName({ displayName: "Jane Doe" }), false);
     assert.equal(looksLikeOwnerByName(null), false);
+  });
+});
+
+describe("research desk", () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
+
+  it("writes the owner binding with the row-level bypass", () => {
+    const text = readFileSync(join(root, "src/lib/owner.server.ts"), "utf8");
+    const start = text.indexOf("async function bindOwner");
+    const end = text.indexOf("function isUnbound");
+    assert.ok(start >= 0 && end > start);
+    assert.match(text.slice(start, end), /AppRls\.bypass/);
+  });
+
+  it("lists research charts by their own names, without a combined heading", () => {
+    const admin = readFileSync(join(root, "src/routes/admin.tsx"), "utf8");
+    assert.equal(admin.includes("Saige and Joey"), false);
+    assert.match(admin, /Research charts/);
+    assert.match(admin, /No research charts are on this desk yet/);
+    assert.match(admin, /The third/);
+    assert.match(admin, /claimed !== true/);
+    assert.match(admin, /Checking/);
+    assert.match(admin, /Bound to this sign-in/);
+    assert.match(admin, /Not bound to this sign-in/);
+    assert.equal(admin.includes('"Waiting"'), false);
+  });
+
+  it("proves the operator secret only for an allowlisted address, and never by name", () => {
+    const server = readFileSync(join(root, "src/lib/owner.server.ts"), "utf8");
+    const start = server.indexOf("async function credentialMatchesOwnerSecret");
+    const end = server.indexOf("function refusalReason");
+    assert.ok(start >= 0 && end > start);
+    const body = server.slice(start, end);
+    assert.match(body, /emails\.includes\(address\)/);
+    const allowCheck = body.indexOf("emails.includes(address)");
+    const verify = body.indexOf("verifyPassword");
+    assert.ok(allowCheck >= 0 && verify > allowCheck);
+    assert.equal(body.includes("looksLikeOwnerByName"), false);
+    assert.equal(server.includes("linkedMailboxProof"), true);
+    const signIn = readFileSync(join(root, "src/lib/auth/owner-sign-in.server.ts"), "utf8");
+    assert.match(signIn, /OWNER_USER_ID/);
+    assert.match(signIn, /ownerPasswordMatches/);
+    assert.equal(signIn.includes("looksLikeOwnerByName"), false);
+    assert.equal(signIn.includes("displayName"), false);
   });
 });
 

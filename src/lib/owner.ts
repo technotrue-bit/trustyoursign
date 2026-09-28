@@ -35,8 +35,10 @@ function norm(s: string | null | undefined) {
  * Authoritative, in order of strength:
  *   1. `OWNER_ACCOUNTS`  — `providerId:accountId` pairs; the upstream provider's
  *      immutable subject id for the owner's Google / X account.
- *   2. `OWNER_EMAILS`    — allowlisted emails, honoured ONLY when the identity
- *      is verified (synthetic/unverified X emails never match).
+ *   2. `OWNER_EMAILS`    — allowlisted emails, honoured when the mailbox is
+ *      verified, or when a linked Google / gate account proves that mailbox.
+ *      Synthetic X emails never match. An unverified password signup never
+ *      matches on the address alone.
  *   3. the stored binding — `site_state.owner_user_id` once the owner has been
  *      recognised, so later requests are decided by id alone.
  *   4. `OWNER_USER_ID`   — the canonical local credential account.
@@ -66,6 +68,21 @@ export function parseOwnerAccounts(raw: string | null | undefined): string[] {
 /** `providerId:accountId` for one linked account row. */
 export function accountKey(a: { providerId: string; accountId: string }) {
   return `${a.providerId}:${a.accountId}`;
+}
+
+/**
+ * Providers whose link is real mailbox proof.
+ * Google and the gate both speak for an address the provider verified.
+ * X is absent on purpose: its address is synthetic and unverified.
+ * A local `credential` row is absent too — an open signup must not count.
+ */
+export const MAILBOX_PROOF_PROVIDER_IDS = ["grok-google", "grok-gate"] as const;
+
+export function linkedMailboxProof(
+  accounts: readonly { providerId: string }[] | undefined,
+): boolean {
+  const proof = new Set<string>(MAILBOX_PROOF_PROVIDER_IDS);
+  return (accounts ?? []).some((account) => proof.has(account.providerId));
 }
 
 export type OwnerIdentityInput = {
@@ -106,11 +123,13 @@ export function isSiteOwnerIdentity(input: OwnerIdentityInput): boolean {
     if (keys.some((k) => accounts.includes(k))) return true;
   }
 
-  // Allowlisted email, verified only.
+  // Allowlisted email. Verified flag, or a provider that proved the mailbox.
+  // An unverified address with no such provider stays out — sign-up is open.
   const emails = input.ownerEmails ?? [];
-  if (emails.length > 0 && input.emailVerified) {
-    const email = norm(input.email);
-    if (email && emails.includes(email)) return true;
+  const email = norm(input.email);
+  if (emails.length > 0 && email && emails.includes(email)) {
+    if (input.emailVerified) return true;
+    if (linkedMailboxProof(input.accounts)) return true;
   }
 
   return false;

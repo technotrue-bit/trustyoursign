@@ -9,6 +9,7 @@ import { PRIVACY_VERSION, TERMS_VERSION, CONTACT_HANDLE } from "@/lib/legal";
 import { getAiDesk, grantSkyPass, saveAiDesk } from "@/lib/chart/sky";
 import { getMaintenanceGate, setMaintenance } from "@/lib/maintenance";
 import { listResearchLibrary } from "@/lib/chart/research";
+import { classifyOwnerFetchError } from "@/lib/owner-state";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
 
 export const Route = createFileRoute("/admin")({ component: Admin });
@@ -16,17 +17,27 @@ export const Route = createFileRoute("/admin")({ component: Admin });
 function Admin() {
   const { user, isPending, isReadFailed } = useCurrentUserState();
   const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
-  const [claimed, setClaimed] = useState<boolean | null>(null);
+  const [claim, setClaim] = useState<"checking" | "bound" | "unbound" | "error">("checking");
 
   const owner = Boolean(user && isSiteOwner(user));
   // Depend on the flag, not the object: the session hook rebuilds `user` on every
   // render, so a `[user]` dependency re-runs this effect (and `claimSite`) forever.
   useEffect(() => {
     if (!owner) return;
+    let cancelled = false;
+    setClaim("checking");
     claimSite()
-      .then((r) => setClaimed(r.owner))
-      .catch(() => setClaimed(false));
+      .then((r) => {
+        if (!cancelled) setClaim(r.owner ? "bound" : "unbound");
+      })
+      .catch(() => {
+        if (!cancelled) setClaim("error");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [owner]);
+  const claimed: boolean | null = claim === "checking" ? null : claim === "bound";
 
   if (guard === "loading") {
     return (
@@ -44,8 +55,7 @@ function Admin() {
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">Closed</p>
           <h1 className="mt-2 font-display text-4xl italic">This desk is taken.</h1>
           <p className="mt-4 text-sm leading-relaxed text-fg-muted">
-            {SITE_OWNER.name} keeps Trust Your Sign. Sign in with the Google or X account that carries
-            that name, or the handle {SITE_OWNER.handle}.
+            {SITE_OWNER.name} keeps Trust Your Sign. This sign-in is not the owner account.
           </p>
           <Link to="/" className="mt-6 inline-flex min-h-11 text-xs tracking-[0.18em] uppercase">
             Back to the sky
@@ -88,7 +98,15 @@ function Admin() {
           </div>
           <div className="flex justify-between gap-4 border-b border-border py-2">
             <dt className="text-fg-subtle">Claim</dt>
-            <dd>{claimed ? "Bound to this sign-in" : "Waiting"}</dd>
+            <dd>
+              {claim === "bound"
+                ? "Bound to this sign-in"
+                : claim === "unbound"
+                  ? "Not bound to this sign-in"
+                  : claim === "error"
+                    ? "Could not check this sign-in"
+                    : "Checking"}
+            </dd>
           </div>
           <div className="flex justify-between gap-4 border-b border-border py-2">
             <dt className="text-fg-subtle">Terms</dt>
@@ -106,7 +124,7 @@ function Admin() {
           <Link to="/terms">Terms</Link>
           <Link to="/">The sky</Link>
         </div>
-        <ResearchBooks />
+        <ResearchBooks claimed={claimed} />
         <AiDeskForm />
       </div>
     </main>
@@ -181,18 +199,39 @@ function MaintenanceSwitch() {
 
 type ResearchBook = { id: "saige" | "joey"; title: string; oneCut: string; date: string };
 
-function ResearchBooks() {
+function ResearchBooks({ claimed }: { claimed: boolean | null }) {
   const [books, setBooks] = useState<ResearchBook[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
+    // The page can open on a name/email glance. The library itself stays behind
+    // the server bind, so don't ask until that bind says yes — a no used to
+    // surface as "the research desk could not be opened."
+    if (claimed !== true) return;
+    let cancelled = false;
     listResearchLibrary()
-      .then((rows) => setBooks(rows as ResearchBook[]))
-      .catch(() => setErr("The research desk could not be opened."));
-  }, []);
+      .then((rows) => {
+        if (!cancelled) setBooks(rows);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const kind = classifyOwnerFetchError(error);
+        setBooks([]);
+        setErr(
+          kind === "signed_out"
+            ? "Your sign-in lapsed. Sign in again to open the desk."
+            : kind === "not_owner"
+              ? "This sign-in isn’t unlocked for the research desk."
+              : "The research desk could not be opened.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [claimed]);
+  const empty = claimed === true && books !== null && books.length === 0 && !err;
   return (
     <section id="research" className="mt-10 scroll-mt-24 border-t border-border pt-8">
-      <p className="text-[0.7rem] tracking-[0.22em] text-accent uppercase">Research charts</p>
-      <h2 className="mt-2 font-display text-3xl tracking-tight text-fg italic">Saige and Joey</h2>
+      <h2 className="text-[0.7rem] tracking-[0.22em] text-accent uppercase">Research charts</h2>
       <p className="mt-2 text-sm leading-relaxed text-fg-muted">
         Timed nativities. Owner only. These do not appear for anyone else.
       </p>
@@ -202,24 +241,36 @@ function ResearchBooks() {
         </p>
       ) : null}
       <ul className="mt-5 space-y-3">
-        {books === null ? (
+        {claimed === null || (claimed === true && books === null && !err) ? (
           <li className="h-20 animate-pulse rounded-md bg-bg-subtle" />
-        ) : (
-          books.map((book) => (
-            <li key={book.id}>
-              <a
-                href={`/?desk=${book.id}`}
-                className="block rounded-md border border-border bg-bg-elevated/80 px-4 py-4 hover:bg-bg-subtle"
-              >
-                <p className="font-display text-xl tracking-tight text-fg italic">{book.title}</p>
-                <p className="mt-1 text-sm text-fg-muted">{book.oneCut}</p>
-                <p className="mt-1 text-xs tracking-wide text-fg-subtle uppercase">
-                  {book.id === "saige" ? "Premium house" : "Walkthrough"} · {book.date} · {book.id}
-                </p>
-              </a>
-            </li>
-          ))
-        )}
+        ) : null}
+        {books?.map((book) => (
+          <li key={book.id}>
+            <a
+              href={`/?desk=${book.id}`}
+              className="block rounded-md border border-border bg-bg-elevated/80 px-4 py-4 hover:bg-bg-subtle"
+            >
+              <p className="font-display text-xl tracking-tight text-fg italic">{book.title}</p>
+              <p className="mt-1 text-sm text-fg-muted">{book.oneCut}</p>
+              <p className="mt-1 text-xs tracking-wide text-fg-subtle uppercase">
+                {book.id === "saige" ? "Premium house" : "Walkthrough"} · {book.date} · {book.id}
+              </p>
+            </a>
+          </li>
+        ))}
+        {empty ? (
+          <li>
+            <p className="text-sm text-fg-muted">No research charts are on this desk yet.</p>
+          </li>
+        ) : null}
+        {claimed === false ? (
+          <li>
+            <p className="text-sm text-fg-muted">
+              This sign-in isn’t bound to the desk. Sign in with the owner password, or an email
+              code sent to this address. A display name does not bind it.
+            </p>
+          </li>
+        ) : null}
         <li>
           <div className="rounded-md border border-dashed border-border px-4 py-4">
             <p className="font-display text-xl tracking-tight text-fg italic">The third</p>
