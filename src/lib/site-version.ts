@@ -9,7 +9,7 @@
  */
 import { siteVersionChrome as formatChrome } from "./site-version-format";
 
-export const SITE_VERSION = "0.52";
+export const SITE_VERSION = "0.53";
 export {
   formatSiteVersionShort,
   isPreReleaseVersion,
