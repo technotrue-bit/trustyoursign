@@ -4,7 +4,7 @@ import { authClient, signOut } from "@/lib/auth/client";
 import { changeAccountEmail } from "@/lib/auth/account-settings";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { deleteAllMyData } from "@/lib/charts";
-import { listRegisteredAccounts, type RegisteredAccount } from "@/lib/admin/accounts";
+import { inviteToBeta, listRegisteredAccounts, type RegisteredAccount } from "@/lib/admin/accounts";
 import { isSiteOwner } from "@/lib/owner";
 import { classifyOwnerFetchError, useOwnerVerdict } from "@/lib/owner-state";
 import { useAskMachinePref } from "@/lib/ui/askMachinePref";
@@ -499,10 +499,53 @@ function accountMarks(row: RegisteredAccount): string {
   return marks.join(" · ");
 }
 
+type RowNote = { tone: "ok" | "warn"; text: string };
+
 /** Owner-only signup list. Mounted only from the Admin Page sheet. */
 function AllUsersList() {
   const [rows, setRows] = useState<RegisteredAccount[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, RowNote>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function invite(id: string) {
+    setBusyId(id);
+    setNotes((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    try {
+      const result = await inviteToBeta({ data: { userId: id } });
+      if (!result.ok) {
+        setNotes((current) => ({ ...current, [id]: { tone: "warn", text: result.error } }));
+        return;
+      }
+      setRows((current) =>
+        current?.map((row) => (row.id === id ? { ...row, role: "beta" } : row)) ?? current,
+      );
+      setNotes((current) => ({
+        ...current,
+        [id]: result.emailed
+          ? { tone: "ok", text: "Invite sent" }
+          : { tone: "warn", text: result.mailNote },
+      }));
+    } catch (error: unknown) {
+      const kind = classifyOwnerFetchError(error);
+      setNotes((current) => ({
+        ...current,
+        [id]: {
+          tone: "warn",
+          text:
+            kind === "not_owner" || kind === "signed_out"
+              ? "This sign-in isn’t unlocked to send an invite."
+              : "The invite could not be sent.",
+        },
+      }));
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -562,6 +605,29 @@ function AllUsersList() {
                 </p>
               ) : null}
               {marks ? <p className="text-[0.65rem] leading-snug text-fg-subtle">{marks}</p> : null}
+              <button
+                type="button"
+                disabled={busyId !== null}
+                aria-label={
+                  row.role === "beta" ? `Send invite to ${row.email}` : `Invite ${row.email} to beta`
+                }
+                className="mt-1 min-h-11 text-left text-sm text-fg hover:text-accent disabled:opacity-50"
+                onClick={() => void invite(row.id)}
+              >
+                {busyId === row.id ? "Sending…" : row.role === "beta" ? "Send invite" : "Invite to beta"}
+              </button>
+              {notes[row.id] ? (
+                <p
+                  role={notes[row.id]?.tone === "warn" ? "alert" : "status"}
+                  className={
+                    notes[row.id]?.tone === "warn"
+                      ? "text-[0.65rem] leading-snug text-wine"
+                      : "text-[0.65rem] leading-snug text-fg-subtle"
+                  }
+                >
+                  {notes[row.id]?.text}
+                </p>
+              ) : null}
             </li>
           );
         })}
