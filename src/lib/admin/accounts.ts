@@ -8,6 +8,8 @@ export type RegisteredAccount = {
   name: string;
   emailVerified: boolean;
   createdAt: string;
+  /** Newest session start, when one exists. Not a secret. */
+  lastSignedInAt: string | null;
   role: AccountRole;
   ipAddress: string | null;
   userAgent: string | null;

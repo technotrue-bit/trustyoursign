@@ -4,12 +4,13 @@ import { authClient, signOut } from "@/lib/auth/client";
 import { changeAccountEmail } from "@/lib/auth/account-settings";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { deleteAllMyData } from "@/lib/charts";
+import { listRegisteredAccounts, type RegisteredAccount } from "@/lib/admin/accounts";
 import { isSiteOwner } from "@/lib/owner";
-import { useOwnerVerdict } from "@/lib/owner-state";
+import { classifyOwnerFetchError, useOwnerVerdict } from "@/lib/owner-state";
 import { useAskMachinePref } from "@/lib/ui/askMachinePref";
 import { cn } from "@/lib/utils";
 
-type SettingsView = "menu" | "email" | "password" | "admin";
+type SettingsView = "menu" | "email" | "password" | "admin" | "users";
 
 type AccountSettingsPanelProps = {
   onBack: () => void;
@@ -96,6 +97,28 @@ export function AccountSettingsPanel({ onBack, onClose }: AccountSettingsPanelPr
     );
   }
 
+  if (view === "users" && showAdmin) {
+    return (
+      <div className="flex max-h-[min(70vh,28rem)] flex-col">
+        <div className="flex items-center gap-2 border-b border-border px-2 py-1">
+          <button
+            type="button"
+            className="min-h-11 px-2 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+            onClick={() => setView("admin")}
+          >
+            Back
+          </button>
+          <p className="flex-1 truncate pr-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
+            All Users
+          </p>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          <AllUsersList />
+        </div>
+      </div>
+    );
+  }
+
   if (view === "admin" && showAdmin) {
     return (
       <div className="flex max-h-[min(70vh,28rem)] flex-col">
@@ -142,6 +165,14 @@ export function AccountSettingsPanel({ onBack, onClose }: AccountSettingsPanelPr
               />
             </button>
           </div>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex min-h-11 w-full items-center px-4 text-left text-sm text-fg hover:bg-bg-subtle"
+            onClick={() => setView("users")}
+          >
+            All Users
+          </button>
           <Link
             to="/admin"
             role="menuitem"
@@ -445,5 +476,96 @@ function PasswordForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function formatWhen(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(d);
+}
+
+function accountMarks(row: RegisteredAccount): string {
+  const marks: string[] = [];
+  if (row.role === "beta") marks.push("Beta");
+  if (!row.emailVerified) marks.push("Not verified");
+  return marks.join(" · ");
+}
+
+/** Owner-only signup list. Mounted only from the Admin Page sheet. */
+function AllUsersList() {
+  const [rows, setRows] = useState<RegisteredAccount[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listRegisteredAccounts()
+      .then((list) => {
+        if (!cancelled) setRows(list);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const kind = classifyOwnerFetchError(error);
+        setErr(
+          kind === "not_owner" || kind === "signed_out"
+            ? "This sign-in isn’t unlocked for the account list."
+            : "The account list could not be opened.",
+        );
+        setRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (err) {
+    return (
+      <p role="alert" className="px-4 py-3 text-xs leading-snug text-wine">
+        {err}
+      </p>
+    );
+  }
+  if (rows === null) {
+    return <div className="mx-4 my-3 h-16 animate-pulse rounded-md bg-bg-subtle" />;
+  }
+  if (rows.length === 0) {
+    return <p className="px-4 py-3 text-xs leading-snug text-fg-muted">No one has signed up yet.</p>;
+  }
+
+  return (
+    <div>
+      <p className="px-4 pt-2 pb-1 text-[0.65rem] tracking-[0.14em] text-fg-subtle uppercase">
+        {rows.length} signed up
+      </p>
+      <ul>
+        {rows.map((row) => {
+          const name = row.name.trim();
+          const showName = name.length > 0 && name.toLowerCase() !== row.email.toLowerCase();
+          const marks = accountMarks(row);
+          return (
+            <li key={row.id} className="border-b border-border px-4 py-2.5 last:border-b-0">
+              <p className="break-all text-sm text-fg">{row.email}</p>
+              {showName ? <p className="text-xs text-fg-muted">{name}</p> : null}
+              <p className="mt-0.5 text-[0.65rem] leading-snug text-fg-subtle">
+                Joined {formatWhen(row.createdAt)}
+              </p>
+              {row.lastSignedInAt ? (
+                <p className="text-[0.65rem] leading-snug text-fg-subtle">
+                  Last sign-in {formatWhen(row.lastSignedInAt)}
+                </p>
+              ) : null}
+              {marks ? <p className="text-[0.65rem] leading-snug text-fg-subtle">{marks}</p> : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

@@ -8,6 +8,7 @@ type AccountRow = {
   name: string;
   emailVerified: boolean | null;
   createdAt: Date | string;
+  lastSignedInAt: Date | string | null;
   role: string | null;
   ipAddress: string | null;
   userAgent: string | null;
@@ -34,11 +35,12 @@ export async function listRegisteredAccounts(): Promise<RegisteredAccount[]> {
       u."emailVerified" as "emailVerified",
       u."createdAt" as "createdAt",
       u."role" as role,
+      s."createdAt" as "lastSignedInAt",
       s."ipAddress" as "ipAddress",
       s."userAgent" as "userAgent"
     from "user" u
     left join lateral (
-      select "ipAddress", "userAgent"
+      select "ipAddress", "userAgent", "createdAt"
       from "session"
       where "userId" = u."id"
       order by "createdAt" desc
@@ -52,6 +54,7 @@ export async function listRegisteredAccounts(): Promise<RegisteredAccount[]> {
     name: row.name,
     emailVerified: Boolean(row.emailVerified),
     createdAt: asIso(row.createdAt),
+    lastSignedInAt: row.lastSignedInAt ? asIso(row.lastSignedInAt) : null,
     role: asAccountRole(row.role),
     ipAddress: asText(row.ipAddress),
     userAgent: asText(row.userAgent),
