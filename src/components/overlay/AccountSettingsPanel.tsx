@@ -4,11 +4,13 @@ import { authClient, signOut } from "@/lib/auth/client";
 import { changeAccountEmail } from "@/lib/auth/account-settings";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { deleteAllMyData } from "@/lib/charts";
+import { inviteToBeta, listRegisteredAccounts, type RegisteredAccount } from "@/lib/admin/accounts";
 import { isSiteOwner } from "@/lib/owner";
+import { classifyOwnerFetchError, useOwnerVerdict } from "@/lib/owner-state";
 import { useAskMachinePref } from "@/lib/ui/askMachinePref";
 import { cn } from "@/lib/utils";
 
-type SettingsView = "menu" | "email" | "password";
+type SettingsView = "menu" | "email" | "password" | "admin" | "users";
 
 type AccountSettingsPanelProps = {
   onBack: () => void;
@@ -48,6 +50,9 @@ export function AccountSettingsPanel({ onBack, onClose }: AccountSettingsPanelPr
   }, []);
 
   const owner = user ? isSiteOwner(user) : false;
+  // Same people who already see owner chrome: the account-page check, or the
+  // server verdict behind the Owner menu (Your Sky’s). Visitors see neither.
+  const showAdmin = owner || useOwnerVerdict(user?.id) === true;
 
   if (view === "email") {
     return (
@@ -89,6 +94,95 @@ export function AccountSettingsPanel({ onBack, onClose }: AccountSettingsPanelPr
           setView("menu");
         }}
       />
+    );
+  }
+
+  if (view === "users" && showAdmin) {
+    return (
+      <div className="flex max-h-[min(70vh,28rem)] flex-col">
+        <div className="flex items-center gap-2 border-b border-border px-2 py-1">
+          <button
+            type="button"
+            className="min-h-11 px-2 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+            onClick={() => setView("admin")}
+          >
+            Back
+          </button>
+          <p className="flex-1 truncate pr-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
+            All Users
+          </p>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          <AllUsersList />
+        </div>
+      </div>
+    );
+  }
+
+  if (view === "admin" && showAdmin) {
+    return (
+      <div className="flex max-h-[min(70vh,28rem)] flex-col">
+        <div className="flex items-center gap-2 border-b border-border px-2 py-1">
+          <button
+            type="button"
+            className="min-h-11 px-2 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+            onClick={() => {
+              setError(null);
+              setMessage(null);
+              setView("menu");
+            }}
+          >
+            Back
+          </button>
+          <p className="flex-1 truncate pr-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
+            Admin Page
+          </p>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-2">
+            <div className="min-w-0">
+              <p className="text-sm text-fg">Natal machine (remote)</p>
+              <p className="text-[0.65rem] leading-snug text-fg-subtle">
+                When off, Ask answers from the chart bones only — no remote model call.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={remoteEnabled}
+              aria-label="Natal machine remote answers"
+              onClick={() => setRemoteEnabled(!remoteEnabled)}
+              className={cn(
+                "relative h-7 w-12 shrink-0 rounded-full border transition-colors",
+                remoteEnabled ? "border-accent bg-accent/30" : "border-border bg-bg-subtle",
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 left-0.5 size-5 rounded-full bg-fg transition-transform",
+                  remoteEnabled && "translate-x-5",
+                )}
+              />
+            </button>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            className="flex min-h-11 w-full items-center px-4 text-left text-sm text-fg hover:bg-bg-subtle"
+            onClick={() => setView("users")}
+          >
+            All Users
+          </button>
+          <Link
+            to="/admin"
+            role="menuitem"
+            className="flex min-h-11 w-full items-center px-4 text-left text-sm text-fg hover:bg-bg-subtle"
+            onClick={onClose}
+          >
+            Owner desk
+          </Link>
+        </div>
+      </div>
     );
   }
 
@@ -141,32 +235,20 @@ export function AccountSettingsPanel({ onBack, onClose }: AccountSettingsPanelPr
           Change password
         </button>
 
-        <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-2">
-          <div className="min-w-0">
-            <p className="text-sm text-fg">Natal machine (remote)</p>
-            <p className="text-[0.65rem] leading-snug text-fg-subtle">
-              When off, Ask answers from the chart bones only — no remote model call.
-            </p>
-          </div>
+        {showAdmin ? (
           <button
             type="button"
-            role="switch"
-            aria-checked={remoteEnabled}
-            aria-label="Natal machine remote answers"
-            onClick={() => setRemoteEnabled(!remoteEnabled)}
-            className={cn(
-              "relative h-7 w-12 shrink-0 rounded-full border transition-colors",
-              remoteEnabled ? "border-accent bg-accent/30" : "border-border bg-bg-subtle",
-            )}
+            role="menuitem"
+            className="flex min-h-11 w-full items-center px-4 text-left text-sm text-fg hover:bg-bg-subtle"
+            onClick={() => {
+              setError(null);
+              setMessage(null);
+              setView("admin");
+            }}
           >
-            <span
-              className={cn(
-                "absolute top-0.5 left-0.5 size-5 rounded-full bg-fg transition-transform",
-                remoteEnabled && "translate-x-5",
-              )}
-            />
+            Admin Page
           </button>
-        </div>
+        ) : null}
 
         <button
           type="button"
@@ -394,5 +476,162 @@ function PasswordForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function formatWhen(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(d);
+}
+
+function accountMarks(row: RegisteredAccount): string {
+  const marks: string[] = [];
+  if (row.role === "beta") marks.push("Beta");
+  if (!row.emailVerified) marks.push("Not verified");
+  return marks.join(" · ");
+}
+
+type RowNote = { tone: "ok" | "warn"; text: string };
+
+/** Owner-only signup list. Mounted only from the Admin Page sheet. */
+function AllUsersList() {
+  const [rows, setRows] = useState<RegisteredAccount[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, RowNote>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function invite(id: string) {
+    setBusyId(id);
+    setNotes((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    try {
+      const result = await inviteToBeta({ data: { userId: id } });
+      if (!result.ok) {
+        setNotes((current) => ({ ...current, [id]: { tone: "warn", text: result.error } }));
+        return;
+      }
+      setRows((current) =>
+        current?.map((row) => (row.id === id ? { ...row, role: "beta" } : row)) ?? current,
+      );
+      setNotes((current) => ({
+        ...current,
+        [id]: result.emailed
+          ? { tone: "ok", text: "Invite sent" }
+          : { tone: "warn", text: result.mailNote },
+      }));
+    } catch (error: unknown) {
+      const kind = classifyOwnerFetchError(error);
+      setNotes((current) => ({
+        ...current,
+        [id]: {
+          tone: "warn",
+          text:
+            kind === "not_owner" || kind === "signed_out"
+              ? "This sign-in isn’t unlocked to send an invite."
+              : "The invite could not be sent.",
+        },
+      }));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    listRegisteredAccounts()
+      .then((list) => {
+        if (!cancelled) setRows(list);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const kind = classifyOwnerFetchError(error);
+        setErr(
+          kind === "not_owner" || kind === "signed_out"
+            ? "This sign-in isn’t unlocked for the account list."
+            : "The account list could not be opened.",
+        );
+        setRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (err) {
+    return (
+      <p role="alert" className="px-4 py-3 text-xs leading-snug text-wine">
+        {err}
+      </p>
+    );
+  }
+  if (rows === null) {
+    return <div className="mx-4 my-3 h-16 animate-pulse rounded-md bg-bg-subtle" />;
+  }
+  if (rows.length === 0) {
+    return <p className="px-4 py-3 text-xs leading-snug text-fg-muted">No one has signed up yet.</p>;
+  }
+
+  return (
+    <div>
+      <p className="px-4 pt-2 pb-1 text-[0.65rem] tracking-[0.14em] text-fg-subtle uppercase">
+        {rows.length} signed up
+      </p>
+      <ul>
+        {rows.map((row) => {
+          const name = row.name.trim();
+          const showName = name.length > 0 && name.toLowerCase() !== row.email.toLowerCase();
+          const marks = accountMarks(row);
+          return (
+            <li key={row.id} className="border-b border-border px-4 py-2.5 last:border-b-0">
+              <p className="break-all text-sm text-fg">{row.email}</p>
+              {showName ? <p className="text-xs text-fg-muted">{name}</p> : null}
+              <p className="mt-0.5 text-[0.65rem] leading-snug text-fg-subtle">
+                Joined {formatWhen(row.createdAt)}
+              </p>
+              {row.lastSignedInAt ? (
+                <p className="text-[0.65rem] leading-snug text-fg-subtle">
+                  Last sign-in {formatWhen(row.lastSignedInAt)}
+                </p>
+              ) : null}
+              {marks ? <p className="text-[0.65rem] leading-snug text-fg-subtle">{marks}</p> : null}
+              <button
+                type="button"
+                disabled={busyId !== null}
+                aria-label={
+                  row.role === "beta" ? `Send invite to ${row.email}` : `Invite ${row.email} to beta`
+                }
+                className="mt-1 min-h-11 text-left text-sm text-fg hover:text-accent disabled:opacity-50"
+                onClick={() => void invite(row.id)}
+              >
+                {busyId === row.id ? "Sending…" : row.role === "beta" ? "Send invite" : "Invite to beta"}
+              </button>
+              {notes[row.id] ? (
+                <p
+                  role={notes[row.id]?.tone === "warn" ? "alert" : "status"}
+                  className={
+                    notes[row.id]?.tone === "warn"
+                      ? "text-[0.65rem] leading-snug text-wine"
+                      : "text-[0.65rem] leading-snug text-fg-subtle"
+                  }
+                >
+                  {notes[row.id]?.text}
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

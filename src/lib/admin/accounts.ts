@@ -1,6 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { isAccountRole, type AccountRole } from "@/lib/auth/account-role";
 import { authMiddleware } from "@/lib/auth/middleware";
+import type { BetaInviteResult } from "./invite-beta";
+
+export type { BetaInviteResult };
 
 export type RegisteredAccount = {
   id: string;
@@ -8,6 +11,8 @@ export type RegisteredAccount = {
   name: string;
   emailVerified: boolean;
   createdAt: string;
+  /** Newest session start, when one exists. Not a secret. */
+  lastSignedInAt: string | null;
   role: AccountRole;
   ipAddress: string | null;
   userAgent: string | null;
@@ -36,4 +41,27 @@ export const setAccountRole = createServerFn({ method: "POST" })
     await assertOwner(context.userId);
     const { setRegisteredAccountRole } = await import("./accounts.server");
     return setRegisteredAccountRole(data.userId, data.role);
+  });
+
+/** Owner-only. Marks this signup beta and sends the closed-beta letter to its email. */
+export const inviteToBeta = createServerFn({ method: "POST" })
+  .validator((input: { userId: string }) => {
+    const userId = typeof input?.userId === "string" ? input.userId.trim().slice(0, 80) : "";
+    if (!userId) throw new Error("Not found");
+    return { userId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }): Promise<BetaInviteResult> => {
+    const { assertOwner } = await import("@/lib/chart/desk.server");
+    await assertOwner(context.userId);
+    const { inviteRegisteredAccountToBeta } = await import("./invite-beta");
+    const { getSql } = await import("@/lib/db.server");
+    const { emailDeliveryConfigured, emailSenderIsSandbox, sendEmail } = await import(
+      "@/lib/email/send.server"
+    );
+    return inviteRegisteredAccountToBeta(await getSql(), data.userId, {
+      configured: emailDeliveryConfigured(),
+      sandbox: emailSenderIsSandbox(),
+      send: sendEmail,
+    });
   });
