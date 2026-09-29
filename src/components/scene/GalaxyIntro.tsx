@@ -118,6 +118,13 @@ import {
   syncDwellPrefetch,
 } from "@/lib/galaxy/dwellClip";
 import {
+  syncTaurusPlateLoop,
+  taurusPlateAction,
+  taurusPlateVideo,
+  stopTaurusPlateLoop,
+  type TaurusPlateAction,
+} from "@/lib/galaxy/taurusPlateLoop";
+import {
   loadSignArt,
   preloadSignArt,
   preloadSignArtNear,
@@ -559,6 +566,28 @@ function releaseDwellTexture(
   }
 }
 
+/** Charge loop on the Taurus plate only. True once a decoded frame can draw. */
+function bindTaurusLoop(
+  id: SignId,
+  mat: MeshBasicMaterial,
+  still: CanvasTexture | null,
+  slot: { current: VideoTexture | null },
+  action: TaurusPlateAction,
+): boolean {
+  if (id !== "taurus" || action !== "play") {
+    releaseDwellTexture(mat, still, slot);
+    return false;
+  }
+  const video = taurusPlateVideo();
+  const ready = Boolean(video && video.readyState >= 2 && !video.paused && !video.error);
+  if (!ready || !video) {
+    releaseDwellTexture(mat, still, slot);
+    return false;
+  }
+  slot.current = bindDwellTexture(video, slot.current);
+  return true;
+}
+
 /** True when this station should build its star cloud before the viewer reaches it. */
 function stationCloudApproach(index: number, t: number) {
   const cur = stationFromT(t);
@@ -591,6 +620,8 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
   >(null);
   const dwellTex = useRef<VideoTexture | null>(null);
   const dwellStall = useRef(0);
+  const loopTex = useRef<VideoTexture | null>(null);
+  const taurusLoopAction = useRef<TaurusPlateAction>("drop");
   const shellWrap = useRef<Group>(null);
   const shown = useRef(false);
   const hydrated = useRef(false);
@@ -657,8 +688,22 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           /* element already detached */
         }
       }
+      const loop = loopTex.current;
+      loopTex.current = null;
+      if (loop) {
+        try {
+          loop.dispose();
+        } catch {
+          /* element already detached */
+        }
+      }
     };
   }, [coreMat, starGeo, artTex]);
+
+  useEffect(() => {
+    if (sign.id !== "taurus") return;
+    return () => stopTaurusPlateLoop();
+  }, [sign.id]);
 
   const shellMats = useRef<{ opacity?: number; transparent?: boolean }[]>([]);
   useEffect(() => {
@@ -752,6 +797,20 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const shelfSignId = state.shelfSignId;
     const picked = chatting && state.claimSignId === sign.id;
     const held = picked || shelfSignId === sign.id;
+    if (sign.id === "taurus") {
+      const away = exploringSign() || introPlaying();
+      const onStrip = index === aimedIndex() && !held && !away;
+      const nearby = !away && Math.abs(index - aimedIndex()) <= 1;
+      const action = taurusPlateAction({
+        onStrip,
+        nearby,
+        paused: galaxyTravel.paused,
+        reduced: prefersReducedMotion(),
+      });
+      taurusLoopAction.current = action;
+      if (action !== "play") releaseDwellTexture(plateMat.current, artTex, loopTex);
+      syncTaurusPlateLoop(action);
+    }
     const t = galaxyTravel.t;
     const direct = galaxyTravel.seekDirect && galaxyTravel.seek != null;
     const dest = stationT(index);
@@ -977,12 +1036,19 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         // drawn at. Only the entered station publishes, so a neighbour's frame
         // can't clobber the value the QA probe reads.
         if (exploringHere) galaxyTravel.plateOpacity = plateOp;
-        if (plateBurst.current) plateBurst.current.uLifeKey.value = lifeVideo ? 1 : 0;
+        const loopVideo = bindTaurusLoop(sign.id, mat, artTex, loopTex, taurusLoopAction.current);
+        if (plateBurst.current) plateBurst.current.uLifeKey.value = lifeVideo || loopVideo ? 1 : 0;
         if (lifeVideo && dwellTex.current) {
           if (mat.map !== dwellTex.current) {
             mat.map = dwellTex.current;
             mat.needsUpdate = true;
           }
+        } else if (loopVideo && loopTex.current) {
+          if (mat.map !== loopTex.current) {
+            mat.map = loopTex.current;
+            mat.needsUpdate = true;
+          }
+          loopTex.current.needsUpdate = true;
         } else {
           mat.map = artTex;
         }
