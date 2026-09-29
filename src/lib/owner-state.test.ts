@@ -197,6 +197,20 @@ describe("owner sky menu", () => {
     assert.match(mainBlock, /skyMode === "empty"/);
     assert.match(mainBlock, /EMPTY_DESK_NOTE/);
   });
+
+  it("puts Back to main menu under the account label, before Profile", () => {
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const menu = readFileSync(join(root, "components/overlay/AccountMenu.tsx"), "utf8");
+    const labelAt = menu.indexOf('{owner ? "Owner" : label}');
+    const backAt = menu.indexOf("Back to main menu");
+    const profileAt = menu.indexOf("Profile", backAt);
+    assert.ok(labelAt >= 0 && backAt > labelAt && profileAt > backAt);
+    const row = menu.slice(backAt - 700, profileAt);
+    assert.match(row, /ITEM_CLASS/);
+    assert.match(row, /goHome\(undefined\)/);
+    assert.match(row, /savePlaceSession\(\{ kind: "home" \}\)/);
+    assert.match(menu, /const ITEM_CLASS =[\s\S]{0,120}min-h-11/);
+  });
 });
 
 describe("readResearchBook", () => {

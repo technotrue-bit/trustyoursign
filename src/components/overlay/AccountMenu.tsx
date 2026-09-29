@@ -404,6 +404,19 @@ export function AccountMenu() {
                 <DropdownMenu.Label className="truncate px-4 pt-3 pb-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
                   {owner ? "Owner" : label}
                 </DropdownMenu.Label>
+                <DropdownMenu.Item
+                  className={cn(ITEM_CLASS, locked && "pointer-events-none opacity-50")}
+                  disabled={locked}
+                  onSelect={() => {
+                    // Same home trip as the sky links: drop desk/sign/galaxy/star
+                    // and stay on the client router so the session stays warm.
+                    savePlaceSession({ kind: "home" });
+                    close();
+                    void goHome(undefined);
+                  }}
+                >
+                  Back to main menu
+                </DropdownMenu.Item>
                 {owner ? (
                   <>
                     {skyMode === "submenu" ? (
