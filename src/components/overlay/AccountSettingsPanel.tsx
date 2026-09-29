@@ -5,10 +5,11 @@ import { changeAccountEmail } from "@/lib/auth/account-settings";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { deleteAllMyData } from "@/lib/charts";
 import { isSiteOwner } from "@/lib/owner";
+import { useOwnerVerdict } from "@/lib/owner-state";
 import { useAskMachinePref } from "@/lib/ui/askMachinePref";
 import { cn } from "@/lib/utils";
 
-type SettingsView = "menu" | "email" | "password";
+type SettingsView = "menu" | "email" | "password" | "admin";
 
 type AccountSettingsPanelProps = {
   onBack: () => void;
@@ -48,6 +49,9 @@ export function AccountSettingsPanel({ onBack, onClose }: AccountSettingsPanelPr
   }, []);
 
   const owner = user ? isSiteOwner(user) : false;
+  // Same people who already see owner chrome: the account-page check, or the
+  // server verdict behind the Owner menu (Your Sky’s). Visitors see neither.
+  const showAdmin = owner || useOwnerVerdict(user?.id) === true;
 
   if (view === "email") {
     return (
@@ -89,6 +93,65 @@ export function AccountSettingsPanel({ onBack, onClose }: AccountSettingsPanelPr
           setView("menu");
         }}
       />
+    );
+  }
+
+  if (view === "admin" && showAdmin) {
+    return (
+      <div className="flex max-h-[min(70vh,28rem)] flex-col">
+        <div className="flex items-center gap-2 border-b border-border px-2 py-1">
+          <button
+            type="button"
+            className="min-h-11 px-2 text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg"
+            onClick={() => {
+              setError(null);
+              setMessage(null);
+              setView("menu");
+            }}
+          >
+            Back
+          </button>
+          <p className="flex-1 truncate pr-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
+            Admin Page
+          </p>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-2">
+            <div className="min-w-0">
+              <p className="text-sm text-fg">Natal machine (remote)</p>
+              <p className="text-[0.65rem] leading-snug text-fg-subtle">
+                When off, Ask answers from the chart bones only — no remote model call.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={remoteEnabled}
+              aria-label="Natal machine remote answers"
+              onClick={() => setRemoteEnabled(!remoteEnabled)}
+              className={cn(
+                "relative h-7 w-12 shrink-0 rounded-full border transition-colors",
+                remoteEnabled ? "border-accent bg-accent/30" : "border-border bg-bg-subtle",
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 left-0.5 size-5 rounded-full bg-fg transition-transform",
+                  remoteEnabled && "translate-x-5",
+                )}
+              />
+            </button>
+          </div>
+          <Link
+            to="/admin"
+            role="menuitem"
+            className="flex min-h-11 w-full items-center px-4 text-left text-sm text-fg hover:bg-bg-subtle"
+            onClick={onClose}
+          >
+            Owner desk
+          </Link>
+        </div>
+      </div>
     );
   }
 
@@ -141,32 +204,20 @@ export function AccountSettingsPanel({ onBack, onClose }: AccountSettingsPanelPr
           Change password
         </button>
 
-        <div className="flex min-h-11 items-center justify-between gap-3 px-4 py-2">
-          <div className="min-w-0">
-            <p className="text-sm text-fg">Natal machine (remote)</p>
-            <p className="text-[0.65rem] leading-snug text-fg-subtle">
-              When off, Ask answers from the chart bones only — no remote model call.
-            </p>
-          </div>
+        {showAdmin ? (
           <button
             type="button"
-            role="switch"
-            aria-checked={remoteEnabled}
-            aria-label="Natal machine remote answers"
-            onClick={() => setRemoteEnabled(!remoteEnabled)}
-            className={cn(
-              "relative h-7 w-12 shrink-0 rounded-full border transition-colors",
-              remoteEnabled ? "border-accent bg-accent/30" : "border-border bg-bg-subtle",
-            )}
+            role="menuitem"
+            className="flex min-h-11 w-full items-center px-4 text-left text-sm text-fg hover:bg-bg-subtle"
+            onClick={() => {
+              setError(null);
+              setMessage(null);
+              setView("admin");
+            }}
           >
-            <span
-              className={cn(
-                "absolute top-0.5 left-0.5 size-5 rounded-full bg-fg transition-transform",
-                remoteEnabled && "translate-x-5",
-              )}
-            />
+            Admin Page
           </button>
-        </div>
+        ) : null}
 
         <button
           type="button"

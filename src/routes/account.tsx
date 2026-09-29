@@ -180,13 +180,7 @@ function Account() {
           <AccountMenu />
         </div>
         {isSiteOwner(user) ? (
-          <p className="mt-3 text-sm text-fg-muted">
-            You keep this house.{" "}
-            <Link to="/admin" className="text-fg underline">
-              Owner desk
-            </Link>
-            .
-          </p>
+          <p className="mt-3 text-sm text-fg-muted">You keep this house.</p>
         ) : null}
 
         <section id="profile" className="mt-8 scroll-mt-24">
@@ -197,8 +191,9 @@ function Account() {
         <section id="settings" className="mt-8 scroll-mt-24">
           <h2 className="font-display text-2xl text-fg italic">Settings</h2>
           <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-            Change email, password, natal-machine preference, or delete your data from the account
-            menu (your initial in the corner) → Settings.
+            Change email, password, or delete your data from the account menu (your initial in the
+            corner) → Settings.
+            {isSiteOwner(user) ? " House controls are under Admin Page." : ""}
           </p>
         </section>
 
