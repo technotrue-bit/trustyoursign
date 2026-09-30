@@ -13,6 +13,7 @@ export const DWELL_STILL_SEC = 2.5;
  */
 export const DWELL_CLIPS: Partial<Record<SignId, string>> = {
   aries: "/signs/aries-life.mp4",
+  taurus: "/signs/taurus-loop.mp4",
   leo: "/signs/leo-life.mp4",
   aquarius: "/signs/aquarius-life.mp4",
 };
