@@ -16,12 +16,12 @@ import {
 const T0 = 10_000;
 
 describe("dwell clip map", () => {
-  it("attaches life clips to Aries, Leo, and Aquarius only", () => {
-    assert.deepEqual(Object.keys(DWELL_CLIPS), ["aries", "leo", "aquarius"]);
+  it("attaches life clips to Aries, Taurus, Leo, and Aquarius only", () => {
+    assert.deepEqual(Object.keys(DWELL_CLIPS), ["aries", "taurus", "leo", "aquarius"]);
     assert.equal(DWELL_CLIPS.aries, "/signs/aries-life.mp4");
+    assert.equal(DWELL_CLIPS.taurus, "/signs/taurus-loop.mp4");
     assert.equal(DWELL_CLIPS.leo, "/signs/leo-life.mp4");
     assert.equal(DWELL_CLIPS.aquarius, "/signs/aquarius-life.mp4");
-    assert.equal(DWELL_CLIPS.taurus, undefined);
     assert.equal(DWELL_CLIPS.cancer, undefined);
     assert.equal(DWELL_CLIPS.capricorn, undefined);
     assert.ok(DWELL_STILL_SEC >= 2 && DWELL_STILL_SEC <= 3);
@@ -141,15 +141,21 @@ describe("stepAutoSign dwell", () => {
     assert.equal(galaxyTravel.explorePhase, "fading");
   });
 
-  it("keeps Taurus on the 7s walk with no clip", () => {
-    galaxyTravel.t = stationT(1);
-    galaxyTravel.tTarget = stationT(1);
-    assert.equal(stepAt(6_900), false);
+  it("holds Taurus, plays once, then walks to Gemini", () => {
+    const taurus = CONSTELLATIONS.findIndex((c) => c.id === "taurus");
+    assert.equal(taurus, 1);
+    galaxyTravel.t = stationT(taurus);
+    galaxyTravel.tTarget = stationT(taurus);
+    assert.equal(stepAt(2_400), false);
     assert.equal(galaxyTravel.dwellClipIndex, null);
+    assert.equal(stepAt(2_500), false);
+    assert.equal(galaxyTravel.dwellClipIndex, taurus);
     assert.equal(galaxyTravel.seek, null);
-    assert.equal(stepAt(7_000), true);
-    assert.equal(galaxyTravel.seek, stationT(2));
+    assert.equal(stepAt(8_000), false);
+    galaxyTravel.dwellClipDone = true;
+    assert.equal(stepAt(8_100), true);
     assert.equal(galaxyTravel.dwellClipIndex, null);
+    assert.equal(galaxyTravel.seek, stationT(taurus + 1));
   });
 
   it("does not walk Pisces off the end of the corridor", () => {
@@ -237,8 +243,10 @@ describe("stepAutoSign dwell", () => {
   });
 
   it("still blocks the 7s walk during a selection hold on a sign with no clip", () => {
-    galaxyTravel.t = stationT(1);
-    galaxyTravel.tTarget = stationT(1);
+    const gemini = CONSTELLATIONS.findIndex((c) => c.id === "gemini");
+    assert.equal(gemini, 2);
+    galaxyTravel.t = stationT(gemini);
+    galaxyTravel.tTarget = stationT(gemini);
     galaxyTravel.selectionHoldLeft = 5_000;
     assert.equal(stepAt(8_000), false);
     assert.equal(galaxyTravel.seek, null);
