@@ -223,7 +223,7 @@ export function BirthChat() {
       : null;
 
   return (
-    <div className="vault-overlay pointer-events-none absolute inset-0 z-30 flex items-end justify-start md:items-center">
+    <div className="vault-overlay pointer-events-none absolute inset-0 z-40 flex items-end justify-start md:items-center">
       <div className="absolute inset-0 bg-gradient-to-t from-bg from-25% via-bg/70 to-transparent md:bg-gradient-to-r md:from-bg md:from-20% md:via-bg/80 md:to-transparent" />
       <div
         ref={dialogRef}
@@ -313,6 +313,7 @@ export function BirthChat() {
             ) : null}
             <button
               type="submit"
+              data-sky-cta
               disabled={!ready}
               className={cn(
                 "min-h-12 w-full rounded-md px-4 text-xs tracking-[0.22em] uppercase transition-colors duration-150 md:min-h-11",
@@ -325,6 +326,7 @@ export function BirthChat() {
             </button>
             <button
               type="button"
+              data-sky-cta
               onClick={closeClaim}
               className="min-h-12 w-full text-xs tracking-[0.18em] text-fg-subtle uppercase hover:text-fg md:min-h-11"
             >
@@ -350,6 +352,7 @@ export function BirthChat() {
             </p>
             <button
               type="button"
+              data-sky-cta
               data-initial-focus
               onClick={() => setStep("deeper")}
               className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase hover:bg-fg md:min-h-11"
@@ -436,6 +439,7 @@ export function BirthChat() {
             </label>
             <button
               type="submit"
+              data-sky-cta
               disabled={casting || toHour24() == null || minute === "" || place.trim().length < 2}
               className={cn(
                 "min-h-12 w-full rounded-md px-4 text-xs tracking-[0.22em] uppercase md:min-h-11",
@@ -483,6 +487,7 @@ export function BirthChat() {
             ) : null}
             <button
               type="button"
+              data-sky-cta
               data-initial-focus
               onClick={() => {
                 const s = sketch();

@@ -80,14 +80,14 @@ export function GalaxyShell() {
 
   if (!born) {
     return (
-      <div className="vault-overlay pointer-events-none absolute inset-0 z-30">
+      <div className="vault-overlay pointer-events-none absolute inset-0 z-40">
         <h1 className="sr-only">what&rsquo;s your sign?</h1>
       </div>
     );
   }
 
   return (
-    <div className="vault-overlay pointer-events-none absolute inset-0 z-30">
+    <div className="vault-overlay pointer-events-none absolute inset-0 z-40">
       {showCornerSkip ? (
         <div className="pointer-events-none absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[70]">
           <button
@@ -247,6 +247,7 @@ export function GalaxyShell() {
                 useGalaxy.getState().markBorn();
                 enterSignGalaxy(signIndex);
               }}
+              data-sky-cta
               aria-label={sign ? `Enter this sign, ${sign.name}` : "Enter this sign"}
               className="sign-claim pointer-events-auto inline-flex min-h-11 w-auto items-center px-5 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent active:text-accent md:min-h-12 md:px-6"
             >

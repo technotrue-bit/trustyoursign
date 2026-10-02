@@ -308,14 +308,16 @@
   position: absolute;
   inset: 0;
   z-index: 0;
+  isolation: isolate;
   touch-action: none;
   background: #0c0b0a;
-  transform: translateZ(0);
   -webkit-touch-callout: none;
   user-select: none;
 }
 
 .canvas-root canvas {
+  position: relative;
+  z-index: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -324,9 +326,19 @@
   -webkit-user-select: none;
 }
 
+/* Chrome sits in its own layer above the picture. A promoted canvas used to
+   take the tap even when a button was drawn on top of it. */
 .vault-overlay {
-  z-index: 30;
+  z-index: 40;
+  isolation: isolate;
   transform: translateZ(0);
+}
+
+[data-sky-cta] {
+  position: relative;
+  z-index: 5;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 @keyframes sign-soft {

@@ -95,7 +95,9 @@ export function canvasDpr(): [number, number] {
 
 /** One sky everywhere. Width / touch used to force a 2D fork — that made the
  *  phone (and the Grok preview pane) a different product. 2D is only the
- *  tripwire after WebGL actually fails; we never remount a dead context. */
+ *  tripwire after WebGL actually fails, or after a lost context will not come
+ *  back. A lost context is not painted back onto the same canvas — the sky
+ *  pauses and a tap mounts a fresh one. */
 export function shouldUse3D(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
   return canWebGL();

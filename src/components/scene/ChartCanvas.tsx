@@ -3,7 +3,8 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
 import { Color, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { buryWebGLCanvas, canvasDpr, glContextAttrs, isSmallGpu } from "@/lib/gpu";
+import { canvasDpr, glContextAttrs, isSmallGpu } from "@/lib/gpu";
+import { acknowledgeContextLost, SKY_READY_EVENT } from "@/lib/galaxy/contextLost";
 import { lonToXZ } from "@/lib/chart/geometry";
 import {
   useIsEntered,
@@ -206,13 +207,15 @@ function ChartWorld() {
 }
 
 function contextLost(el: HTMLCanvasElement | null): boolean {
-  if (!el) return false;
-  try {
-    const gl = el.getContext("webgl2");
-    if (!gl) return true;
+    if (!el || el.dataset.glAlive !== "1") return false;
+    try {
+    // A null getContext means the attributes don't match the live one, not
+    // that the picture died. Only isContextLost is a real loss.
+    const gl = el.getContext("webgl2") || el.getContext("webgl");
+    if (!gl || typeof gl.isContextLost !== "function") return false;
     return gl.isContextLost();
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -252,10 +255,6 @@ function SceneGate({ charted }: { charted: boolean }) {
   );
 }
 
-function failGl() {
-  window.dispatchEvent(new Event("vault-webgl-lost"));
-}
-
 export function ChartCanvas() {
   const entered = useIsEntered();
   const sessionKind = useSessionKind();
@@ -263,19 +262,23 @@ export function ChartCanvas() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const recover = (el: EventTarget | null) => {
-      buryWebGLCanvas(el);
-      failGl();
-    };
+    if (!ready) return;
+    const t = window.setTimeout(() => {
+      window.dispatchEvent(new Event(SKY_READY_EVENT));
+    }, 2000);
+    return () => window.clearTimeout(t);
+  }, [ready]);
+
+  useEffect(() => {
     const onLost = (e: Event) => {
       const canvas = document.querySelector(".canvas-root canvas");
       if (e.target !== canvas) return;
-      recover(e.target);
+      acknowledgeContextLost(e);
     };
     const onShow = () => {
       if (document.visibilityState === "hidden") return;
       const canvas = document.querySelector(".canvas-root canvas") as HTMLCanvasElement | null;
-      if (contextLost(canvas)) recover(canvas);
+      if (contextLost(canvas)) acknowledgeContextLost(new Event("webglcontextlost"), canvas);
     };
     window.addEventListener("webglcontextlost", onLost, true);
     document.addEventListener("visibilitychange", onShow);
@@ -295,6 +298,7 @@ export function ChartCanvas() {
         style={{
           background: "#0c0b0a",
           opacity: ready ? 1 : 0,
+          zIndex: 0,
           transition: "opacity 0.85s cubic-bezier(0.22, 1, 0.36, 1)",
         }}
         camera={{
@@ -312,12 +316,12 @@ export function ChartCanvas() {
           if (el) {
             el.tabIndex = -1;
             el.setAttribute("aria-hidden", "true");
+            el.dataset.glAlive = "1";
             el.style.background = "#0c0b0a";
             el.addEventListener(
               "webglcontextlost",
-              () => {
-                buryWebGLCanvas(el);
-                failGl();
+              (ev) => {
+                acknowledgeContextLost(ev);
               },
               { capture: true },
             );
