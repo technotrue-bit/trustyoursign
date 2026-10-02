@@ -3,6 +3,14 @@ import type { ErrorComponentProps } from "@tanstack/react-router";
 import { TriangleAlert } from "lucide-react";
 import { reloadOnceForStaleChunk } from "@/lib/chunk-reload";
 
+function skyErrorMessage(error: unknown): string {
+  if (typeof error === "object" && error && "message" in error) {
+    const message = error.message;
+    if (typeof message === "string" && message) return message;
+  }
+  return "Reload and try the chart again.";
+}
+
 export function AppErrorComponent({ error }: ErrorComponentProps) {
   useEffect(() => {
     reloadOnceForStaleChunk(error);
@@ -18,7 +26,7 @@ export function AppErrorComponent({ error }: ErrorComponentProps) {
       </span>
       <h1 className="font-display text-lg font-medium italic">The sky hiccuped.</h1>
       <p className="max-w-md text-sm break-words text-fg-muted">
-        {error.message || "Reload and try the chart again."}
+        {skyErrorMessage(error)}
       </p>
     </main>
   );
