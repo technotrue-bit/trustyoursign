@@ -259,6 +259,7 @@ export function SignGalaxyHud() {
               <button
                 type="button"
                 onClick={() => openClaim(sign.id)}
+                data-sky-cta
                 aria-label={`Begin birth chart for ${sign.name}`}
                 className="pointer-events-auto sign-claim min-h-12 w-[min(100%,20rem)] px-4 text-xs tracking-[0.22em] text-fg uppercase hover:text-accent"
               >

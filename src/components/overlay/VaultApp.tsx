@@ -48,6 +48,12 @@ import {
   type SkyPlaceSearch,
 } from "@/lib/ui/skyPlace";
 import { buryWebGLCanvas, canWebGL, shouldUse3D } from "@/lib/gpu";
+import {
+  acknowledgeContextLost,
+  SKY_LOST_EVENT,
+  SKY_READY_EVENT,
+  skyAfterContextLost,
+} from "@/lib/galaxy/contextLost";
 import { SceneErrorBoundary } from "../scene-error-boundary";
 import { GalaxyShell } from "./GalaxyShell";
 import { ClaimShell } from "./ClaimShell";
@@ -56,6 +62,7 @@ import { MeshReviewShell, wantsMeshReview } from "./MeshReviewShell";
 import { StarBack } from "./StarBack";
 import { NatalShell } from "./NatalShell";
 import { resolveGate } from "./resolveGate";
+import { SkyPaused } from "./SkyPaused";
 
 const FallbackSky = lazy(() =>
   import("./FallbackSky").then((m) => ({ default: m.FallbackSky })),
@@ -157,6 +164,11 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   // paint imported it on every visit; a 404 there took down the 3D sky and the
   // one-shot reload cleared its latch when the scene committed, so it looped.
   const [skyMode, setSkyMode] = useState<"pending" | "webgl" | "flat">("pending");
+  const [sceneEpoch, setSceneEpoch] = useState(0);
+  const [skyPaused, setSkyPaused] = useState(false);
+  const lostStrikes = useRef(0);
+  const skyModeRef = useRef(skyMode);
+  skyModeRef.current = skyMode;
   const [deskNotice, setDeskNotice] = useState<string | null>(null);
   const noticeTimer = useRef<number | null>(null);
 
@@ -219,19 +231,43 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
       .catch(() => {
         if (!cancelled) setSkyMode("flat");
       });
-    const onLost = () => setSkyMode("flat");
+    const onLost = () => {
+      if (skyModeRef.current === "flat") return;
+      lostStrikes.current += 1;
+      if (skyAfterContextLost(lostStrikes.current) === "flat") {
+        setSkyPaused(false);
+        setSkyMode("flat");
+        return;
+      }
+      setSkyPaused(true);
+    };
+    const onReady = () => {
+      lostStrikes.current = 0;
+    };
     const hideLost = (e: Event) => {
       const t = e.target;
-      if (t instanceof HTMLCanvasElement && t.closest(".canvas-root")) buryWebGLCanvas(t);
+      if (t instanceof HTMLCanvasElement && t.closest(".canvas-root")) {
+        acknowledgeContextLost(e);
+        return;
+      }
+      if (t instanceof HTMLCanvasElement) buryWebGLCanvas(t);
     };
-    window.addEventListener("vault-webgl-lost", onLost);
+    window.addEventListener(SKY_LOST_EVENT, onLost);
+    window.addEventListener(SKY_READY_EVENT, onReady);
     window.addEventListener("webglcontextlost", hideLost, true);
     return () => {
       cancelled = true;
-      window.removeEventListener("vault-webgl-lost", onLost);
+      window.removeEventListener(SKY_LOST_EVENT, onLost);
+      window.removeEventListener(SKY_READY_EVENT, onReady);
       window.removeEventListener("webglcontextlost", hideLost, true);
     };
   }, []);
+
+  const retrySky = () => {
+    setSkyPaused(false);
+    setSkyMode("webgl");
+    setSceneEpoch((n) => n + 1);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -474,8 +510,9 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
       style={{ background: "#0c0b0a", color: "#efe8dc" }}
       tabIndex={-1}
     >
-      {skyMode === "webgl" && Scene ? (
+      {skyMode === "webgl" && Scene && !skyPaused ? (
         <SceneErrorBoundary
+          key={sceneEpoch}
           fallback={
             <Suspense fallback={null}>
               <FallbackSky note={FALLBACK_NOTE} />
@@ -484,6 +521,8 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
         >
           <Scene />
         </SceneErrorBoundary>
+      ) : skyPaused ? (
+        <div className="canvas-root" style={{ background: "#0c0b0a" }} aria-hidden />
       ) : skyMode === "flat" ? (
         <Suspense fallback={null}>
           {/* Reduced motion chose the 2D sky on purpose — only a real
@@ -501,6 +540,7 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
           {deskNotice}
         </p>
       ) : null}
+      {skyPaused ? <SkyPaused onRetry={retrySky} /> : null}
       {showStarBack ? <StarBack /> : null}
       {gate === "galaxy" ? <GalaxyShell /> : null}
       {gate === "claim" ? <ClaimShell /> : null}

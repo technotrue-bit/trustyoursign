@@ -28,6 +28,7 @@ import {
 import { useGalaxy, currentConstellation } from "./store";
 import { NAVE, STATION_N, TEMPLE_CURVE, clamp01, stationFromT, stationT } from "./temple";
 import { introPlaying, skipIntro, introCanSkip, templeIntro } from "./intro";
+import { ensureSkyHit } from "./skyHit";
 
 export { signedDelta, wrap12 };
 export type { ExplorePhase };
@@ -1239,7 +1240,7 @@ function flyLocked() {
 }
 
 const FLY_IGNORE =
-  "button, a, input, textarea, select, details, summary, .sign-strip, .birth-chat, .gloss-card, .chart-talks, [data-no-fly], [role='menu'], [role='menuitem'], [role='dialog'], [data-radix-menu-content], [data-radix-popper-content-wrapper]";
+  "button, a, input, textarea, select, details, summary, .sign-strip, .birth-chat, .gloss-card, .chart-talks, [data-no-fly], [data-sky-cta], [role='menu'], [role='menuitem'], [role='dialog'], [data-radix-menu-content], [data-radix-popper-content-wrapper]";
 
 /** Duck-typed so the rule is testable outside a browser realm (and across iframes). */
 function closestElement(target: EventTarget | null): Element | null {
@@ -1547,6 +1548,8 @@ let flyBound = false;
 export function ensureFlyInput() {
   if (typeof window === "undefined" || flyBound) return;
   flyBound = true;
+  // Before the fly listeners, so a tap on Enter / Begin / Keep flying is not a drag.
+  ensureSkyHit();
 
   const SLOP = 12;
   const pts = new Map<number, { x: number; y: number }>();
