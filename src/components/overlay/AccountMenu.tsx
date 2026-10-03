@@ -5,7 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { clearBearerTokens } from "@/lib/auth/bearer-storage";
 import { signOut } from "@/lib/auth/client";
 import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
-import type { ResearchChartId } from "@/lib/chart/types";
+import { isResearchChartId, type ResearchChartId } from "@/lib/chart/types";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { openSavedChart, useSessionStore } from "@/lib/chart/session";
 import { listCharts } from "@/lib/charts";
@@ -13,6 +13,10 @@ import { pickSkyChart } from "@/lib/charts-saved";
 import { skipIntro } from "@/lib/galaxy/intro";
 import { useGalaxy } from "@/lib/galaxy/store";
 import { skipBirth } from "@/lib/galaxy/travel";
+import {
+  clearChartRoomsBoot,
+  showChartRoomsOnNextBoot,
+} from "@/lib/ui/chartSheetIntent";
 import { savePlaceSession } from "@/lib/ui/skyPlace";
 import {
   EMPTY_DESK_NOTE,
@@ -36,14 +40,24 @@ const ITEM_CLASS =
   "flex min-h-11 w-full cursor-pointer items-center px-4 text-left text-sm text-fg outline-none hover:bg-bg-subtle focus:bg-bg-subtle data-[highlighted]:bg-bg-subtle disabled:cursor-default disabled:opacity-50";
 
 type Desk = "joey" | "saige";
-type SkyTarget = Desk | "mine";
+type SkyTarget = Desk | "mine" | "rooms";
 
 /** Fold the sheet and park on Sky so the planet wheel is the thing you see. */
 function revealPlanetSky() {
+  clearChartRoomsBoot();
   const st = useSessionStore.getState();
   if (!st.session) return false;
   st.setMode("sky");
   st.foldSheet(true);
+  return true;
+}
+
+/** Open the sheet on Sky so the chart rooms are on screen, not tucked away. */
+function revealChartRooms() {
+  const st = useSessionStore.getState();
+  if (!st.session) return false;
+  st.setMode("sky");
+  st.foldSheet(false);
   return true;
 }
 
@@ -58,6 +72,7 @@ function leaveTitleScreen() {
  * that race left taps feeling dead on the galaxy home.
  */
 async function openResearchSky(desk: Desk) {
+  clearChartRoomsBoot();
   const st = useSessionStore.getState();
   if (st.session?.kind === "research" && st.session.chartKey === desk) {
     revealPlanetSky();
@@ -256,6 +271,49 @@ export function AccountMenu() {
       .finally(() => setBusy((b) => (b === "mine" ? null : b)));
   };
 
+  /**
+   * Chart rooms: same chart as The sky, with the side sheet open on Sky.
+   * No chart to open falls through to the saved-charts list, same as The sky.
+   */
+  const openChartRooms = () => {
+    if (locked) return;
+    setBusy("rooms");
+    setError(null);
+    void (async () => {
+      const session = useSessionStore.getState().session;
+      const openDesk =
+        session?.kind === "research" && isResearchChartId(session.chartKey)
+          ? session.chartKey
+          : null;
+      if (session) {
+        if (openDesk) showChartRoomsOnNextBoot(openDesk);
+        else clearChartRoomsBoot();
+        revealChartRooms();
+        close();
+        void goHome(openDesk ?? undefined);
+        return;
+      }
+      if ((await resolveOwnerVerdict(user.id)) === true) {
+        await openResearchSky("joey");
+        showChartRoomsOnNextBoot("joey");
+        revealChartRooms();
+        close();
+        void goHome("joey");
+        return;
+      }
+      const opened = await openOwnSky();
+      if (opened) revealChartRooms();
+      close();
+      if (opened) {
+        void goHome(undefined);
+      } else {
+        void navigate({ to: "/account", hash: "charts" });
+      }
+    })()
+      .catch((err) => fail(err, openChartRooms))
+      .finally(() => setBusy((b) => (b === "rooms" ? null : b)));
+  };
+
   const leave = () => {
     setLeaving(true);
     try {
@@ -450,6 +508,7 @@ export function AccountMenu() {
                 ) : (
                   skyRow("mine", "The sky", openVisitorSky)
                 )}
+                {skyRow("rooms", "Chart rooms", openChartRooms)}
                 {errorRow}
                 <DropdownMenu.Item asChild disabled={locked}>
                   <Link

@@ -30,6 +30,7 @@ import {
   stopAutoClock,
 } from "@/lib/galaxy/travel";
 import { bootIntro, skipIntro } from "@/lib/galaxy/intro";
+import { takeChartRoomsBoot } from "@/lib/ui/chartSheetIntent";
 import { readGuestDraft } from "@/lib/ui/guestDraft";
 import { readMotionPaused } from "@/lib/ui/motionPreference";
 import {
@@ -104,9 +105,11 @@ function applyBootPlace(place: SkyPlace): Promise<BootResult> {
       .then((nat) => {
         const st = useSessionStore.getState();
         st.openResearch(place.id, nat);
-        // Account-menu "The sky" deep links land on the planet wheel, not under the sheet.
+        // Read at the end so a Chart rooms tap during this fetch still wins.
+        // "The sky" clears that request before it asks for the wheel.
+        const keepSheetOpen = takeChartRoomsBoot(place.id);
         st.setMode("sky");
-        st.foldSheet(true);
+        st.foldSheet(!keepSheetOpen);
         return "ok" as const;
       })
       .catch((err: unknown) =>

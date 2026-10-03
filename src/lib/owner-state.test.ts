@@ -211,6 +211,27 @@ describe("owner sky menu", () => {
     assert.match(row, /savePlaceSession\(\{ kind: "home" \}\)/);
     assert.match(menu, /const ITEM_CLASS =[\s\S]{0,120}min-h-11/);
   });
+
+  it("adds Chart rooms beside the sky rows without dropping the others", () => {
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const menu = readFileSync(join(root, "components/overlay/AccountMenu.tsx"), "utf8");
+    const skyAt = menu.indexOf('skyRow("mine", "The sky", openVisitorSky)');
+    const roomsAt = menu.indexOf('skyRow("rooms", "Chart rooms", openChartRooms)');
+    const profileAt = menu.indexOf("Profile", roomsAt);
+    const settingsAt = menu.indexOf("Settings", profileAt);
+    const logoutAt = menu.indexOf("Log out", settingsAt);
+    assert.ok(skyAt >= 0 && roomsAt > skyAt && profileAt > roomsAt);
+    assert.ok(settingsAt > profileAt && logoutAt > settingsAt);
+    assert.match(menu, /Back to main menu/);
+    assert.match(menu, /YOUR_SKIES_LABEL/);
+    const fn = menu.slice(menu.indexOf("const openChartRooms"), menu.indexOf("const leave ="));
+    assert.match(fn, /revealChartRooms\(\)/);
+    assert.match(fn, /openResearchSky\("joey"\)/);
+    assert.match(fn, /openOwnSky\(\)/);
+    assert.match(fn, /hash: "charts"/);
+    assert.match(menu, /function revealChartRooms\(\)[\s\S]{0,180}foldSheet\(false\)/);
+    assert.match(menu, /function revealPlanetSky\(\)[\s\S]{0,180}foldSheet\(true\)/);
+  });
 });
 
 describe("readResearchBook", () => {
