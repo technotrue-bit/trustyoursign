@@ -6,6 +6,7 @@ import {
   ownChartForSkyCode,
   paintSkyCode,
   skyCodeFileName,
+  skyCodeFrame,
   skyCodeUrl,
   SKY_CODE_SIZE,
 } from "@/lib/sky-code";
@@ -13,9 +14,8 @@ import {
 /**
  * Downloadable sky code for a signed-in chart.
  *
- * TODO(image-gen): frame is the sign's star glyph from the sky, not a bespoke
- * illustration. A later art pass can replace the frame; leave the QR clear.
- * Wallet passes, an Apple Pay–style sheet, and paid checkout are not this card.
+ * Sagittarius composites the locked surround and draws the code into its cream
+ * pad. Every other sign still uses the star-glyph frame. Nothing is charged.
  */
 
 export function SkyCodeSection({
@@ -80,6 +80,11 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [canShare, setCanShare] = useState(false);
+  const locked = skyCodeFrame(signId);
+  const [box, setBox] = useState({
+    width: locked?.width ?? SKY_CODE_SIZE.width,
+    height: locked?.height ?? SKY_CODE_SIZE.height,
+  });
   const url = skyCodeUrl(signId);
   const name = SIGN_CANON[signId].name;
 
@@ -91,18 +96,33 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
+    const frame = skyCodeFrame(signId);
+    setBox({
+      width: frame?.width ?? SKY_CODE_SIZE.width,
+      height: frame?.height ?? SKY_CODE_SIZE.height,
+    });
     setReady(false);
     setError(null);
     void (async () => {
-      try {
-        await document.fonts?.load("italic 500 84px Fraunces");
-        await document.fonts?.load("500 26px Outfit");
-      } catch {
-        /* Georgia / system sans still read. */
+      let framePixels: Uint8ClampedArray | null = null;
+      if (frame) {
+        try {
+          framePixels = await loadFramePixels(frame.src, frame.width, frame.height);
+        } catch {
+          framePixels = null;
+        }
+      }
+      if (!frame || !framePixels) {
+        try {
+          await document.fonts?.load("italic 500 84px Fraunces");
+          await document.fonts?.load("500 26px Outfit");
+        } catch {
+          /* Georgia / system sans still read. */
+        }
       }
       if (cancelled) return;
       try {
-        const paint = paintSkyCode(signId);
+        const paint = paintSkyCode(signId, framePixels);
         canvas.width = paint.width;
         canvas.height = paint.height;
         const ctx = canvas.getContext("2d");
@@ -111,7 +131,10 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
         pixels.set(paint.rgba);
         ctx.putImageData(new ImageData(pixels, paint.width, paint.height), 0, 0);
         drawSkyCodeCaptions(ctx, paint);
-        if (!cancelled) setReady(true);
+        if (!cancelled) {
+          setBox({ width: paint.width, height: paint.height });
+          setReady(true);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not draw the code");
       }
@@ -180,7 +203,7 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
     <div className="mt-4">
       <div
         className="relative mx-auto w-full max-w-[22rem] overflow-hidden rounded-lg border border-border bg-bg"
-        style={{ aspectRatio: `${SKY_CODE_SIZE.width} / ${SKY_CODE_SIZE.height}` }}
+        style={{ aspectRatio: `${box.width} / ${box.height}` }}
       >
         <canvas
           ref={canvasRef}
@@ -227,4 +250,22 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
       </div>
     </div>
   );
+}
+
+/** 1:1 decode of a locked surround. A size mismatch falls back to the glyph frame. */
+async function loadFramePixels(src: string, width: number, height: number) {
+  const img = new Image();
+  img.decoding = "async";
+  img.src = src;
+  await img.decode();
+  if (img.naturalWidth !== width || img.naturalHeight !== height) {
+    throw new Error("Sky code frame is the wrong size");
+  }
+  const scratch = document.createElement("canvas");
+  scratch.width = width;
+  scratch.height = height;
+  const ctx = scratch.getContext("2d", { willReadFrequently: true });
+  if (!ctx) throw new Error("Could not draw the code");
+  ctx.drawImage(img, 0, 0);
+  return ctx.getImageData(0, 0, width, height).data;
 }
