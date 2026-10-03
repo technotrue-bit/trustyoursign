@@ -513,6 +513,23 @@ export function AccountMenu() {
                 <DropdownMenu.Item asChild disabled={locked}>
                   <Link
                     to="/account"
+                    hash="sky-code"
+                    className={cn(
+                      ITEM_CLASS,
+                      "justify-between gap-3",
+                      locked && "pointer-events-none opacity-50",
+                    )}
+                    onClick={close}
+                  >
+                    Your sky code
+                    <span className="text-[0.6rem] tracking-[0.16em] text-fg-subtle uppercase">
+                      Premium
+                    </span>
+                  </Link>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item asChild disabled={locked}>
+                  <Link
+                    to="/account"
                     className={cn(ITEM_CLASS, locked && "pointer-events-none opacity-50")}
                     onClick={close}
                   >

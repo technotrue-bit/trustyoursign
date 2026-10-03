@@ -20,6 +20,7 @@ import { MIN_AGE } from "@/lib/legal";
 import { claimSite } from "@/lib/site";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
+import { SkyCodeSection } from "@/components/overlay/SkyCodeCard";
 import { authClient, signOut } from "@/lib/auth/client";
 import { clearStickySession } from "@/lib/auth/session-sticky";
 import { isUnauthorizedError } from "@/lib/auth/unauthorized";
@@ -206,6 +207,8 @@ function Account() {
               : "The Big Three, a timed natal (Sky · Body · Bones · Ask), and one deep cut a week are free. Paid bones are not billed yet — this house is still being built."}
           </p>
         </section>
+
+        <SkyCodeSection charts={charts} failed={chartsFailed} onRetry={load} />
 
         <PasskeySection onError={setError} nudgeEnable={Boolean(enablePasskey)} />
 
