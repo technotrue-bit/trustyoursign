@@ -16,8 +16,9 @@ import {
  * The host is always the live site. A code saved from a preview must still
  * open trustyoursign.com.
  *
- * TODO(image-gen): the frame is the sign's existing star glyph. Replace it
- * with illustrated sign art later, and keep the QR modules clear of that art.
+ * Sagittarius uses the locked surround (`public/sky-code/sagittarius-frame.png`).
+ * The cream pad is empty in that cut; modules are stamped into the pad only.
+ * Other signs keep the star-glyph frame until their own art exists.
  */
 export const SKY_CODE_ORIGIN = "https://trustyoursign.com";
 
@@ -40,7 +41,38 @@ export type SkyCodePaint = {
   signName: string;
   /** Inclusive pixel rect of the cream plate (quiet zone included). */
   plate: { x: number; y: number; size: number };
+  /** True when the locked surround was composited. False uses the star glyph. */
+  framed: boolean;
 };
+
+export type SkyCodeFrame = {
+  src: string;
+  width: number;
+  height: number;
+  /** Sharp cream square measured on the locked cut. Modules stay inside it. */
+  pad: { x: number; y: number; size: number };
+};
+
+/**
+ * Sagittarius display cut, 1200×1314.
+ * Cream pad is 552×552 (46% of the width) at (324, 178) — #f5efe3, empty.
+ * "Trust Your Sign" is already set in the art. Do not paint type over it.
+ */
+const SAGITTARIUS_FRAME: SkyCodeFrame = {
+  src: "/sky-code/sagittarius-frame.png",
+  width: 1200,
+  height: 1314,
+  pad: { x: 324, y: 178, size: 552 },
+};
+
+const SKY_CODE_FRAMES: Partial<Record<SignId, SkyCodeFrame>> = {
+  sagittarius: SAGITTARIUS_FRAME,
+};
+
+/** Locked surround for this sign, or null when the star-glyph frame still applies. */
+export function skyCodeFrame(signId: SignId): SkyCodeFrame | null {
+  return SKY_CODE_FRAMES[signId] ?? null;
+}
 
 /** Newest chart saved as the viewer's own. Rows arrive newest first. */
 export function ownChartForSkyCode<T extends { relation: string }>(charts: readonly T[]): T | null {
@@ -55,15 +87,44 @@ export function skyCodeFileName(signId: SignId): string {
   return `trust-your-sign-${signId}-sky.png`;
 }
 
-export function paintSkyCode(signId: SignId): SkyCodePaint {
+export function paintSkyCode(signId: SignId, framePixels?: Uint8ClampedArray | null): SkyCodePaint {
+  const locked = skyCodeFrame(signId);
+  if (locked && framePixels && framePixels.length === locked.width * locked.height * 4) {
+    return paintLockedFrame(signId, locked, framePixels);
+  }
+  return paintGlyphFrame(signId);
+}
+
+/** Blit the locked surround, then stamp modules into the cream pad only. */
+function paintLockedFrame(
+  signId: SignId,
+  frame: SkyCodeFrame,
+  framePixels: Uint8ClampedArray,
+): SkyCodePaint {
+  const url = skyCodeUrl(signId);
+  const rgba = new Uint8ClampedArray(framePixels);
+  const { x, y, size } = frame.pad;
+  stampQr(rgba, frame.width, x, y, size, url);
+  return {
+    width: frame.width,
+    height: frame.height,
+    rgba,
+    url,
+    signId,
+    signName: SIGN_CANON[signId].name,
+    plate: { x, y, size },
+    framed: true,
+  };
+}
+
+function paintGlyphFrame(signId: SignId): SkyCodePaint {
   const { width, height, topBand, bottomBand } = SKY_CODE_SIZE;
   const url = skyCodeUrl(signId);
   const signName = SIGN_CANON[signId].name;
   const rgba = new Uint8ClampedArray(width * height * 4);
   fillRect(rgba, width, 0, 0, width, height, INK);
 
-  const qr = encode(url, { ecc: "H", border: 4 });
-  const cells = qr.size;
+  const cells = qrGrid(url).size;
   const side = 156;
   const roomW = width - side * 2;
   const roomH = height - topBand - bottomBand - 40;
@@ -116,22 +177,7 @@ export function paintSkyCode(signId: SignId): SkyCodePaint {
   fillRect(rgba, width, 0, height - bottomBand, width, bottomBand, INK);
 
   fillRoundRect(rgba, width, height, plateX, plateY, plateSize, plateSize, 28, CREAM);
-  for (let row = 0; row < cells; row++) {
-    const line = qr.data[row];
-    if (!line) continue;
-    for (let col = 0; col < cells; col++) {
-      if (!line[col]) continue;
-      fillRect(
-        rgba,
-        width,
-        plateX + col * modulePx,
-        plateY + row * modulePx,
-        modulePx,
-        modulePx,
-        INK,
-      );
-    }
-  }
+  stampQr(rgba, width, plateX, plateY, plateSize, url);
 
   return {
     width,
@@ -141,7 +187,38 @@ export function paintSkyCode(signId: SignId): SkyCodePaint {
     signId,
     signName,
     plate: { x: plateX, y: plateY, size: plateSize },
+    framed: false,
   };
+}
+
+function qrGrid(url: string) {
+  return encode(url, { ecc: "H", border: 4 });
+}
+
+/** Dark modules only. Light modules stay whatever is already in the pad (cream). */
+function stampQr(
+  rgba: Uint8ClampedArray,
+  width: number,
+  plateX: number,
+  plateY: number,
+  plateSize: number,
+  url: string,
+) {
+  const qr = qrGrid(url);
+  const cells = qr.size;
+  const modulePx = Math.floor(plateSize / cells);
+  if (modulePx < 1) return;
+  const drawn = cells * modulePx;
+  const ox = plateX + Math.floor((plateSize - drawn) / 2);
+  const oy = plateY + Math.floor((plateSize - drawn) / 2);
+  for (let row = 0; row < cells; row++) {
+    const line = qr.data[row];
+    if (!line) continue;
+    for (let col = 0; col < cells; col++) {
+      if (!line[col]) continue;
+      fillRect(rgba, width, ox + col * modulePx, oy + row * modulePx, modulePx, modulePx, INK);
+    }
+  }
 }
 
 export type SkyCodeCaption = {
@@ -153,10 +230,14 @@ export type SkyCodeCaption = {
   tracking?: string;
 };
 
-/** Type that sits in the bands paintSkyCode keeps clear of the code. */
+/**
+ * Type for the star-glyph frame. A locked surround already carries its title,
+ * so captions stay empty — drawing them would cover the plate and the stars.
+ */
 export function skyCodeCaptions(
-  paint: Pick<SkyCodePaint, "width" | "height" | "signId" | "signName">,
+  paint: Pick<SkyCodePaint, "width" | "height" | "signId" | "signName" | "framed">,
 ): SkyCodeCaption[] {
+  if (paint.framed) return [];
   const { width, height, signName } = paint;
   const month = SIGN_CANON[paint.signId].month;
   return [
