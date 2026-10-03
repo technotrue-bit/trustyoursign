@@ -6,20 +6,29 @@ import {
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
+  ClampToEdgeWrapping,
   Color,
   DoubleSide,
   FogExp2,
   Group,
   LinearFilter,
+  LinearSRGBColorSpace,
   Mesh,
   MeshBasicMaterial,
   NoToneMapping,
+  OrthographicCamera,
   PerspectiveCamera,
+  PlaneGeometry,
   Points,
   SRGBColorSpace,
+  Scene,
+  ShaderMaterial,
+  Texture,
   Vector2,
   Vector3,
   VideoTexture,
+  WebGLRenderer,
+  WebGLRenderTarget,
 } from "three";
 import { isSmallGpu } from "@/lib/gpu";
 import { CONSTELLATIONS, ELEMENT_TINT, pairFigures } from "@/lib/galaxy/constellations";
@@ -50,7 +59,6 @@ import {
   exitSignGalaxy,
   exploringSign,
   galaxyTravel,
-  killDwellClip,
   noteControl,
   prefersReducedMotion,
   publishTravel,
@@ -111,9 +119,14 @@ import {
   stepArriveBurst,
 } from "@/lib/galaxy/signField";
 import {
+  DWELL_ASPECT_MATCH_EPS,
+  DWELL_CROSSFADE_SEC,
+  DWELL_LIFE_PLATE_NUDGE_PX,
+  DWELL_PLATE_REF,
   dwellClipFor,
+  dwellVideoFrameReady,
   pauseDwellClip,
-  playDwellClip,
+  primeDwellClip,
   stopDwellClip,
   syncDwellPrefetch,
 } from "@/lib/galaxy/dwellClip";
@@ -520,16 +533,16 @@ function BirthNebula() {
 /** Give up starting a clip that never leaves frame 0, then let the walk continue. */
 const DWELL_START_GIVE_UP_SEC = 4;
 
-/** Fit the clip's own frame inside the plate width. 16:9 clips match the still plate; portrait clips keep their bars for the black key. */
-function lifePlaneSize(plateWide: number, plateAspect: number, video: HTMLVideoElement | null) {
-  const vw = video?.videoWidth ?? 0;
-  const vh = video?.videoHeight ?? 0;
-  const aspect = vw > 2 && vh > 2 ? vw / vh : plateAspect;
-  return { x: plateWide, y: plateWide / aspect };
-}
-
-function bindDwellTexture(video: HTMLVideoElement, prev: VideoTexture | null): VideoTexture {
-  if (prev && prev.image === video) return prev;
+function bindDwellTexture(
+  video: HTMLVideoElement,
+  prev: VideoTexture | null,
+  plateAspect: number,
+  signId: SignId,
+): VideoTexture {
+  if (prev && prev.image === video) {
+    fitDwellCoverUv(prev, video, plateAspect, signId);
+    return prev;
+  }
   if (prev) {
     try {
       prev.dispose();
@@ -540,7 +553,146 @@ function bindDwellTexture(video: HTMLVideoElement, prev: VideoTexture | null): V
   const tex = new VideoTexture(video);
   tex.colorSpace = SRGBColorSpace;
   tex.generateMipmaps = false;
+  fitDwellCoverUv(tex, video, plateAspect, signId);
   return tex;
+}
+
+/** Map the life clip into the still plate. Near-matching aspects skip the cover crop. */
+function fitDwellCoverUv(
+  tex: VideoTexture,
+  video: HTMLVideoElement,
+  plateAspect: number,
+  signId: SignId,
+) {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  tex.wrapS = ClampToEdgeWrapping;
+  tex.wrapT = ClampToEdgeWrapping;
+  if (vw < 3 || vh < 3 || !Number.isFinite(plateAspect) || plateAspect <= 0) {
+    tex.repeat.set(1, 1);
+    tex.offset.set(0, 0);
+    return;
+  }
+  const va = vw / vh;
+  if (Math.abs(va - plateAspect) <= DWELL_ASPECT_MATCH_EPS) {
+    tex.repeat.set(1, 1);
+    tex.offset.set(0, 0);
+  } else if (va > plateAspect) {
+    const scale = va / plateAspect;
+    tex.repeat.set(1 / scale, 1);
+    tex.offset.set((1 - 1 / scale) / 2, 0);
+  } else {
+    const scale = plateAspect / va;
+    tex.repeat.set(1, 1 / scale);
+    tex.offset.set(0, (1 - 1 / scale) / 2);
+  }
+  const nudge = DWELL_LIFE_PLATE_NUDGE_PX[signId];
+  if (nudge) {
+    tex.offset.x -= nudge.x / DWELL_PLATE_REF.w;
+    tex.offset.y += nudge.y / DWELL_PLATE_REF.h;
+  }
+}
+
+let dwellPoseFallback: CanvasTexture | null = null;
+
+function dwellPoseFallbackTexture(): CanvasTexture {
+  if (dwellPoseFallback) return dwellPoseFallback;
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = LinearFilter;
+  tex.magFilter = LinearFilter;
+  dwellPoseFallback = tex;
+  return tex;
+}
+
+let dwellPoseStage: {
+  scene: Scene;
+  cam: OrthographicCamera;
+  mat: ShaderMaterial;
+} | null = null;
+
+function dwellPoseStageOnce() {
+  if (dwellPoseStage) return dwellPoseStage;
+  const mat = new ShaderMaterial({
+    uniforms: { tMap: { value: null } },
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+    vertexShader: [
+      "varying vec2 vUv;",
+      "void main() {",
+      "  vUv = uv;",
+      "  gl_Position = vec4(position.xy, 0.0, 1.0);",
+      "}",
+    ].join("\n"),
+    fragmentShader: [
+      "uniform sampler2D tMap;",
+      "varying vec2 vUv;",
+      "void main() {",
+      "  gl_FragColor = sRGBTransferEOTF(texture2D(tMap, vUv));",
+      "}",
+    ].join("\n"),
+  });
+  const scene = new Scene();
+  scene.add(new Mesh(new PlaneGeometry(2, 2), mat));
+  dwellPoseStage = {
+    scene,
+    cam: new OrthographicCamera(-1, 1, 1, -1, 0, 1),
+    mat,
+  };
+  return dwellPoseStage;
+}
+
+/**
+ * Draw frame 0 through the same sampler the plate uses, into a linear target.
+ * A canvas grab and a raw texture copy are different texels, and that gap is
+ * the brightness step at both cuts.
+ */
+function renderDwellPose(
+  gl: WebGLRenderer,
+  videoTex: VideoTexture,
+  slot: { current: WebGLRenderTarget | null },
+): Texture | null {
+  const video = videoTex.image as HTMLVideoElement;
+  const w = video?.videoWidth ?? 0;
+  const h = video?.videoHeight ?? 0;
+  if (w < 3 || h < 3) return null;
+  let rt = slot.current;
+  if (!rt || rt.width !== w || rt.height !== h) {
+    rt?.dispose();
+    rt = new WebGLRenderTarget(w, h, {
+      depthBuffer: false,
+      stencilBuffer: false,
+      generateMipmaps: false,
+      minFilter: LinearFilter,
+      magFilter: LinearFilter,
+    });
+    rt.texture.colorSpace = LinearSRGBColorSpace;
+    rt.texture.generateMipmaps = false;
+    rt.texture.minFilter = LinearFilter;
+    rt.texture.magFilter = LinearFilter;
+    rt.texture.wrapS = ClampToEdgeWrapping;
+    rt.texture.wrapT = ClampToEdgeWrapping;
+    slot.current = rt;
+  }
+  const stage = dwellPoseStageOnce();
+  stage.mat.uniforms.tMap!.value = videoTex;
+  // Upload the held frame before the quad samples it. The first draw otherwise
+  // stores black, and the fade adds the whole clip on top of the painting.
+  videoTex.needsUpdate = true;
+  gl.initTexture(videoTex);
+  const prevTone = gl.toneMapping;
+  const prevTarget = gl.getRenderTarget();
+  gl.toneMapping = NoToneMapping;
+  gl.setRenderTarget(rt);
+  gl.render(stage.scene, stage.cam);
+  gl.setRenderTarget(prevTarget);
+  gl.toneMapping = prevTone;
+  return rt.texture;
 }
 
 function releaseDwellTexture(
@@ -586,11 +738,29 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         uHubUv: { value: Vector2 };
         uAspect: { value: number };
         uLifeKey: { value: number };
+        uDwellVideo: { value: Texture | null };
+        uPoseMap: { value: Texture | null };
+        uPoseReady: { value: number };
+        uDwellBlend: { value: number };
+        uCoverRepeat: { value: Vector2 };
+        uCoverOffset: { value: Vector2 };
       })
     | null
   >(null);
   const dwellTex = useRef<VideoTexture | null>(null);
+  const dwellPoseRt = useRef<WebGLRenderTarget | null>(null);
   const dwellStall = useRef(0);
+  const dwellBlend = useRef(0);
+  const dwellPhase = useRef<"idle" | "wait" | "in" | "play" | "out">("idle");
+  const dwellEnded = useRef(false);
+  /** True while a hidden play/pause is decoding frame 0. The fade stays on the still. */
+  const dwellHold = useRef(false);
+  /** Still plate after the fade, before the walk. The sky must not move on the cut. */
+  const dwellRest = useRef(0);
+  /** currentTime last pushed to the GPU. A paused clip must not re-upload. */
+  const dwellUploadedAt = useRef(-1);
+  const lifeArt = useRef<Mesh>(null);
+  const lifeMat = useRef<MeshBasicMaterial | null>(null);
   const shellWrap = useRef<Group>(null);
   const shown = useRef(false);
   const hydrated = useRef(false);
@@ -682,11 +852,20 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
     const mat = plateMat.current;
     if (!mat || plateBurst.current) return;
     const params = burstParams(sign.id, sign.palette);
+    const fallback = dwellPoseFallbackTexture();
     const uniforms = {
       uDissolve: { value: 0 },
       uHubUv: { value: new Vector2(0.5, 0.5) },
       uAspect: { value: 16 / 9 },
       uLifeKey: { value: 0 },
+      // Motion is added on this plate. A second mesh that redraws the painting
+      // changes the way back even when the clip frame matches the still.
+      uDwellVideo: { value: fallback as Texture | null },
+      uPoseMap: { value: fallback as Texture | null },
+      uPoseReady: { value: 0 },
+      uDwellBlend: { value: 0 },
+      uCoverRepeat: { value: new Vector2(1, 1) },
+      uCoverOffset: { value: new Vector2(0, 0) },
       // Mask numbers (and the seed derivation) come from signBurst — the same
       // ones dissolveMaskDistance is tested with. Never hand-build these.
       ...plateDissolveUniforms(params),
@@ -712,6 +891,12 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             "uniform float uRadius;",
             "uniform float uAspect;",
             "uniform float uLifeKey;",
+            "uniform sampler2D uDwellVideo;",
+            "uniform sampler2D uPoseMap;",
+            "uniform float uPoseReady;",
+            "uniform float uDwellBlend;",
+            "uniform vec2 uCoverRepeat;",
+            "uniform vec2 uCoverOffset;",
           ].join("\n"),
         )
         .replace(
@@ -725,22 +910,65 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
             "  float lifeLuma = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));",
             "  diffuseColor.a *= smoothstep(0.02, 0.06, lifeLuma);",
             "}",
+            // Cover UV matches fitDwellCoverUv. The pose is already linear.
+            // The video is not an sRGB texture, so decode it the same way the
+            // plate decodes a clip. Blend 0, or a frame that matches the pose,
+            // leaves this write identical to the painting.
+            "if (uPoseReady > 0.5 && uDwellBlend > 0.001) {",
+            "  vec2 tysVideoUv = vTysPlateUv * uCoverRepeat + uCoverOffset;",
+            "  vec3 tysVid = sRGBTransferEOTF(texture2D(uDwellVideo, tysVideoUv)).rgb;",
+            "  vec3 tysPose = texture2D(uPoseMap, tysVideoUv).rgb;",
+            "  diffuseColor.rgb = clamp(diffuseColor.rgb + (tysVid - tysPose) * uDwellBlend, 0.0, 1.0);",
+            "}",
           ].join("\n"),
         );
     };
     // Only this material carries the dissolve; keep the program cache honest.
-    mat.customProgramCacheKey = () => "tys-plate-dissolve-life";
+    mat.customProgramCacheKey = () => "tys-plate-dwell-delta";
     mat.needsUpdate = true;
   }, [sign.id, sign.palette]);
 
-  useFrame(({ clock, camera }, dt) => {
+  useFrame(({ clock, camera, gl }, dt) => {
     const g = group.current;
     const mesh = cores.current;
     if (!g || !mesh) return;
+    const clearDwellPose = () => {
+      const tex = dwellPoseRt.current;
+      dwellPoseRt.current = null;
+      const uniforms = plateBurst.current;
+      if (uniforms) {
+        uniforms.uPoseReady.value = 0;
+        uniforms.uDwellBlend.value = 0;
+        const fallback = dwellPoseFallbackTexture();
+        uniforms.uPoseMap.value = fallback;
+        uniforms.uDwellVideo.value = fallback;
+      }
+      if (dwellPoseStage) dwellPoseStage.mat.uniforms.tMap!.value = dwellPoseFallbackTexture();
+      dwellUploadedAt.current = -1;
+      if (!tex) return;
+      try {
+        tex.dispose();
+      } catch {
+        /* already detached */
+      }
+    };
     const releaseLife = () => {
       if (galaxyTravel.dwellClipIndex === index) pauseDwellClip(sign.id);
-      releaseDwellTexture(plateMat.current, artTex, dwellTex);
+      dwellBlend.current = 0;
+      dwellPhase.current = "idle";
+      dwellEnded.current = false;
+      dwellHold.current = false;
+      dwellRest.current = 0;
+      clearDwellPose();
+      releaseDwellTexture(lifeMat.current, null, dwellTex);
+      if (plateMat.current) plateMat.current.map = artTex;
+      if (lifeMat.current) {
+        lifeMat.current.opacity = 0;
+        lifeMat.current.visible = false;
+      }
+      if (lifeArt.current) lifeArt.current.visible = false;
       dwellStall.current = 0;
+      stopDwellClip(sign.id);
       if (plateBurst.current) plateBurst.current.uLifeKey.value = 0;
     };
     if (volumeGated && !volReady.current && getSignVolume(sign.id)) {
@@ -914,38 +1142,148 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
           galaxyTravel.dwellClipIndex === index &&
           !galaxyTravel.dwellClipDone &&
           Boolean(dwellClipFor(sign.id));
-        let lifeVideo = false;
-        if (lifeOwns && galaxyTravel.paused) {
-          pauseDwellClip(sign.id);
-          lifeVideo = Boolean(dwellTex.current);
-        } else if (!lifeOwns || !dwellClipMayPlay(index)) {
-          // Not parked, or someone is steering: the clip dies and the still plate rides.
-          if (lifeOwns) killDwellClip();
+        const mayPlay = dwellClipMayPlay(index);
+        // One stalled paint must not swallow the whole fade. 60fps is unchanged.
+        const inStep = Math.min(dt, 1 / 30) / Math.max(0.001, DWELL_CROSSFADE_SEC);
+        const winding =
+          dwellPhase.current === "out" ||
+          (dwellBlend.current > 0 && (!lifeOwns || !mayPlay));
+
+        const finishDwellFade = (markDone: boolean, keepVideo = false) => {
+          dwellBlend.current = 0;
+          dwellPhase.current = "idle";
+          dwellEnded.current = false;
+          clearDwellPose();
+          releaseDwellTexture(lifeMat.current, null, dwellTex);
+          if (lifeMat.current) {
+            lifeMat.current.opacity = 0;
+            lifeMat.current.visible = false;
+          }
+          if (lifeArt.current) lifeArt.current.visible = false;
           dwellStall.current = 0;
-          releaseDwellTexture(mat, artTex, dwellTex);
-        } else {
-          const video = playDwellClip(sign.id);
-          if (video && !video.ended && !video.error && video.paused && video.currentTime === 0) {
-            dwellStall.current += dt;
-          } else {
-            dwellStall.current = 0;
+          dwellHold.current = false;
+          dwellRest.current = markDone ? 0.4 : 0;
+          if (keepVideo) pauseDwellClip(sign.id);
+          else stopDwellClip(sign.id);
+        };
+
+        if (dwellRest.current > 0 && !lifeOwns) {
+          dwellRest.current = 0;
+        } else if (dwellRest.current > 0 && lifeOwns && mayPlay) {
+          dwellRest.current = Math.max(0, dwellRest.current - dt);
+          if (dwellRest.current <= 0) galaxyTravel.dwellClipDone = true;
+        } else if (dwellRest.current > 0 && lifeOwns) {
+          dwellRest.current = 0;
+          galaxyTravel.dwellClipDone = true;
+        } else if (lifeOwns && mayPlay && !reducedMotion && dwellPhase.current !== "out") {
+          const video = primeDwellClip(sign.id);
+          if (dwellPhase.current === "idle" || dwellPhase.current === "wait") {
+            if (!video) {
+              dwellPhase.current = "wait";
+              dwellStall.current += dt;
+            } else if (video.error) {
+              dwellPhase.current = "wait";
+              dwellStall.current += dt;
+            } else if (video.ended) {
+              finishDwellFade(true);
+            } else if (video && !video.error && !video.ended) {
+              const poseHeld =
+                !dwellHold.current && video.paused && video.currentTime < 0.05;
+              if (!dwellVideoFrameReady(video)) {
+                // Decode frame 0 offscreen and park it. The fade starts on that
+                // pose; playback begins with the fade, not on an empty frame.
+                if (!dwellHold.current) {
+                  dwellHold.current = true;
+                  void video
+                    .play()
+                    .then(() => {
+                      if (dwellPhase.current !== "wait") return;
+                      video.pause();
+                      if (video.currentTime > 0.04) video.currentTime = 0;
+                    })
+                    .catch(() => {})
+                    .finally(() => {
+                      dwellHold.current = false;
+                    });
+                }
+                dwellPhase.current = "wait";
+                dwellStall.current += dt;
+              } else if (!poseHeld) {
+                if (!dwellHold.current) {
+                  video.pause();
+                  if (video.currentTime > 0.04) video.currentTime = 0;
+                }
+                dwellPhase.current = "wait";
+                dwellStall.current += dt;
+              } else {
+                const uniforms = plateBurst.current;
+                const videoTex = bindDwellTexture(video, dwellTex.current, aspect, sign.id);
+                dwellTex.current = videoTex;
+                const poseTex = uniforms ? renderDwellPose(gl, videoTex, dwellPoseRt) : null;
+                if (!uniforms || !poseTex) {
+                  dwellPhase.current = "wait";
+                  dwellStall.current += dt;
+                } else {
+                  uniforms.uPoseMap.value = poseTex;
+                  uniforms.uPoseReady.value = 1;
+                  uniforms.uDwellVideo.value = videoTex;
+                  uniforms.uCoverRepeat.value.set(videoTex.repeat.x, videoTex.repeat.y);
+                  uniforms.uCoverOffset.value.set(videoTex.offset.x, videoTex.offset.y);
+                  dwellStall.current = 0;
+                  dwellHold.current = false;
+                  dwellPhase.current = "in";
+                  // Motion starts inside the fade. A held pose that then plays
+                  // is a frame you can point at.
+                  if (video.paused && !video.ended) void video.play().catch(() => {});
+                }
+              }
+            }
           }
-          const stalled = dwellStall.current > DWELL_START_GIVE_UP_SEC;
-          const giveUp = !video || Boolean(video.error) || video.ended || stalled;
-          const playing = Boolean(video && !video.ended && !video.error && !video.paused);
-          if (giveUp) {
-            if (!video || video.ended || video.error || stalled) galaxyTravel.dwellClipDone = true;
-            dwellStall.current = 0;
-            releaseDwellTexture(mat, artTex, dwellTex);
-          } else if (video && (playing || video.currentTime > 0)) {
-            dwellTex.current = bindDwellTexture(video, dwellTex.current);
-            lifeVideo = true;
-          } else {
-            releaseDwellTexture(mat, artTex, dwellTex);
+          const stalled = dwellPhase.current === "wait" && dwellStall.current > DWELL_START_GIVE_UP_SEC;
+          if (stalled || video?.error) {
+            finishDwellFade(true);
+          } else if (dwellPhase.current === "in") {
+            if (video && video.paused && !video.ended) void video.play().catch(() => {});
+            dwellBlend.current = Math.min(1, dwellBlend.current + inStep);
+            // Keep the visible pose on the fade. A long paint otherwise
+            // reveals a frame that already moved while the blend was stuck.
+            if (video && !video.ended) {
+              const target = dwellBlend.current * DWELL_CROSSFADE_SEC;
+              if (video.currentTime > target + 0.05) video.currentTime = target;
+            }
+            if (dwellBlend.current >= 1) dwellPhase.current = "play";
+          } else if (dwellPhase.current === "play") {
+            dwellBlend.current = 1;
+            if (video && video.paused && !video.ended && !dwellEnded.current) {
+              void video.play().catch(() => {});
+            }
+            const dur = video && Number.isFinite(video.duration) ? video.duration : 0;
+            const remain = video ? dur - video.currentTime : 99;
+            // Hold the pose the clip settles on, then fade. Fading across the
+            // last 200ms of the file lets one long paint swallow the return.
+            const poseBack =
+              !!video && video.currentTime > 0.4 && dur > 1 && remain <= 0.05;
+            if (poseBack || video?.ended) {
+              if (video && !video.ended) video.pause();
+              dwellEnded.current = true;
+              dwellPhase.current = "out";
+            }
           }
+        } else if (winding) {
+          if (galaxyTravel.paused || dwellEnded.current) pauseDwellClip(sign.id);
+          if (dwellPhase.current !== "out") dwellPhase.current = "out";
+          // A swipe or a stalled paint must not swallow the fade.
+          const outStep = inStep;
+          dwellBlend.current = Math.max(0, dwellBlend.current - outStep);
+          if (dwellBlend.current <= 0) {
+            finishDwellFade(dwellEnded.current, galaxyTravel.paused && lifeOwns);
+          }
+        } else if (dwellPhase.current !== "idle" || dwellBlend.current > 0) {
+          finishDwellFade(false);
         }
+
         const ariesBreath =
-          !lifeVideo && index === 0 && !reducedMotion
+          index === 0 && !reducedMotion
             ? 1 + Math.sin(galaxyTravel.shaderTime * 0.72) * 0.012
             : 1;
         // Corridor plates follow the one-owner weight alone (no floor, so no stack).
@@ -963,29 +1301,56 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
               bornIn,
               morphLevel: morphLevel.current,
             }) * (exploringHere ? galaxyTravel.plateFade : 1);
+        const plane = { x: wide, y: wide / aspect };
         art.current.visible = plateOp > 0.04;
-        const lifeSource =
-          lifeVideo && dwellTex.current ? (dwellTex.current.image as HTMLVideoElement) : null;
-        const plane = lifeVideo ? lifePlaneSize(wide, aspect, lifeSource) : { x: wide, y: wide / aspect };
         art.current.scale.set(plane.x * ariesBreath, plane.y * ariesBreath, 1);
-        mat.opacity =
-          plateOp *
-          (!lifeVideo && index === 0 && !reducedMotion
+        const stillMul =
+          index === 0 && !reducedMotion
             ? 0.985 + Math.sin(galaxyTravel.shaderTime * 0.9 + 0.6) * 0.015
-            : 1);
+            : 1;
+        // One plate write. The blend only scales the clip's motion, so a frame
+        // that matches the held pose is the painting. The second mesh stays
+        // hidden: drawing it on top redraws the strokes and darkens the return.
+        mat.opacity = plateOp * stillMul;
+        mat.map = artTex;
+        const burst = plateBurst.current;
+        if (burst) {
+          burst.uDwellBlend.value = dwellBlend.current;
+          const clipVideo =
+            burst.uPoseReady.value > 0.5 && dwellBlend.current > 0.001
+              ? primeDwellClip(sign.id)
+              : null;
+          if (clipVideo && dwellVideoFrameReady(clipVideo)) {
+            dwellTex.current = bindDwellTexture(clipVideo, dwellTex.current, aspect, sign.id);
+            if (dwellTex.current) {
+              burst.uDwellVideo.value = dwellTex.current;
+              burst.uCoverRepeat.value.set(dwellTex.current.repeat.x, dwellTex.current.repeat.y);
+              burst.uCoverOffset.value.set(dwellTex.current.offset.x, dwellTex.current.offset.y);
+              // Playback presents frames through requestVideoFrameCallback.
+              // The opening fade still has to push the parked frame. Once the
+              // clip is paused, that frame is already on the GPU — uploading
+              // it again hits an empty element (texImage2D: no video).
+              const opening = dwellPhase.current === "in" || dwellPhase.current === "wait";
+              if (opening && dwellVideoFrameReady(clipVideo)) {
+                const stamp = clipVideo.currentTime;
+                if (Math.abs(stamp - dwellUploadedAt.current) > 0.0005) {
+                  dwellTex.current.needsUpdate = true;
+                  dwellUploadedAt.current = stamp;
+                }
+              }
+            }
+          }
+        }
+        if (lifeArt.current) lifeArt.current.visible = false;
+        if (lifeMat.current) {
+          lifeMat.current.visible = false;
+          lifeMat.current.opacity = 0;
+        }
         // Measured evidence for M11: what the entered sign's plate is actually
         // drawn at. Only the entered station publishes, so a neighbour's frame
         // can't clobber the value the QA probe reads.
         if (exploringHere) galaxyTravel.plateOpacity = plateOp;
-        if (plateBurst.current) plateBurst.current.uLifeKey.value = lifeVideo ? 1 : 0;
-        if (lifeVideo && dwellTex.current) {
-          if (mat.map !== dwellTex.current) {
-            mat.map = dwellTex.current;
-            mat.needsUpdate = true;
-          }
-        } else {
-          mat.map = artTex;
-        }
+        if (plateBurst.current) plateBurst.current.uLifeKey.value = 0;
         mat.depthTest = false;
         mat.alphaTest = 0.04;
         if (plateOn && !shown.current) {
@@ -1120,6 +1485,28 @@ function Station({ index, sign, eager }: { index: number; sign: TempleSign; eage
         <meshBasicMaterial
           ref={plateMat}
           map={artTex ?? undefined}
+          color="#ffffff"
+          transparent
+          opacity={0}
+          depthWrite={false}
+          depthTest={false}
+          fog={false}
+          toneMapped={false}
+          side={DoubleSide}
+        />
+      </mesh>
+      <mesh
+        ref={lifeArt}
+        position={[0, 0.05, -0.06]}
+        visible={false}
+        renderOrder={19}
+        frustumCulled={false}
+        raycast={noopRaycast}
+        dispose={null}
+      >
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
+          ref={lifeMat}
           color="#ffffff"
           transparent
           opacity={0}
