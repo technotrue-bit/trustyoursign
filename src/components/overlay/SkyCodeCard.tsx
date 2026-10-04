@@ -16,6 +16,7 @@ import {
   ownChartForSkyCode,
   paintSkyCode,
   planSkyShare,
+  skySharePayload,
   skyCodeFileName,
   skyCodeFrame,
   skyCodeGate,
@@ -296,10 +297,14 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
     setError(null);
     setShareNote(null);
     const blob = pngRef.current;
-    const file = blob ? new File([blob], skyCodeFileName(signId), { type: "image/png" }) : null;
+    if (!blob) {
+      setError("The code isn’t ready yet");
+      return;
+    }
+    const file = new File([blob], skyCodeFileName(signId), { type: "image/png" });
     const canShare = typeof navigator.share === "function";
     let canShareFiles = false;
-    if (file && canShare) {
+    if (canShare) {
       try {
         canShareFiles = Boolean(navigator.canShare?.({ files: [file] }));
       } catch {
@@ -312,15 +317,12 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
       canShare,
       canShareFiles,
     });
+    const payload = skySharePayload(plan, file);
     // Start the sheet in this tap. Anything awaited before share() loses it.
     void (async () => {
       try {
-        if (plan.kind === "file" && file) {
-          await navigator.share({ files: [file], title: plan.title });
-          return;
-        }
-        if (plan.kind === "url") {
-          await navigator.share({ title: plan.title, url: plan.url });
+        if (payload) {
+          await navigator.share(payload);
           return;
         }
         if (plan.kind === "copy") {
@@ -329,16 +331,20 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
+        // The picture was rejected. The link can still go, but this is not the image.
         if (plan.kind === "file" && canShare) {
           try {
-            const urlPlan = planSkyShare({
-              signName: name,
-              url,
-              canShare: true,
-              canShareFiles: false,
-            });
-            if (urlPlan.kind === "url") {
-              await navigator.share({ title: urlPlan.title, url: urlPlan.url });
+            const urlPayload = skySharePayload(
+              planSkyShare({
+                signName: name,
+                url,
+                canShare: true,
+                canShareFiles: false,
+              }),
+              null,
+            );
+            if (urlPayload) {
+              await navigator.share(urlPayload);
               return;
             }
           } catch (again) {
@@ -382,9 +388,10 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
+          disabled={!ready}
           onClick={share}
           aria-label="Share your sky code"
-          className="inline-flex min-h-12 items-center gap-2 rounded-md bg-accent px-4 text-xs tracking-[0.18em] text-accent-fg uppercase hover:bg-fg"
+          className="inline-flex min-h-12 items-center gap-2 rounded-md bg-accent px-4 text-xs tracking-[0.18em] text-accent-fg uppercase hover:bg-fg disabled:opacity-50"
         >
           <Share className="size-4" aria-hidden />
           Share

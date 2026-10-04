@@ -137,11 +137,17 @@ export function skyCodeFileName(signId: SignId): string {
  * A phone that can attach the picture uses the system share sheet with the
  * image. Otherwise the sheet gets the sky link. With no share sheet, the
  * link is copied so it can still be pasted into Messages, Mail, and the rest.
+ *
+ * The picture is shared as a file alone. iOS turns a title on that same call
+ * into a text item, and Messages then sends “Sagittarius sky” and the page
+ * link instead of the PNG.
  */
 export type SkySharePlan =
-  | { kind: "file"; title: string }
+  | { kind: "file" }
   | { kind: "url"; title: string; url: string }
   | { kind: "copy"; url: string };
+
+export type SkySharePayload = { files: File[] } | { title: string; url: string };
 
 export function planSkyShare(input: {
   signName: string;
@@ -150,9 +156,19 @@ export function planSkyShare(input: {
   canShareFiles: boolean;
 }): SkySharePlan {
   const title = `${input.signName} sky`;
-  if (input.canShare && input.canShareFiles) return { kind: "file", title };
+  if (input.canShare && input.canShareFiles) return { kind: "file" };
   if (input.canShare) return { kind: "url", title, url: input.url };
   return { kind: "copy", url: input.url };
+}
+
+/** The object passed to navigator.share. Null means there is nothing to put in a sheet. */
+export function skySharePayload(plan: SkySharePlan, file: File | null): SkySharePayload | null {
+  if (plan.kind === "file") {
+    if (!file) return null;
+    return { files: [file] };
+  }
+  if (plan.kind === "url") return { title: plan.title, url: plan.url };
+  return null;
 }
 
 export function paintSkyCode(signId: SignId, framePixels?: Uint8ClampedArray | null): SkyCodePaint {
