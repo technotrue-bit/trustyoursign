@@ -178,13 +178,15 @@ describe("sky code", () => {
     const shareButton = card.slice(card.indexOf('aria-label="Share your sky code"') - 120, card.indexOf("Save image"));
     assert.match(shareButton, /disabled=\{!ready\}/);
     assert.match(card, /navigator\.canShare\?\.\(\{ files: \[file\] \}\)/);
+    assert.match(card, /navigator\.canShare\?\.\(\{ files: \[file\], url \}\)/);
     assert.match(card, /skySharePayload\(plan, file\)/);
     assert.match(card, /navigator\.share\(payload\)/);
     assert.match(card, /navigator\.share\(urlPayload\)/);
     assert.doesNotMatch(card, /files:\s*\[file\],\s*title/);
+    assert.doesNotMatch(card, /files:\s*\[file\],\s*text/);
   });
 
-  it("shares the picture when the phone can, otherwise the sky link", () => {
+  it("shares the picture and the sky link when the phone can, otherwise the link alone", () => {
     const url = skyCodeUrl("sagittarius");
     const file = new File([Uint8Array.from([1, 2, 3])], "trust-your-sign-sagittarius-sky.png", {
       type: "image/png",
@@ -195,34 +197,74 @@ describe("sky code", () => {
       url,
       canShare: true,
       canShareFiles: true,
+      canShareFileWithUrl: true,
     });
-    assert.deepEqual(filePlan, { kind: "file" });
+    assert.deepEqual(filePlan, { kind: "file", url });
     const picture = skySharePayload(filePlan, file);
-    assert.deepEqual(picture, { files: [file] });
+    assert.deepEqual(picture, { files: [file], url });
     assert.equal(picture !== null && "title" in picture, false);
-    assert.equal(picture !== null && "url" in picture, false);
     assert.equal(picture !== null && "text" in picture, false);
+    assert.deepEqual(picture && Object.keys(picture).sort(), ["files", "url"]);
     assert.equal(skySharePayload(filePlan, null), null);
 
-    const urlPlan = planSkyShare({ signName: "Leo", url, canShare: true, canShareFiles: false });
+    const pictureOnly = planSkyShare({
+      signName: "Sagittarius",
+      url,
+      canShare: true,
+      canShareFiles: true,
+      canShareFileWithUrl: false,
+    });
+    assert.deepEqual(pictureOnly, { kind: "file" });
+    const pngAlone = skySharePayload(pictureOnly, file);
+    assert.deepEqual(pngAlone, { files: [file] });
+    assert.equal(pngAlone !== null && "url" in pngAlone, false);
+    assert.equal(pngAlone !== null && "title" in pngAlone, false);
+    assert.equal(pngAlone !== null && "text" in pngAlone, false);
+
+    const urlPlan = planSkyShare({
+      signName: "Leo",
+      url,
+      canShare: true,
+      canShareFiles: false,
+      canShareFileWithUrl: true,
+    });
     assert.deepEqual(urlPlan, { kind: "url", title: "Leo sky", url });
     const link = skySharePayload(urlPlan, null);
     assert.deepEqual(link, { title: "Leo sky", url });
     assert.equal(link !== null && "files" in link, false);
+    assert.equal(link !== null && "text" in link, false);
 
-    assert.deepEqual(planSkyShare({ signName: "Leo", url, canShare: false, canShareFiles: true }), {
-      kind: "copy",
-      url,
-    });
+    assert.deepEqual(
+      planSkyShare({
+        signName: "Leo",
+        url,
+        canShare: false,
+        canShareFiles: true,
+        canShareFileWithUrl: true,
+      }),
+      { kind: "copy", url },
+    );
     assert.equal(
       skySharePayload(
-        planSkyShare({ signName: "Leo", url, canShare: false, canShareFiles: true }),
+        planSkyShare({
+          signName: "Leo",
+          url,
+          canShare: false,
+          canShareFiles: true,
+          canShareFileWithUrl: true,
+        }),
         file,
       ),
       null,
     );
     assert.deepEqual(
-      planSkyShare({ signName: "Leo", url, canShare: false, canShareFiles: false }),
+      planSkyShare({
+        signName: "Leo",
+        url,
+        canShare: false,
+        canShareFiles: false,
+        canShareFileWithUrl: false,
+      }),
       { kind: "copy", url },
     );
   });
