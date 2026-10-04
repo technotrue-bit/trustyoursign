@@ -17,6 +17,7 @@ import {
   resetExplore,
   resetTravel,
   seekGalaxyPoint,
+  sessionBlocksSkyFlight,
   setExploreLookHold,
   skipEnterGalaxy,
   stepExplore,
@@ -45,6 +46,22 @@ describe("explore look inside a locked galaxy", () => {
     assert.equal(pointerTracksHover("mouse"), true);
     assert.equal(pointerTracksHover("touch"), false);
     assert.equal(pointerTracksHover("pen"), false);
+  });
+
+  it("a shelf sky stays free to look; a natal wheel still locks flight", () => {
+    assert.equal(sessionBlocksSkyFlight(null), false);
+    assert.equal(sessionBlocksSkyFlight("shelf"), false);
+    assert.equal(sessionBlocksSkyFlight("visitor"), true);
+    assert.equal(sessionBlocksSkyFlight("research"), true);
+
+    galaxyTravel.busy = sessionBlocksSkyFlight("shelf");
+    assert.equal(applyExploreLook(0, 90, true), true, "shelf must not freeze look");
+
+    landInside(4);
+    galaxyTravel.busy = sessionBlocksSkyFlight("visitor");
+    const before = galaxyTravel.exploreLookX;
+    assert.equal(applyExploreLook(0, 90, true), false, "natal wheel keeps flight locked");
+    assert.equal(galaxyTravel.exploreLookX, before);
   });
 
   it("drag pans look and does not change corridor t", () => {

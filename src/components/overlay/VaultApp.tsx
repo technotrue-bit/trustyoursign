@@ -24,6 +24,7 @@ import {
   restoreInsideSignGalaxy,
   returnToOpenSky,
   seekSign,
+  sessionBlocksSkyFlight,
   setPaused,
   skipBirth,
   snapToSign,
@@ -436,9 +437,9 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   }, []);
 
   useEffect(() => {
-    galaxyTravel.busy = Boolean(claiming || entered);
+    galaxyTravel.busy = Boolean(claiming || sessionBlocksSkyFlight(sessionKind));
     galaxyTravel.claiming = Boolean(claiming);
-  }, [claiming, entered]);
+  }, [claiming, sessionKind]);
 
   // Keep the address bar + session backup aligned with the live sky so a
   // refresh returns to this place instead of the title screen.

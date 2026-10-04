@@ -57,6 +57,7 @@ describe("the wheel belongs to the sky, not to whatever it happens to be over", 
     assert.equal(wheelFlies(targetMatching((s) => s.includes(".sign-strip"))), false);
     assert.equal(wheelFlies(targetMatching((s) => s.includes("details"))), false);
     assert.equal(wheelFlies(targetMatching((s) => s.includes(".chart-talks"))), false);
+    assert.equal(wheelFlies(targetMatching((s) => s.includes(".chart-sheet"))), false);
     // Account menu portals to body as role=menuitem — must not steal the tap for flight.
     assert.equal(wheelFlies(targetMatching((s) => s.includes("[role='menuitem']"))), false);
     assert.equal(wheelFlies(targetMatching((s) => s.includes("[data-sky-cta]"))), false);
