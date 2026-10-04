@@ -17,6 +17,7 @@ import {
   clearChartRoomsBoot,
   showChartRoomsOnNextBoot,
 } from "@/lib/ui/chartSheetIntent";
+import { leaveToMainMenu } from "@/lib/ui/mainMenu";
 import { savePlaceSession } from "@/lib/ui/skyPlace";
 import {
   EMPTY_DESK_NOTE,
@@ -466,8 +467,9 @@ export function AccountMenu() {
                   className={cn(ITEM_CLASS, locked && "pointer-events-none opacity-50")}
                   disabled={locked}
                   onSelect={() => {
-                    // Same home trip as the sky links: drop desk/sign/galaxy/star
-                    // and stay on the client router so the session stays warm.
+                    // Sky links call goHome while a chart is open and must keep it.
+                    // Home alone is a no-op over natal — dismiss the desk first.
+                    leaveToMainMenu();
                     savePlaceSession({ kind: "home" });
                     close();
                     void goHome(undefined);
