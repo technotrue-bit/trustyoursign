@@ -134,35 +134,27 @@ export function skyCodeFileName(signId: SignId): string {
 
 /**
  * How to hand someone this sky.
- * A phone that can attach the picture uses the system share sheet with the
- * image and, when that pair is allowed, the sky link. Otherwise the sheet
- * gets the sky link. With no share sheet, the link is copied so it can still
- * be pasted into Messages, Mail, and the rest.
+ * A phone that can attach the picture shares the PNG alone. The sky address
+ * stays on the page, where it can be tapped or copied. Putting that address
+ * on the same share as the file makes Messages send only the link.
  *
- * The link rides in the `url` member only. iOS turns a title or text on the
- * same call as the file into a string item, and Messages then sends that
- * string and the page instead of the PNG. A url member is a separate link
- * item, so the picture stays and the address stays tappable.
+ * When the phone cannot attach a photo, the sheet gets the sky link. With no
+ * share sheet, the link is copied so it can still be pasted into Messages,
+ * Mail, and the rest.
  */
 export type SkySharePlan =
-  | { kind: "file"; url?: string }
-  | { kind: "url"; title: string; url: string }
-  | { kind: "copy"; url: string };
+  { kind: "file" } | { kind: "url"; title: string; url: string } | { kind: "copy"; url: string };
 
-export type SkySharePayload = { files: File[]; url?: string } | { title: string; url: string };
+export type SkySharePayload = { files: File[] } | { title: string; url: string };
 
 export function planSkyShare(input: {
   signName: string;
   url: string;
   canShare: boolean;
   canShareFiles: boolean;
-  /** True when canShare({ files, url }) accepts the picture and the sky link together. */
-  canShareFileWithUrl: boolean;
 }): SkySharePlan {
   const title = `${input.signName} sky`;
-  if (input.canShare && input.canShareFiles) {
-    return input.canShareFileWithUrl ? { kind: "file", url: input.url } : { kind: "file" };
-  }
+  if (input.canShare && input.canShareFiles) return { kind: "file" };
   if (input.canShare) return { kind: "url", title, url: input.url };
   return { kind: "copy", url: input.url };
 }
@@ -171,7 +163,6 @@ export function planSkyShare(input: {
 export function skySharePayload(plan: SkySharePlan, file: File | null): SkySharePayload | null {
   if (plan.kind === "file") {
     if (!file) return null;
-    if (plan.url) return { files: [file], url: plan.url };
     return { files: [file] };
   }
   if (plan.kind === "url") return { title: plan.title, url: plan.url };

@@ -304,21 +304,11 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
     const file = new File([blob], skyCodeFileName(signId), { type: "image/png" });
     const canShare = typeof navigator.share === "function";
     let canShareFiles = false;
-    let canShareFileWithUrl = false;
     if (canShare) {
       try {
         canShareFiles = Boolean(navigator.canShare?.({ files: [file] }));
       } catch {
         canShareFiles = false;
-      }
-      if (canShareFiles) {
-        try {
-          // The link is included only when this pair is accepted. A title or
-          // text beside the file is what drops the picture on iPhone.
-          canShareFileWithUrl = Boolean(navigator.canShare?.({ files: [file], url }));
-        } catch {
-          canShareFileWithUrl = false;
-        }
       }
     }
     const plan = planSkyShare({
@@ -326,7 +316,6 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
       url,
       canShare,
       canShareFiles,
-      canShareFileWithUrl,
     });
     const payload = skySharePayload(plan, file);
     // Start the sheet in this tap. Anything awaited before share() loses it.
@@ -334,6 +323,9 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
       try {
         if (payload) {
           await navigator.share(payload);
+          if (plan.kind === "file") {
+            setShareNote("Picture shared. The link above opens this sky.");
+          }
           return;
         }
         if (plan.kind === "copy") {
@@ -342,28 +334,11 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        // The picture was rejected. The link can still go, but this is not the image.
-        if (plan.kind === "file" && canShare) {
-          try {
-            const urlPayload = skySharePayload(
-              planSkyShare({
-                signName: name,
-                url,
-                canShare: true,
-                canShareFiles: false,
-                canShareFileWithUrl: false,
-              }),
-              null,
-            );
-            if (urlPayload) {
-              await navigator.share(urlPayload);
-              return;
-            }
-          } catch (again) {
-            if (again instanceof DOMException && again.name === "AbortError") return;
-            setError(again instanceof Error ? again.message : "Could not share");
-            return;
-          }
+        // The PNG is ready. A failed picture share must not be replaced by
+        // the link. That send is the address with no image.
+        if (plan.kind === "file") {
+          setError("The picture didn’t send. The link above still opens this sky.");
+          return;
         }
         setError(err instanceof Error ? err.message : "Could not share");
       }
@@ -386,7 +361,9 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
         />
         {ready ? null : <div className="absolute inset-0 animate-pulse bg-bg-subtle" aria-hidden />}
       </div>
-      <p className="mt-3 break-all text-xs leading-relaxed text-fg-subtle">{url}</p>
+      <a href={url} className="mt-3 block break-all text-xs leading-relaxed text-fg underline">
+        {url}
+      </a>
       {error ? (
         <p role="alert" className="mt-2 text-sm text-wine">
           {error}
