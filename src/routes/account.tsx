@@ -20,7 +20,6 @@ import { MIN_AGE } from "@/lib/legal";
 import { claimSite } from "@/lib/site";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
-import { SkyCodeSection } from "@/components/overlay/SkyCodeCard";
 import { authClient, signOut } from "@/lib/auth/client";
 import { clearStickySession } from "@/lib/auth/session-sticky";
 import { isUnauthorizedError } from "@/lib/auth/unauthorized";
@@ -62,6 +61,9 @@ const MONTHS = [
 function Account() {
   const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
   const navigate = useNavigate();
+  // Browsers do not send the hash to the server, so the first paint must not
+  // branch on it — that mismatches the server HTML. Read it after mount.
+  const [hash, setHash] = useState<string | null>(null);
   const { enablePasskey } = Route.useSearch();
   const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [charts, setCharts] = useState<SavedChart[] | null>(null);
@@ -113,6 +115,10 @@ function Account() {
   }, [userId, owner]);
 
   useEffect(() => {
+    setHash(window.location.hash.replace(/^#/, ""));
+  }, []);
+
+  useEffect(() => {
     if (guard !== "signed_out") {
       setSignedOutGrace(false);
       return;
@@ -129,6 +135,9 @@ function Account() {
     };
     // `refetchSession` is a new function each render — only re-run when guard flips.
   }, [guard]);
+
+  // Older menu taps landed on this page’s sky-code section. That page is its own now.
+  if (hash === "sky-code") return <Navigate to="/sky-code" replace />;
 
   if (guard === "loading" || (guard === "signed_out" && signedOutGrace)) {
     return (
@@ -207,8 +216,6 @@ function Account() {
               : "The Big Three, a timed natal (Sky · Body · Bones · Ask), and one deep cut a week are free. Paid bones are not billed yet — this house is still being built."}
           </p>
         </section>
-
-        <SkyCodeSection charts={charts} failed={chartsFailed} onRetry={load} />
 
         <PasskeySection onError={setError} nudgeEnable={Boolean(enablePasskey)} />
 
