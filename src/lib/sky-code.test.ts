@@ -13,6 +13,7 @@ import {
   SKY_CODE_SIZE,
   ownChartForSkyCode,
   paintSkyCode,
+  planSkyShare,
   skyCodeCaptions,
   skyCodeFileName,
   skyCodeFrame,
@@ -70,23 +71,54 @@ describe("sky code", () => {
     assert.deepEqual(paintSkyCode("sagittarius").rgba, sag.rgba);
   });
 
-  it("sits in the account menu and on the account page", () => {
+  it("opens a dedicated page from the account menu", () => {
     const src = join(dirname(fileURLToPath(import.meta.url)), "..");
     const menu = readFileSync(join(src, "components/overlay/AccountMenu.tsx"), "utf8");
     const account = readFileSync(join(src, "routes/account.tsx"), "utf8");
+    const page = readFileSync(join(src, "routes/sky-code.tsx"), "utf8");
     const card = readFileSync(join(src, "components/overlay/SkyCodeCard.tsx"), "utf8");
     const skyCodeAt = menu.indexOf("Your sky code");
     const linkAt = menu.lastIndexOf("<Link", skyCodeAt);
     const profileAt = menu.indexOf("Profile", skyCodeAt);
     assert.ok(linkAt > 0 && skyCodeAt > linkAt && profileAt > skyCodeAt);
     const block = menu.slice(linkAt, profileAt);
-    assert.match(block, /hash="sky-code"/);
+    assert.match(block, /to="\/sky-code"/);
+    assert.doesNotMatch(block, /hash="sky-code"/);
     assert.match(block, /Premium/);
-    assert.match(account, /<SkyCodeSection/);
-    assert.match(card, /id="sky-code"/);
+    assert.match(page, /<SkyCodeSection/);
+    assert.doesNotMatch(account, /SkyCodeSection/);
+    assert.match(account, /to="\/sky-code"/);
+    assert.match(account, /window\.location\.hash/);
+    assert.match(card, /Place your birth first/);
     assert.match(card, /Save image/);
     assert.match(card, /skyCodeFrame/);
     assert.match(card, /paintSkyCode\(signId, framePixels\)/);
+    assert.match(card, /aria-label="Share your sky code"/);
+    assert.match(card, /navigator\.canShare\?\.\(\{ files: \[file\] \}\)/);
+    assert.match(card, /navigator\.share\(\{ files: \[file\], title: plan\.title \}\)/);
+    assert.match(card, /navigator\.share\(\{ title: plan\.title, url: plan\.url \}\)/);
+    assert.match(card, /navigator\.share\(\{ title: urlPlan\.title, url: urlPlan\.url \}\)/);
+  });
+
+  it("shares the picture when the phone can, otherwise the sky link", () => {
+    const url = skyCodeUrl("sagittarius");
+    assert.deepEqual(
+      planSkyShare({ signName: "Sagittarius", url, canShare: true, canShareFiles: true }),
+      { kind: "file", title: "Sagittarius sky" },
+    );
+    assert.deepEqual(planSkyShare({ signName: "Leo", url, canShare: true, canShareFiles: false }), {
+      kind: "url",
+      title: "Leo sky",
+      url,
+    });
+    assert.deepEqual(planSkyShare({ signName: "Leo", url, canShare: false, canShareFiles: true }), {
+      kind: "copy",
+      url,
+    });
+    assert.deepEqual(
+      planSkyShare({ signName: "Leo", url, canShare: false, canShareFiles: false }),
+      { kind: "copy", url },
+    );
   });
 
   it("scans for every sign", () => {

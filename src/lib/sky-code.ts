@@ -87,6 +87,29 @@ export function skyCodeFileName(signId: SignId): string {
   return `trust-your-sign-${signId}-sky.png`;
 }
 
+/**
+ * How to hand someone this sky.
+ * A phone that can attach the picture uses the system share sheet with the
+ * image. Otherwise the sheet gets the sky link. With no share sheet, the
+ * link is copied so it can still be pasted into Messages, Mail, and the rest.
+ */
+export type SkySharePlan =
+  | { kind: "file"; title: string }
+  | { kind: "url"; title: string; url: string }
+  | { kind: "copy"; url: string };
+
+export function planSkyShare(input: {
+  signName: string;
+  url: string;
+  canShare: boolean;
+  canShareFiles: boolean;
+}): SkySharePlan {
+  const title = `${input.signName} sky`;
+  if (input.canShare && input.canShareFiles) return { kind: "file", title };
+  if (input.canShare) return { kind: "url", title, url: input.url };
+  return { kind: "copy", url: input.url };
+}
+
 export function paintSkyCode(signId: SignId, framePixels?: Uint8ClampedArray | null): SkyCodePaint {
   const locked = skyCodeFrame(signId);
   if (locked && framePixels && framePixels.length === locked.width * locked.height * 4) {

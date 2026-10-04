@@ -22,6 +22,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SkyCodeRouteImport } from './routes/sky-code'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AdminUsersRouteImport } from './routes/admin_.users'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
@@ -92,6 +93,11 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SkyCodeRoute = SkyCodeRouteImport.update({
+  id: '/sky-code',
+  path: '/sky-code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -127,6 +133,7 @@ export interface FileRoutesByFullPath {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/sky-code': typeof SkyCodeRoute
   '/terms': typeof TermsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -146,6 +153,7 @@ export interface FileRoutesByTo {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/sky-code': typeof SkyCodeRoute
   '/terms': typeof TermsRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -166,6 +174,7 @@ export interface FileRoutesById {
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/sky-code': typeof SkyCodeRoute
   '/terms': typeof TermsRoute
   '/admin_/users': typeof AdminUsersRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -187,6 +196,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/signup'
+    | '/sky-code'
     | '/terms'
     | '/admin/users'
     | '/api/feedback'
@@ -206,6 +216,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/signup'
+    | '/sky-code'
     | '/terms'
     | '/admin/users'
     | '/api/feedback'
@@ -225,6 +236,7 @@ export interface FileRouteTypes {
     | '/register'
     | '/reset-password'
     | '/signup'
+    | '/sky-code'
     | '/terms'
     | '/admin_/users'
     | '/api/feedback'
@@ -245,6 +257,7 @@ export interface RootRouteChildren {
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
+  SkyCodeRoute: typeof SkyCodeRoute
   TermsRoute: typeof TermsRoute
   AdminUsersRoute: typeof AdminUsersRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
@@ -344,6 +357,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sky-code': {
+      id: '/sky-code'
+      path: '/sky-code'
+      fullPath: '/sky-code'
+      preLoaderRoute: typeof SkyCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -389,6 +409,7 @@ const rootRouteChildren: RootRouteChildren = {
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
+  SkyCodeRoute: SkyCodeRoute,
   TermsRoute: TermsRoute,
   AdminUsersRoute: AdminUsersRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,

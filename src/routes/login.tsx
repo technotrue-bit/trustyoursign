@@ -534,6 +534,10 @@ function Login() {
           <p className="mt-2 text-sm leading-relaxed text-fg-subtle">
             You were headed to your account — sign in to open your saved charts.
           </p>
+        ) : from === "sky-code" ? (
+          <p className="mt-2 text-sm leading-relaxed text-fg-subtle">
+            You were headed to your sky code — sign in to open it.
+          </p>
         ) : null}
         <p className="mt-2 text-xs leading-relaxed text-fg-subtle">
           <Link

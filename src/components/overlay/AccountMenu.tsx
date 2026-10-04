@@ -512,8 +512,7 @@ export function AccountMenu() {
                 {errorRow}
                 <DropdownMenu.Item asChild disabled={locked}>
                   <Link
-                    to="/account"
-                    hash="sky-code"
+                    to="/sky-code"
                     className={cn(
                       ITEM_CLASS,
                       "justify-between gap-3",
