@@ -3,9 +3,14 @@ import { Link } from "@tanstack/react-router";
 import { Share } from "lucide-react";
 import type { SavedChart } from "@/lib/charts";
 import { listCharts } from "@/lib/charts";
+import { getResearchChart } from "@/lib/chart/research";
 import { SIGN_CANON } from "@/lib/chart/sign-canon";
+import type { SignId } from "@/lib/chart/types";
+import { visitorBirth, visitorSign } from "@/lib/chart/session";
 import { clearStickySession } from "@/lib/auth/session-sticky";
 import { isUnauthorizedError } from "@/lib/auth/unauthorized";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { classifyOwnerFetchError, resolveOwnerVerdict, useOwnerVerdict } from "@/lib/owner-state";
 import {
   drawSkyCodeCaptions,
   ownChartForSkyCode,
@@ -13,6 +18,7 @@ import {
   planSkyShare,
   skyCodeFileName,
   skyCodeFrame,
+  skyCodeGate,
   skyCodeUrl,
   SKY_CODE_SIZE,
 } from "@/lib/sky-code";
@@ -20,14 +26,25 @@ import {
 /**
  * Shareable sky code for the signed-in person's own chart.
  *
+ * A saved chart marked as their own is used first. When there is none, the
+ * owner's own sky (the book the account menu calls "The sky") supplies the
+ * sign. Place a birth stays for a vault that truly has neither.
+ *
  * Sagittarius composites the locked surround and draws the code into its cream
  * pad. Every other sign still uses the star-glyph frame. Nothing is charged.
  */
 
 export function SkyCodeSection() {
+  const { user } = useCurrentUserState();
+  const owner = useOwnerVerdict(user?.id);
   const [charts, setCharts] = useState<SavedChart[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [ownSkySignId, setOwnSkySignId] = useState<SignId | null | undefined>(undefined);
+  const [ownSkyFailed, setOwnSkyFailed] = useState(false);
+  const [ownerFailed, setOwnerFailed] = useState(false);
+  const [deskNonce, setDeskNonce] = useState(0);
   const loadGen = useRef(0);
+  const deskGen = useRef(0);
 
   const load = useCallback(() => {
     const gen = ++loadGen.current;
@@ -54,9 +71,74 @@ export function SkyCodeSection() {
     load();
   }, [load]);
 
-  const own = charts?.filter((chart) => chart.relation === "self") ?? [];
-  const chart = charts ? ownChartForSkyCode(charts) : null;
-  const name = chart ? SIGN_CANON[chart.signId].name : null;
+  const saved = charts ? ownChartForSkyCode(charts) : null;
+  const needDesk = Boolean(charts && !saved && owner === true);
+
+  useEffect(() => {
+    if (!user?.id || owner !== null || !charts || saved) {
+      setOwnerFailed(false);
+      return;
+    }
+    let cancelled = false;
+    void resolveOwnerVerdict(user.id).then((verdict) => {
+      if (!cancelled) setOwnerFailed(verdict === null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, owner, charts, saved, deskNonce]);
+
+  useEffect(() => {
+    if (!needDesk) return;
+    const gen = ++deskGen.current;
+    setOwnSkySignId(undefined);
+    setOwnSkyFailed(false);
+    getResearchChart({ data: "joey" })
+      .then((book) => {
+        if (gen !== deskGen.current) return;
+        try {
+          setOwnSkySignId(visitorSign(book, visitorBirth(book)));
+          setOwnSkyFailed(false);
+        } catch {
+          setOwnSkyFailed(true);
+        }
+      })
+      .catch((err: unknown) => {
+        if (gen !== deskGen.current) return;
+        const kind = classifyOwnerFetchError(err);
+        if (kind === "signed_out") {
+          clearStickySession();
+          window.location.assign("/login?from=sky-code");
+          return;
+        }
+        if (kind === "unseeded" || kind === "not_owner") {
+          setOwnSkySignId(null);
+          setOwnSkyFailed(false);
+          return;
+        }
+        setOwnSkyFailed(true);
+      });
+    return () => {
+      deskGen.current += 1;
+    };
+  }, [needDesk, deskNonce]);
+
+  const retry = () => {
+    load();
+    setOwnerFailed(false);
+    if (user?.id) void resolveOwnerVerdict(user.id);
+    setDeskNonce((n) => n + 1);
+  };
+
+  const gate = skyCodeGate({
+    charts,
+    chartsFailed: failed,
+    owner,
+    ownerFailed,
+    ownSkySignId,
+    ownSkyFailed,
+  });
+  const name = gate.kind === "draw" ? SIGN_CANON[gate.signId].name : null;
 
   return (
     <section>
@@ -68,22 +150,22 @@ export function SkyCodeSection() {
         A picture of your sign’s sky that someone can scan. It opens that sky on Trust Your Sign.
         Premium is marked for later — nothing is charged, and checkout is not open.
       </p>
-      {charts === null ? (
+      {gate.kind === "loading" ? (
         <div className="mt-4 h-64 animate-pulse rounded-lg bg-bg-subtle" />
-      ) : failed && !chart ? (
+      ) : gate.kind === "retry" ? (
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <p role="alert" className="text-sm text-wine">
             Your chart didn’t load, so the code can’t be drawn yet.
           </p>
           <button
             type="button"
-            onClick={load}
+            onClick={retry}
             className="min-h-11 text-xs tracking-[0.16em] text-fg uppercase hover:text-accent"
           >
             Try again
           </button>
         </div>
-      ) : !chart || !name ? (
+      ) : gate.kind !== "draw" || !name ? (
         <div className="mt-4 space-y-4">
           <p className="text-sm text-fg-muted">
             Place your birth first. The code is drawn from your sign.
@@ -98,11 +180,11 @@ export function SkyCodeSection() {
       ) : (
         <div className="mt-4">
           <p className="text-sm text-fg-muted">
-            {own.length > 1
+            {gate.ownCount > 1
               ? `Drawn from your newest chart — ${name}.`
               : `Drawn from your ${name} chart.`}
           </p>
-          <SkyCodeCard signId={chart.signId} />
+          <SkyCodeCard signId={gate.signId} />
         </div>
       )}
     </section>

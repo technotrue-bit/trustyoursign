@@ -79,6 +79,51 @@ export function ownChartForSkyCode<T extends { relation: string }>(charts: reado
   return charts.find((chart) => chart.relation === "self") ?? null;
 }
 
+export type SkyCodeGate =
+  | { kind: "loading" }
+  | { kind: "draw"; signId: SignId; ownCount: number }
+  | { kind: "empty" }
+  | { kind: "retry" };
+
+/**
+ * What Your sky code should show.
+ *
+ * A saved chart marked as the viewer's own is drawn (newest first).
+ * When there is none, the owner's own sky — the book the account menu calls
+ * "The sky" — is drawn from that book's sun sign. Someone else's sky is not
+ * used. Place a birth only when neither source exists. A failed read asks
+ * to try again instead of claiming the birth is missing.
+ */
+export function skyCodeGate(input: {
+  charts: ReadonlyArray<{ relation: string; signId: SignId }> | null;
+  chartsFailed: boolean;
+  /** `null` while the owner check is still out. */
+  owner: boolean | null;
+  /** The owner check failed, so we still do not know whether that sky exists. */
+  ownerFailed?: boolean;
+  /** `undefined` while that sky is still being read. `null` when it is not there. */
+  ownSkySignId?: SignId | null;
+  ownSkyFailed?: boolean;
+}): SkyCodeGate {
+  if (input.charts === null) return { kind: "loading" };
+
+  const chart = ownChartForSkyCode(input.charts);
+  if (chart) {
+    const ownCount = input.charts.filter((row) => row.relation === "self").length;
+    return { kind: "draw", signId: chart.signId, ownCount };
+  }
+
+  if (input.owner === null) return input.ownerFailed ? { kind: "retry" } : { kind: "loading" };
+  if (input.owner) {
+    if (input.ownSkyFailed) return { kind: "retry" };
+    if (input.ownSkySignId === undefined) return { kind: "loading" };
+    if (input.ownSkySignId) return { kind: "draw", signId: input.ownSkySignId, ownCount: 0 };
+  }
+
+  if (input.chartsFailed) return { kind: "retry" };
+  return { kind: "empty" };
+}
+
 export function skyCodeUrl(signId: SignId): string {
   return `${SKY_CODE_ORIGIN}/?sign=${signId}&galaxy=true`;
 }
