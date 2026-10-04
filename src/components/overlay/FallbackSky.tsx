@@ -4,7 +4,7 @@ import { lonToXZ } from "@/lib/chart/geometry";
 import { CONSTELLATIONS, constellationDust, pairFigures } from "@/lib/galaxy/constellations";
 import { preloadSignArt, signArtImage } from "@/lib/galaxy/signArt";
 import { getSignVolume } from "@/lib/galaxy/signVolume";
-import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, decayWheelGlide, ensureAutoClock, ensureFlyInput, exploringSign, galaxyTravel, gateForm, pinchQuiet, portalActive, portalEnvelope, prefersReducedMotion, publishTravel, settleCorridor, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepShaderTime, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
+import { CRUISE, HOLD_FLY, MAX_FLY, PLAY_CRUISE, aimedIndex, alongToGate, birthBoom, birthIgnite, decayWheelGlide, ensureAutoClock, ensureFlyInput, exploringSign, galaxyTravel, gateForm, pinchQuiet, portalActive, portalEnvelope, prefersReducedMotion, publishTravel, sessionBlocksSkyFlight, settleCorridor, starGather, starSpark, stepBirth, stepExplore, stepPlayUntil, stepSeek, stepSelectionHold, stepShaderTime, stepZoom, stopAutoClock } from "@/lib/galaxy/travel";
 import { plateOwnership } from "@/lib/galaxy/signField";
 import { clamp01, stationFromT, stationT, TEMPLE_SIGNS } from "@/lib/galaxy/temple";
 import { bootIntro, introPlaying, stepIntro } from "@/lib/galaxy/intro";
@@ -597,7 +597,7 @@ export function FallbackSky({ note }: { note?: string }) {
       const reduced = prefersReducedMotion();
       const hands = galaxyTravel.dragging || performance.now() < galaxyTravel.wheelUntil;
       galaxyTravel.handsOn = hands;
-      galaxyTravel.busy = chatting || entered || birthing;
+      galaxyTravel.busy = chatting || birthing || sessionBlocksSkyFlight(state.session?.kind ?? null);
       galaxyTravel.claiming = chatting;
       if (w < 2 || h < 2) return;
       ctx.fillStyle = "#0c0b0a";

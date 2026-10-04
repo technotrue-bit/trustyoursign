@@ -54,6 +54,7 @@ import {
   noteControl,
   prefersReducedMotion,
   publishTravel,
+  sessionBlocksSkyFlight,
   skipBirth,
   skipEnterGalaxy,
   stepBirth,
@@ -1417,8 +1418,12 @@ function TempleRig() {
     const chatting = state.claim !== null && state.session === null;
     const arriving = introPlaying();
     const exploring = exploringSign();
-    // Keep busy in sync so selection hold pauses during claim / intro.
-    galaxyTravel.busy = chatting || state.session !== null || arriving;
+    // Claim and the intro pause the selection hold. A natal wheel replaces
+    // this galaxy, so it freezes flight too. A shelf leaves the sky up —
+    // treating every session as busy is what made touch-drag do nothing
+    // after Open your sky.
+    galaxyTravel.busy =
+      chatting || arriving || sessionBlocksSkyFlight(state.session?.kind ?? null);
     galaxyTravel.claiming = chatting;
     const sought = exploring ? { active: false, t: current.current } : stepSeek(current.current, d);
     // A seek landing this frame (or a reduced-motion cut) places t exactly.

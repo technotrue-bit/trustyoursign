@@ -1232,6 +1232,16 @@ export function noteControl() {
   clearDwellClip();
 }
 
+/**
+ * A chart that replaces the galaxy (visitor natal, research desk) freezes
+ * flight so that wheel can orbit on its own controls. A sun-sign shelf keeps
+ * this galaxy on screen — Open your sky must not lock touch drag.
+ * Claim chat and the intro are separate locks, applied by the callers.
+ */
+export function sessionBlocksSkyFlight(sessionKind: string | null | undefined): boolean {
+  return sessionKind != null && sessionKind !== "shelf";
+}
+
 function flyLocked() {
   if (galaxyTravel.birth >= 1 && galaxyTravel.busy) return true;
   if (enterAnimating()) return true;
@@ -1240,7 +1250,7 @@ function flyLocked() {
 }
 
 const FLY_IGNORE =
-  "button, a, input, textarea, select, details, summary, .sign-strip, .birth-chat, .gloss-card, .chart-talks, [data-no-fly], [data-sky-cta], [role='menu'], [role='menuitem'], [role='dialog'], [data-radix-menu-content], [data-radix-popper-content-wrapper]";
+  "button, a, input, textarea, select, details, summary, .sign-strip, .birth-chat, .gloss-card, .chart-talks, .chart-sheet, [data-no-fly], [data-sky-cta], [role='menu'], [role='menuitem'], [role='dialog'], [data-radix-menu-content], [data-radix-popper-content-wrapper]";
 
 /** Duck-typed so the rule is testable outside a browser realm (and across iframes). */
 function closestElement(target: EventTarget | null): Element | null {
