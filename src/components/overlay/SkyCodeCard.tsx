@@ -304,11 +304,21 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
     const file = new File([blob], skyCodeFileName(signId), { type: "image/png" });
     const canShare = typeof navigator.share === "function";
     let canShareFiles = false;
+    let canShareFileWithUrl = false;
     if (canShare) {
       try {
         canShareFiles = Boolean(navigator.canShare?.({ files: [file] }));
       } catch {
         canShareFiles = false;
+      }
+      if (canShareFiles) {
+        try {
+          // The link is included only when this pair is accepted. A title or
+          // text beside the file is what drops the picture on iPhone.
+          canShareFileWithUrl = Boolean(navigator.canShare?.({ files: [file], url }));
+        } catch {
+          canShareFileWithUrl = false;
+        }
       }
     }
     const plan = planSkyShare({
@@ -316,6 +326,7 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
       url,
       canShare,
       canShareFiles,
+      canShareFileWithUrl,
     });
     const payload = skySharePayload(plan, file);
     // Start the sheet in this tap. Anything awaited before share() loses it.
@@ -340,6 +351,7 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
                 url,
                 canShare: true,
                 canShareFiles: false,
+                canShareFileWithUrl: false,
               }),
               null,
             );
