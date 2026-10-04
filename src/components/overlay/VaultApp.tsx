@@ -145,6 +145,9 @@ function followHistoryPlace(place: SkyPlace) {
   }
   if (place.kind === "home") {
     const st = useSessionStore.getState();
+    // Sky links clear the address after the chart is already open. Leaving
+    // that chart up is intentional here — Back to main menu dismisses first
+    // via leaveToMainMenu, then this branch can land on the title.
     if (st.session) return;
     if (st.surface !== "galaxy") st.close();
     returnToOpenSky();

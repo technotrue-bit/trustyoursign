@@ -207,8 +207,10 @@ describe("owner sky menu", () => {
     assert.ok(labelAt >= 0 && backAt > labelAt && profileAt > backAt);
     const row = menu.slice(backAt - 700, profileAt);
     assert.match(row, /ITEM_CLASS/);
+    assert.match(row, /leaveToMainMenu\(\)/);
     assert.match(row, /goHome\(undefined\)/);
     assert.match(row, /savePlaceSession\(\{ kind: "home" \}\)/);
+    assert.equal(menu.split("leaveToMainMenu(").length - 1, 1);
     assert.match(menu, /const ITEM_CLASS =[\s\S]{0,120}min-h-11/);
   });
 
