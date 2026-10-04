@@ -17,6 +17,7 @@ import {
   skyCodeCaptions,
   skyCodeFileName,
   skyCodeFrame,
+  skyCodeGate,
   skyCodeUrl,
 } from "./sky-code.ts";
 
@@ -48,6 +49,81 @@ describe("sky code", () => {
     assert.equal(ownChartForSkyCode(charts)?.id, "newest-self");
     assert.equal(ownChartForSkyCode([{ id: "a", relation: "other" }]), null);
     assert.equal(ownChartForSkyCode([]), null);
+  });
+
+  it("draws a saved own chart before the owner's sky, and the owner's sky when that is all there is", () => {
+    const saved = [
+      { relation: "other", signId: "pisces" as const },
+      { relation: "self", signId: "sagittarius" as const },
+      { relation: "self", signId: "leo" as const },
+    ];
+    assert.deepEqual(
+      skyCodeGate({
+        charts: saved,
+        chartsFailed: false,
+        owner: true,
+        ownSkySignId: "leo",
+      }),
+      { kind: "draw", signId: "sagittarius", ownCount: 2 },
+    );
+    assert.deepEqual(
+      skyCodeGate({
+        charts: [{ relation: "other", signId: "pisces" }],
+        chartsFailed: false,
+        owner: true,
+        ownSkySignId: "leo",
+      }),
+      { kind: "draw", signId: "leo", ownCount: 0 },
+    );
+    assert.deepEqual(
+      skyCodeGate({
+        charts: [],
+        chartsFailed: true,
+        owner: true,
+        ownSkySignId: "leo",
+      }),
+      { kind: "draw", signId: "leo", ownCount: 0 },
+    );
+  });
+
+  it("asks to place a birth only when no own chart and no owner sky are stored", () => {
+    assert.equal(
+      skyCodeGate({ charts: null, chartsFailed: false, owner: false }).kind,
+      "loading",
+    );
+    assert.equal(
+      skyCodeGate({ charts: [], chartsFailed: false, owner: null }).kind,
+      "loading",
+    );
+    assert.equal(
+      skyCodeGate({ charts: [], chartsFailed: false, owner: true }).kind,
+      "loading",
+    );
+    assert.equal(
+      skyCodeGate({ charts: [], chartsFailed: false, owner: false, ownSkySignId: "leo" }).kind,
+      "empty",
+    );
+    assert.equal(
+      skyCodeGate({
+        charts: [{ relation: "other", signId: "pisces" }],
+        chartsFailed: false,
+        owner: true,
+        ownSkySignId: null,
+      }).kind,
+      "empty",
+    );
+    assert.equal(
+      skyCodeGate({ charts: [], chartsFailed: true, owner: false }).kind,
+      "retry",
+    );
+    assert.equal(
+      skyCodeGate({ charts: [], chartsFailed: false, owner: true, ownSkyFailed: true }).kind,
+      "retry",
+    );
+    assert.equal(
+      skyCodeGate({ charts: [], chartsFailed: false, owner: null, ownerFailed: true }).kind,
+      "retry",
+    );
   });
 
   it("keeps the name and caption off the code", () => {
@@ -90,6 +166,10 @@ describe("sky code", () => {
     assert.match(account, /to="\/sky-code"/);
     assert.match(account, /window\.location\.hash/);
     assert.match(card, /Place your birth first/);
+    assert.match(card, /skyCodeGate/);
+    assert.match(card, /getResearchChart\(\{ data: "joey" \}\)/);
+    assert.match(card, /visitorSign\(book, visitorBirth\(book\)\)/);
+    assert.doesNotMatch(card, /"saige"/);
     assert.match(card, /Save image/);
     assert.match(card, /skyCodeFrame/);
     assert.match(card, /paintSkyCode\(signId, framePixels\)/);
