@@ -1,6 +1,6 @@
 /** Shared mutable travel. Written every frame by the camera. Not React state. */
 import { Vector3 } from "three";
-import { CONSTELLATIONS, nearestSign, signStation, signSteps, signedDelta, wrap12 } from "./constellations";
+import { CONSTELLATIONS, nearestSign, signStation, signSteps, signedDelta } from "./constellations";
 import {
   DWELL_STILL_SEC,
   SETTLE_DIST,
@@ -30,15 +30,13 @@ import { NAVE, STATION_N, TEMPLE_CURVE, clamp01, stationFromT, stationT } from "
 import { introPlaying, skipIntro, introCanSkip, templeIntro } from "./intro";
 import { ensureSkyHit } from "./skyHit";
 
-export { signedDelta, wrap12 };
-export type { ExplorePhase };
 export type EnterSkipPhase = "idle" | "out" | "hold" | "in";
 /**
  * direct = strip / Enter jump to a neighbour; portal = strip / arrow jump across
  * two or more signs; walk = hands-off advance; glide = wheel / keys;
  * settle = hands-off landing.
  */
-export type SeekKind = "direct" | "portal" | "walk" | "glide" | "settle";
+type SeekKind = "direct" | "portal" | "walk" | "glide" | "settle";
 
 /** Seconds for the full enter morph (fade → dive → galaxy form). */
 const ENTER_SEC = 4.5;
@@ -50,7 +48,7 @@ const SKIP_OUT_RM = 0.18;
 const SKIP_HOLD_RM = 0.1;
 const SKIP_IN_RM = 0.22;
 
-export const BIRTH_SECONDS = 3.85;
+const BIRTH_SECONDS = 3.85;
 /** Idle drift toward you. Keep this low — the sky should feel patient. */
 export const CRUISE = 0.14;
 /** After a jump, ease through animal → explosion → glyph. Patient so the stars can gather. */
@@ -60,41 +58,41 @@ export const HOLD_FLY = 0.42;
 /** Hard ceiling on corridor speed, same units as HOLD_FLY. Nothing flies faster, flick or not. */
 export const MAX_FLY = 0.72;
 /** Travel t per second for one unit of fly speed in the 3D corridor. */
-export const FLY_T = 0.22;
+const FLY_T = 0.22;
 /** One station in travel t. */
 export const STATION_GAP_T = 1 / (STATION_N - 1);
 /** Top corridor speed in travel t per second. */
 export const MAX_FLY_T = MAX_FLY * FLY_T;
 /** World units along −Z per t. Signs sit farther apart so the burst can read. */
-export const SPACING = 50;
+const SPACING = 50;
 /** Sign sits this far ahead of its station. You still fly through it while its name is up. */
-export const GATE = 0.55;
+const GATE = 0.55;
 /** Hands off: dwell, then walk to the next sign. */
-export const AUTO_SIGN = 7;
+const AUTO_SIGN = 7;
 /** Animal holds until this along. */
-export const MORPH_FAR = 0.92;
+const MORPH_FAR = 0.92;
 /** Glyph is complete by this along — middle of the remaining approach. */
-export const MORPH_NEAR = 0.42;
+const MORPH_NEAR = 0.42;
 /** Stars are still out in the field. */
-export const GATHER_FAR = 2.55;
+const GATHER_FAR = 2.55;
 /** Stars have locked into the picture. */
-export const GATHER_LOCK = 1.12;
+const GATHER_LOCK = 1.12;
 /** Land this far before the station so the ram is still a ram. */
-export const SEEK_ARRIVE = 0.55;
+const SEEK_ARRIVE = 0.55;
 /** Cruise this far past the station so the explosion finishes, then the glyph passes. */
-export const SEEK_THROUGH = 0.34;
+const SEEK_THROUGH = 0.34;
 /** Never skip more than ~2 frames of birth, even after a load hitch. */
 const BIRTH_DT_CAP = 0.032;
 /** Strip click: fly straight to the sign without station-hopping. Base, per sign crossed, cap. */
-export const DIRECT_SEEK_SEC = 0.95;
+const DIRECT_SEEK_SEC = 0.95;
 const DIRECT_SEEK_PER_SIGN = 0.05;
 const DIRECT_SEEK_MAX_SEC = 1.5;
 /** Wheel notch or hands-off settle: seconds to glide one sign (scaled by √signs). */
 export const GLIDE_SEC = 1.5;
 /** Hands-off walk to the next sign. Slower than a glide — nobody asked to move. */
-export const WALK_SEC = 2.4;
+const WALK_SEC = 2.4;
 /** Hands off past this share of a sign (in the direction of travel) lands the next one; less eases back. */
-export const SETTLE_COMMIT = 0.12;
+const SETTLE_COMMIT = 0.12;
 /** Camera speed under which it counts as parked, travel t per second. */
 export const SETTLED_VEL = 0.002;
 /** Drag may lead the camera by at most this much t. One sky, not twelve. */
@@ -143,9 +141,9 @@ const EXPLORE_LOOK_KEY_RATE = 3.2;
  * Wheel pixels per sign of intent. The wheel steers a station aim, not a raw
  * velocity: impulse = px / WHEEL_STEP_PX, and the camera glides to the aim.
  */
-export const WHEEL_STEP_PX = 120;
+const WHEEL_STEP_PX = 120;
 /** Pixels that commit the first sign of a fresh gesture, so one notch always answers. */
-export const WHEEL_FIRST_PX = 40;
+const WHEEL_FIRST_PX = 40;
 /** Signs the wheel may queue ahead of the camera. A flick cannot outrun this. */
 export const WHEEL_AHEAD = 2;
 /** A gap this long ends a wheel gesture; the next notch is a first notch again. */
@@ -157,7 +155,7 @@ const WHEEL_REDUCED_COOLDOWN_MS = 650;
  * sign of travel instead of racing the whole corridor. Aries ↔ Pisces are
  * calendar neighbours but the two ends of the tropical corridor.
  */
-export const PORTAL_MIN_SIGNS = 2;
+const PORTAL_MIN_SIGNS = 2;
 /** Portal progress (0–1) where the empty sky hides the swap from one station to the other. */
 export const PORTAL_CUT = 0.5;
 /** Inside a sign galaxy the wheel zooms on the original scale. */
@@ -165,7 +163,7 @@ const INSIDE_WHEEL_PX = 900;
 /** Below this a wheel impulse is trackpad momentum dribble, not a new flick. */
 const WHEEL_ARM_IMPULSE = 0.03;
 /** How fast the wheel's hands-on latch fades once the fingers stop. */
-export const WHEEL_GLIDE_DECAY = 2.2;
+const WHEEL_GLIDE_DECAY = 2.2;
 
 let reduceCache = false;
 let reduceAt = -1e9;
@@ -822,7 +820,7 @@ export function setExploreStarsUnlocked(unlocked: boolean) {
   galaxyTravel.starsUnlocked = Boolean(unlocked);
 }
 
-export function consumeClaimPrompt() {
+function consumeClaimPrompt() {
   if (!galaxyTravel.claimPrompt) return false;
   galaxyTravel.claimPrompt = false;
   return true;
@@ -960,7 +958,7 @@ export function starSpark(time: number, i: number, seed: number) {
   return breathe + flash * 0.2;
 }
 
-export type SeekOptions = { direct?: boolean; auto?: boolean; portal?: boolean };
+type SeekOptions = { direct?: boolean; auto?: boolean; portal?: boolean };
 
 function clearDirectSeek() {
   galaxyTravel.seekDirect = false;
@@ -1485,7 +1483,7 @@ export function applyWheel(deltaY: number, deltaX = 0, deltaMode = 0) {
   bankWheel(dir, Math.abs(px));
 }
 
-export function applyPinch(ratio: number) {
+function applyPinch(ratio: number) {
   if (introPlaying()) {
     if (introCanSkip()) skipIntro();
     return;
@@ -1978,7 +1976,7 @@ export function aimedIndex(t = galaxyTravel.t) {
   return stationFromT(t);
 }
 
-export function nextSignIndex(t: number) {
+function nextSignIndex(t: number) {
   return Math.min(11, stationFromT(t) + 1);
 }
 
@@ -2178,7 +2176,7 @@ export function gateForm(along: number, index?: number, t?: number) {
 }
 
 /** 0 = animal constellation, 1 = glyph. Completes mid-approach so you fly through the symbol. */
-export function signMorph(along: number) {
+function signMorph(along: number) {
   if (prefersReducedMotion()) return along < 0.9 ? 1 : 0;
   if (along >= MORPH_FAR) return 0;
   if (along <= MORPH_NEAR) return 1;
@@ -2186,7 +2184,7 @@ export function signMorph(along: number) {
 }
 
 /** Soft cosmic pulse at the heart of the morph — cream, not neon. */
-export function morphBurst(along: number) {
+function morphBurst(along: number) {
   if (prefersReducedMotion()) return 0;
   if (along > MORPH_FAR || along < MORPH_NEAR) return 0;
   const mid = (MORPH_FAR + MORPH_NEAR) * 0.5;
