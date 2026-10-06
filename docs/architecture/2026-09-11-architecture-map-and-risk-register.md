@@ -1,9 +1,12 @@
 # TrustYourSign — Architecture Map & Risk Register
 
-**Repo:** `C:\Users\Devin\Projects\trustyoursign` · GitHub `technotrue-bit/trustyoursign` (private)
-**Branch at time of audit:** `main` @ `05ac661` (PR #36 merged)
-**App:** "The Vault" — a natal fly-through. Live: https://trustyoursigns.grok.me/
-**Scale:** 260 tracked files · ~33,756 LOC (ts/tsx/mjs/js/sql/css) · 166 modules in `src/`
+**Repo:** GitHub `technotrue-bit/trustyoursign`
+**Current main:** `fce979b3e360d57f99e0020ae84feb70a8c2d5b8`
+**2026-09-11 audit:** `05ac661` (merge of PR #36). That commit is history. The counts and the live host below are measured on current `main`, not copied from the audit.
+**App:** Trust Your Sign ("The Vault") — a natal fly-through. Live: https://trustyoursign.com
+**Scale:** `src/` is **53,756** lines across 327 tracked files (`git ls-files src`, then `wc -l`). `src/lib/galaxy/travel.ts` is **2,204** lines with **86** lines that begin with `export`. `src/components/scene/GalaxyIntro.tsx` is **1,737** lines.
+
+`docs/superpowers/plans/` (plans dated 2026-09-04 through 2026-09-15) is history. The files stay in the tree. They are not current work orders.
 
 ---
 
@@ -86,6 +89,8 @@ Same shape in `charts.ts`, `sky.ts`, `research.ts`, `ask.ts`, `field-notes.ts`, 
 
 PGLite correctly present **only** in `.vercel/output/functions/__server.func/_libs/`.
 
+CI repeats this grep on `.vercel/output/static/assets` after `npm run build` and fails the run on any hit.
+
 **When adding a feature:** put the implementation in a `.server.ts` file and reach it by
 dynamic `import()` inside a `createServerFn` handler. A static import of a Node builtin
 anywhere on the client graph = black screen, no error page.
@@ -144,7 +149,7 @@ This is the app's authorization model for *features* (distinct from RLS for *row
 
 ### 4.4 Galaxy / scene (the biggest, most delicate subsystem)
 
-`src/lib/galaxy/travel.ts` (1,055 lines, 63 exports) is the flight engine and it is
+`src/lib/galaxy/travel.ts` (2,204 lines, 86 `export` lines) is the flight engine and it is
 **deliberately not React state**:
 
 > `/** Shared mutable travel. Written every frame by the camera. Not React state. */`
@@ -152,9 +157,9 @@ This is the app's authorization model for *features* (distinct from RLS for *row
 - One module-level `galaxyTravel` object, mutated every frame; React reads it through
   `galaxy/store.ts` with epsilon guards (`Math.abs(prev.t - t) < 0.008`) to avoid render storms.
 - Hand-tuned constants carry the feel: `ENTER_SEC 4.5`, `SPACING 50`, `AUTO_SIGN 7s`,
-  `SELECTION_HOLD_MS 10_000`, `BIRTH_SECONDS 3.85`, `MAX_FLY 1.12`.
+  `SELECTION_HOLD_MS 10_000`, `BIRTH_SECONDS 3.85`, `MAX_FLY 0.72`.
 - Its own `rAF` + a wall-clock auto clock so the 7s walk keeps time while the canvas boots.
-- `GalaxyIntro.tsx` is 1,121 lines — the largest component, and the one that owned the
+- `GalaxyIntro.tsx` is 1,737 lines — the largest component, and the one that owned the
   birth → open → fly sequences.
 
 **Implication for future work:** correctness here depends on ordering and frame timing, not on
@@ -237,16 +242,16 @@ owner is not recognised.
 
 ---
 
-### R2 — Preview/owner bootstrap is open when env is incomplete · MEDIUM
+### R2 — Preview/owner bootstrap is open when env is incomplete · MEDIUM — **CLOSED in [#148](https://github.com/technotrue-bit/trustyoursign/pull/148)**
 
-`site.server.ts:72-76` → `previewDeskOpen()` returns `true` unless `VERCEL` is set **or**
-(`GROK_AUTH_CLIENT_SECRET` **and** `DATABASE_URL`). If a production deploy is missing either
-secret, `bindOwnerPreviewImpl()` would sign in as the owner using `OWNER_PASSWORD` and return a
-live session token with no user interaction. Mitigated by `VERCEL` being set on Vercel — but it
-is a single env var standing between an anonymous caller and an owner session.
+`site.server.ts` used to treat a missing deploy env as "this is a preview." `previewDeskOpen()`
+returned `true` unless `VERCEL` was set **or** (`GROK_AUTH_CLIENT_SECRET` **and** `DATABASE_URL`).
+If a production deploy was missing either secret, `bindOwnerPreviewImpl()` would sign in as the
+owner using `OWNER_PASSWORD` and return a live session token with no user interaction.
 
-**Fix direction:** require an explicit positive opt-in flag (e.g. `ALLOW_PREVIEW_OWNER_BIND=1`)
-instead of inferring "preview" from absent env.
+**Closed in #148.** Owner preview bind now requires an explicit `ALLOW_PREVIEW_OWNER_BIND=1`
+and a preview or loopback host. A missing flag fails closed. Absent env is no longer treated
+as permission to mint an owner session.
 
 ---
 
@@ -257,12 +262,15 @@ instead of inferring "preview" from absent env.
 
 ---
 
-### R4 — Shared mutable frame state · MEDIUM (structural, not a bug)
+### R4 — Shared mutable frame state · MEDIUM — **OPEN** (structural, not a bug)
 
-`galaxyTravel` is mutated from multiple rAF loops and gesture handlers, and the same module
-holds standalone `let` clocks (`autoClock`, `enterSkipWatchdog`, …). Regressions here show up as
-feel/timing bugs that typecheck and unit tests cannot catch. Treat every travel-timing change as
-needing a rendered before/after check.
+`galaxyTravel` is still the single flight owner. It is mutated from multiple rAF loops and
+gesture handlers, and the same module holds standalone `let` clocks (`autoClock`,
+`enterSkipWatchdog`, …). `travel.ts` is 2,204 lines; **86** of those lines begin with `export`.
+The file stays one file. That smaller public surface is not a timing guarantee.
+
+Unit tests cannot see frame timing. Do not add a second way into a sign, and do not retune
+ENTER / dwell / portal timing without a rendered before/after.
 
 ---
 
@@ -277,25 +285,24 @@ project's stated quality bar; on this machine it silently can't run.
 
 ---
 
-### R6 — 14 test failures in `scripts/*.test.mjs` · LOW (pre-existing)
+### R6 — Test gate skipped the scripts suite · LOW — **CLOSED in [#147](https://github.com/technotrue-bit/trustyoursign/pull/147)**
 
-`node --test 'scripts/**/*.test.mjs'` reports 195 tests / **14 fail**. Proven pre-existing:
-identical failures on `origin/main` in a throwaway worktree. Cause is template-vs-project
-branding — tests assert the platform default (`og:title` = "Hello World") while the project sets
-"The Vault". Also note `npm test`'s first stage reports **0 tests** on Windows because the quoted
-glob doesn't expand, so those 195 tests never run in the default gate.
+The 2026-09-11 audit found `npm test` reporting **0 tests** on Windows, because a quoted glob
+never expanded, so the scripts suite never ran in the default gate. The same audit also saw
+branding tests still expecting the platform default title ("Hello World") while the project sets
+"The Vault".
 
-**Fix direction:** update the branding assertions to the project's own values; un-quote/expand the
-glob so the stage actually runs.
+**Closed in #147.** CI runs the scripts suite and the app unit tests as one blocking step. The
+glob is unquoted so the scripts stage actually runs. This is not an open class.
 
 ---
 
-### R7 — Personal data was tracked in git · LOW
+### R7 — Personal data was tracked in git · LOW — **CLOSED in [#151](https://github.com/technotrue-bit/trustyoursign/pull/151)**
 
 `src/lib/chart/nativities/joey.ts` and `saige.ts` were real natal charts in git.
-They are removed from the tracked tree (history is not rewritten) and loaded
+They are removed from the tracked tree. History was not rewritten. They load
 from `research_nativity`, seeded from gitignored `seeds/private/`. See
-`docs/security/research-nativities.md`. Confirm before that change merges.
+`docs/security/research-nativities.md`.
 
 ---
 
@@ -306,7 +313,7 @@ cd C:/Users/Devin/Projects/trustyoursign
 npm run dev          # 0.0.0.0:8080  (never call vite directly — env wrapper matters)
 npm run typecheck    # pass, clean
 npm run build        # nitro → .vercel/output, then db:migrate
-npm test             # 70 + 76 tests pass; NOTE stage 1 silently runs 0 on Windows
+npm test             # scripts suite and app unit tests; both blocking in CI (#147)
 ```
 
 Post-change verification that actually catches this app's failure modes:

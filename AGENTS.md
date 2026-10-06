@@ -1,3 +1,24 @@
+# This repository
+
+This product is **Trust Your Sign**, live at https://trustyoursign.com. It is not the App Builder sandbox scaffold described below.
+
+The checks from Phases A–C are what stop the ranked mistakes. Writing a rule down does not. Read this section first. The sandbox contract under the line stays so the platform rules remain on the page. That contract does not describe this product. Do not add a second instruction file.
+
+The map of the product is `docs/architecture/2026-09-11-architecture-map-and-risk-register.md`. `docs/superpowers/plans/` is history, not current work orders. The zodiac order rule in `.cursor/rules/astrological-order.mdc` stays as it is.
+
+| Mistake | Enforcement | Where |
+|---|---|---|
+| Static import of `*.server` or `db.server` from a client module | Test walks the tree; message names `src/lib/db.ts` | `db-rls.test.ts`, CI |
+| Node SQL / ALS in the client build | CI grep after `npm run build` | `ci.yml` |
+| Aries→Pisces counted as 11 steps | `signSteps(0, 11) === 1` test; `seekSign` calls `signSteps` | `constellations.ts`, `portalGlide.test.ts` |
+| Reordering `CONSTELLATIONS` for a calendar strip | Existing rule + `signAlign` / calendar-index test already in tree | `.cursor/rules/astrological-order.mdc` |
+| Failed session read treated as signed out | `RequireSession` + existing `session-guard.test.ts` | `gates.tsx` |
+| New flight timing constant exported "so the component can tweak it" | Export census; new constants stay unexported | `travel.ts` |
+
+Judgment a check cannot see, also recorded as risk R4 in the architecture map: do not add a second way into a sign, and do not retune ENTER / dwell / portal timing without a rendered before/after.
+
+---
+
 # App Builder Workspace
 
 **The single source of truth** for the App Builder sandbox contract. You are
