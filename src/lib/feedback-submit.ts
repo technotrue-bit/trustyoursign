@@ -5,7 +5,7 @@
  * error" without TanStack Start or a live Resend / Postgres call.
  */
 
-import { emailDeliveryConfigured, type EmailMessage } from "./email/send.server.ts";
+import type { EmailMessage } from "./email/send.server.ts";
 import { buildFeedbackEmail, validateFeedback, type FeedbackRawInput } from "./feedback.ts";
 import {
   createMemoryFeedbackRateLimitStore,
@@ -91,6 +91,7 @@ export async function submitFeedback(
   }
 
   const env = deps.env ?? process.env;
+  const { emailDeliveryConfigured } = await import("./email/send.server.ts");
   if (!emailDeliveryConfigured(env)) {
     return {
       ok: false,
