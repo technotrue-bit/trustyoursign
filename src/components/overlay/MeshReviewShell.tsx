@@ -10,6 +10,7 @@ function leaveReview() {
 /**
  * Chrome around the Sagittarius mesh review stage.
  * Entry: `/?mesh=sagittarius`. Plates / GalaxyIntro stay untouched.
+ * The URL check lives in wantsMeshReview.ts so this file stays off the first download.
  */
 export function MeshReviewShell() {
   return (
@@ -54,11 +55,4 @@ export function MeshReviewShell() {
       </div>
     </main>
   );
-}
-
-export function wantsMeshReview(search = "") {
-  // Dev-only stage — never open from a public share URL in production builds.
-  if (!import.meta.env.DEV) return false;
-  const q = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("mesh");
-  return q === "sagittarius" || q === "1" || q === "sagitarius";
 }

@@ -60,15 +60,47 @@ import { SceneErrorBoundary } from "../scene-error-boundary";
 import { GalaxyShell } from "./GalaxyShell";
 import { ClaimShell } from "./ClaimShell";
 import { LibraryShell } from "./LibraryShell";
-import { MeshReviewShell, wantsMeshReview } from "./MeshReviewShell";
 import { StarBack } from "./StarBack";
 import { NatalShell } from "./NatalShell";
 import { resolveGate } from "./resolveGate";
 import { SkyPaused } from "./SkyPaused";
+import { wantsMeshReview } from "./wantsMeshReview";
 
 const FallbackSky = lazy(() =>
   import("./FallbackSky").then((m) => ({ default: m.FallbackSky })),
 );
+
+// The predicate stays in wantsMeshReview.ts. Importing the shell here would
+// pull Canvas / WebGL into every sky visit.
+const MeshReviewShell = lazy(() =>
+  import("./MeshReviewShell").then((m) => ({ default: m.MeshReviewShell })),
+);
+
+/** Dark stage while the review chunk loads — the corridor must not flash in. */
+function MeshReviewLoading() {
+  return (
+    <main
+      className="vault-stage relative overflow-hidden bg-bg text-fg"
+      style={{ background: "#050403", color: "#efe8dc" }}
+      aria-busy="true"
+    >
+      <p className="sr-only">Loading mesh review</p>
+    </main>
+  );
+}
+
+function MeshReviewFailed() {
+  return (
+    <main
+      className="vault-stage relative overflow-hidden bg-bg text-fg"
+      style={{ background: "#050403", color: "#efe8dc" }}
+    >
+      <div className="absolute inset-0 grid place-items-center px-6 text-center">
+        <p className="font-display text-lg text-fg-muted">Mesh review failed to load.</p>
+      </div>
+    </main>
+  );
+}
 
 /** J4/I2: honest copy when the 3D sky fails — the 2D sky is not a dead end. */
 const FALLBACK_NOTE =
@@ -508,7 +540,15 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   ]);
 
   // Isolated mesh-review stage — keeps GalaxyIntro / plate hydrate path untouched.
-  if (meshReview) return <MeshReviewShell />;
+  if (meshReview) {
+    return (
+      <SceneErrorBoundary fallback={<MeshReviewFailed />}>
+        <Suspense fallback={<MeshReviewLoading />}>
+          <MeshReviewShell />
+        </Suspense>
+      </SceneErrorBoundary>
+    );
+  }
 
   return (
     <main
