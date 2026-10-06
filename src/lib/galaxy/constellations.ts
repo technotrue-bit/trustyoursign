@@ -716,6 +716,16 @@ export function signStation(index: number): number {
   return i * SIGN_SPAN;
 }
 
+/**
+ * How many signs apart two indices are, the short way around the wheel.
+ * `signSteps(0, 11)` is 1 (Aries beside Pisces). `signSteps(0, 6)` is 6 (Aries to Libra).
+ * Camera travel uses `signedDelta` — that is continuous t, not sign steps.
+ */
+export function signSteps(from: number, to: number): number {
+  const ahead = (((to - from) % 12) + 12) % 12;
+  return ahead > 6 ? 12 - ahead : ahead;
+}
+
 export function signedDelta(from: number, to: number) {
   const a = wrap12(from);
   const b = wrap12(to);

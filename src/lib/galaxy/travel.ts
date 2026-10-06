@@ -1,6 +1,6 @@
 /** Shared mutable travel. Written every frame by the camera. Not React state. */
 import { Vector3 } from "three";
-import { CONSTELLATIONS, nearestSign, signStation, signedDelta, wrap12 } from "./constellations";
+import { CONSTELLATIONS, nearestSign, signStation, signSteps, signedDelta, wrap12 } from "./constellations";
 import {
   DWELL_STILL_SEC,
   SETTLE_DIST,
@@ -1026,8 +1026,9 @@ function clearPortal() {
  */
 export function portalDirection(from: number, to: number): 1 | -1 {
   const ahead = (((to - from) % 12) + 12) % 12;
+  // A dead heat (six and six) keeps the corridor direction.
   if (ahead === 6) return to > from ? 1 : -1;
-  return ahead < 6 ? 1 : -1;
+  return signSteps(from, to) === ahead ? 1 : -1;
 }
 
 /** A portal's pose has landed but the camera is still closing in on the target. */
@@ -1130,19 +1131,28 @@ export function seekSign(index: number, opts?: SeekOptions) {
   }
   const i = ((Math.round(index) % 12) + 12) % 12;
   // A jump across several signs hides the ones in between rather than strobing through them.
-  const far = Math.abs(i - stationFromT(galaxyTravel.tTarget)) > 1;
+  // Distance is the short way around the wheel. The corridor is a line, so the neighbour
+  // across the Aries/Pisces seam is one step on the wheel and eleven along the line.
+  // Flying that line is the dash, so a longer line than the wheel still counts as far.
+  const aim = stationFromT(galaxyTravel.tTarget);
+  const aimSteps = signSteps(aim, i);
+  const far = aimSteps > 1 || Math.abs(i - aim) > aimSteps;
   const direct = opts?.direct ?? far;
   const select = !opts?.auto;
-  // Two or more signs away: glide one sign's worth and swap stations in the empty
-  // sky, rather than racing the corridor (Aries → Pisces was all eleven).
+  // Two or more signs away on the wheel: glide one sign's worth and swap stations in the
+  // empty sky. The seam neighbour is one wheel step, but the line between those ends is
+  // the old eleven-sign dash, so it takes the same glide.
   const here = !portalActive()
     ? stationFromT(galaxyTravel.t)
     : galaxyTravel.portalPhase === 1
       ? (galaxyTravel.portalFrom ?? i)
       : (galaxyTravel.portalTo ?? i);
-  const span = Math.abs(i - here);
+  const span = signSteps(here, i);
   const portal =
-    direct && opts?.portal !== false && span >= PORTAL_MIN_SIGNS && !prefersReducedMotion();
+    direct &&
+    opts?.portal !== false &&
+    (span >= PORTAL_MIN_SIGNS || Math.abs(i - here) > span) &&
+    !prefersReducedMotion();
   const dest = beginSeek(i, portal ? "portal" : direct ? "direct" : "walk");
   if (select) {
     galaxyTravel.moved = true;

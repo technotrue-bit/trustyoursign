@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
+import { signSteps } from "./constellations.ts";
 import { skipIntro, templeIntro } from "./intro.ts";
 import { stationT } from "./temple.ts";
 import {
@@ -69,6 +70,18 @@ beforeEach(() => {
 afterEach(() => {
   performance.now = originalNow;
   resetTravel(false);
+});
+
+describe("sign steps are the short way around the wheel", () => {
+  it("Aries to Pisces is one step", () => {
+    assert.equal(signSteps(0, 11), 1);
+  });
+
+  it("Aries to Libra is six steps and still takes the portal", () => {
+    assert.equal(signSteps(0, 6), 6);
+    seekSign(6, { direct: true });
+    assert.equal(galaxyTravel.seekKind, "portal");
+  });
 });
 
 describe("Aries → Pisces is one sign of travel, not eleven", () => {
