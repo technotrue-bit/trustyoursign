@@ -88,14 +88,10 @@ function mapUser(user: {
  *                            (cookie when deployed; bearer in live preview).
  *   - Auth disabled (`VITE_AUTH_ENABLED=false`) -> `DEV_USER`, never pending.
  *
- * Protect a route by waiting out `isPending` before acting on `user` —
- * redirecting on `user: null` alone bounces signed-in visitors to sign-in on
- * every hard reload:
- *
- *   import { RedirectToSignIn } from "@/lib/auth/gates";
- *   const { user, isPending } = useCurrentUserState();
- *   if (isPending) return null;              // still resolving — don't redirect yet
- *   if (!user) return <RedirectToSignIn />;  // definitely signed out
+ * Protect a route with `RequireSession` from `./gates`. That is the one
+ * session screen (checking, a failed read, or a definite sign-out). Do not
+ * copy an `if (!user) return <Navigate>` block: `user: null` is also the
+ * loading state, and a failed read is not signed out.
  *
  * `authEnabled` is a module-level constant fixed at load, so the guarded hook
  * call keeps a stable hook order across every render of a given component.

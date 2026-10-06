@@ -3,8 +3,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
 import { listRegisteredAccounts, setAccountRole, type RegisteredAccount } from "@/lib/admin/accounts";
 import { type AccountRole } from "@/lib/auth/account-role";
-import { RedirectToSignIn, SessionUnavailable } from "@/lib/auth/gates";
-import { resolveSessionGuardState } from "@/lib/auth/session-guard";
+import { RequireSession } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { claimSite } from "@/lib/site";
@@ -25,8 +24,7 @@ function formatSignedUp(iso: string) {
 }
 
 function AdminUsers() {
-  const { user, isPending, isReadFailed } = useCurrentUserState();
-  const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
+  const { user } = useCurrentUserState();
   const [claimed, setClaimed] = useState<boolean | null>(null);
   const owner = Boolean(user && isSiteOwner(user));
 
@@ -37,17 +35,10 @@ function AdminUsers() {
       .catch(() => setClaimed(false));
   }, [owner]);
 
-  if (guard === "loading") {
-    return (
-      <main id="main-content" className="grid vault-page place-items-center bg-bg text-fg">
-        <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
-      </main>
-    );
-  }
-  if (guard === "unavailable") return <SessionUnavailable />;
-  if (!user) return <RedirectToSignIn />;
+  if (!user) return <RequireSession />;
   if (!isSiteOwner(user) && claimed !== true) {
     return (
+      <RequireSession>
       <main id="main-content" className="vault-page bg-bg px-5 py-16 text-fg">
         <div className="mx-auto max-w-md pt-[var(--chrome-top)]">
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">Closed</p>
@@ -61,10 +52,12 @@ function AdminUsers() {
           </Link>
         </div>
       </main>
+      </RequireSession>
     );
   }
 
   return (
+    <RequireSession>
     <main id="main-content" className="vault-page bg-bg px-5 py-10 text-fg">
       <div className="mx-auto max-w-5xl pt-[var(--chrome-top)] pb-[var(--page-chrome-bottom)]">
         <div className="flex items-start justify-between gap-4">
@@ -85,6 +78,7 @@ function AdminUsers() {
         <AccountTable />
       </div>
     </main>
+    </RequireSession>
   );
 }
 

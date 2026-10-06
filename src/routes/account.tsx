@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { SessionUnavailable } from "@/lib/auth/gates";
-import { resolveSessionGuardState } from "@/lib/auth/session-guard";
+import { RequireSession } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import {
   acceptLegal,
@@ -59,20 +58,15 @@ const MONTHS = [
 ];
 
 function Account() {
-  const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
+  const { user } = useCurrentUserState();
   const navigate = useNavigate();
   // Browsers do not send the hash to the server, so the first paint must not
   // branch on it — that mismatches the server HTML. Read it after mount.
   const [hash, setHash] = useState<string | null>(null);
   const { enablePasskey } = Route.useSearch();
-  const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
   const [charts, setCharts] = useState<SavedChart[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // Right after email/OTP sign-in the first /get-session can still read as empty
-  // while the cookie settles. One short grace + refetch avoids bouncing to
-  // /login and stranding a freshly signed-in visitor on the form.
-  const [signedOutGrace, setSignedOutGrace] = useState(true);
 
   const [chartsFailed, setChartsFailed] = useState(false);
   const loadGen = useRef(0);
@@ -118,36 +112,12 @@ function Account() {
     setHash(window.location.hash.replace(/^#/, ""));
   }, []);
 
-  useEffect(() => {
-    if (guard !== "signed_out") {
-      setSignedOutGrace(false);
-      return;
-    }
-    let cancelled = false;
-    setSignedOutGrace(true);
-    refetchSession();
-    const id = window.setTimeout(() => {
-      if (!cancelled) setSignedOutGrace(false);
-    }, 600);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(id);
-    };
-    // `refetchSession` is a new function each render — only re-run when guard flips.
-  }, [guard]);
-
   // Older menu taps landed on this page’s sky-code section. That page is its own now.
   if (hash === "sky-code") return <Navigate to="/sky-code" replace />;
 
-  if (guard === "loading" || (guard === "signed_out" && signedOutGrace)) {
-    return (
-      <main id="main-content" className="grid vault-page place-items-center bg-bg text-fg">
-        <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
-      </main>
-    );
-  }
-  if (guard === "unavailable") return <SessionUnavailable />;
-  if (!user) return <Navigate to="/login" search={{ from: "account" }} />;
+  // Checking, a failed read, and a definite sign-out all live in RequireSession.
+  // This return only lets the vault below treat the visitor as signed in.
+  if (!user) return <RequireSession from="account" />;
 
   const mine = charts?.filter((c) => c.relation === "self") ?? [];
   const others = charts?.filter((c) => c.relation === "other") ?? [];
@@ -175,6 +145,7 @@ function Account() {
   };
 
   return (
+    <RequireSession from="account">
     <main id="main-content" className="vault-page bg-bg px-5 py-10 text-fg">
       <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[var(--page-chrome-bottom)]">
         <div className="flex items-start justify-between gap-4">
@@ -362,6 +333,7 @@ function Account() {
         </section>
       </div>
     </main>
+    </RequireSession>
   );
 }
 

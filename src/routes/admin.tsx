@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, createFileRoute, useRouter } from "@tanstack/react-router";
-import { RedirectToSignIn, SessionUnavailable } from "@/lib/auth/gates";
-import { resolveSessionGuardState } from "@/lib/auth/session-guard";
+import { RequireSession } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { claimSite } from "@/lib/site";
@@ -15,8 +14,7 @@ import { AccountMenu } from "@/components/overlay/AccountMenu";
 export const Route = createFileRoute("/admin")({ component: Admin });
 
 function Admin() {
-  const { user, isPending, isReadFailed } = useCurrentUserState();
-  const guard = resolveSessionGuardState({ isPending, isReadFailed, hasUser: user !== null });
+  const { user } = useCurrentUserState();
   const [claim, setClaim] = useState<"checking" | "bound" | "unbound" | "error">("checking");
 
   const owner = Boolean(user && isSiteOwner(user));
@@ -39,17 +37,10 @@ function Admin() {
   }, [owner]);
   const claimed: boolean | null = claim === "checking" ? null : claim === "bound";
 
-  if (guard === "loading") {
-    return (
-      <main id="main-content" className="grid vault-page place-items-center bg-bg text-fg">
-        <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
-      </main>
-    );
-  }
-  if (guard === "unavailable") return <SessionUnavailable />;
-  if (!user) return <RedirectToSignIn />;
+  if (!user) return <RequireSession />;
   if (!isSiteOwner(user) && claimed !== true) {
     return (
+      <RequireSession>
       <main id="main-content" className="vault-page bg-bg px-5 py-16 text-fg">
         <div className="mx-auto max-w-md pt-[var(--chrome-top)]">
           <p className="text-[0.7rem] tracking-[0.28em] text-fg-subtle uppercase">Closed</p>
@@ -62,10 +53,12 @@ function Admin() {
           </Link>
         </div>
       </main>
+      </RequireSession>
     );
   }
 
   return (
+    <RequireSession>
     <main id="main-content" className="vault-page bg-bg px-5 py-10 text-fg">
       <div className="mx-auto max-w-2xl pt-[var(--chrome-top)] pb-[var(--page-chrome-bottom)]">
         <div className="flex items-start justify-between gap-4">
@@ -128,6 +121,7 @@ function Admin() {
         <AiDeskForm />
       </div>
     </main>
+    </RequireSession>
   );
 }
 
