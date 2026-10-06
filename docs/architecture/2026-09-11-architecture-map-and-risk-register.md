@@ -180,13 +180,15 @@ A `kill` switch exists in the desk config.
 
 ### R1 — **Owner privileges were granted by matching a user-editable display name** · CRITICAL — **FIXED in [#37](https://github.com/technotrue-bit/trustyoursign/pull/37)**
 
-**Evidence:**
-- `src/lib/auth/email-password.ts:10` → `export const emailAndPasswordEnabled = true;` (public sign-up is ON)
-- `src/routes/login.tsx:63` → sign-up sends `name: name.trim() || email.trim()` — **name is user-supplied**
-- `src/lib/owner.ts:33-42` → `isSiteOwner()` compacts name+email and does a **substring** test:
-  `c.includes("devinnorris") || c.includes("itsmetrueg")`
-- `src/lib/owner.server.ts:12` → `assertSiteOwner()` — the **server-side** gate — uses that same match
-  against the `user` row. It does **not** consult `site_state.owner_user_id`.
+**Evidence (what the 2026-09-11 audit saw, before #37):**
+- Public sign-up was on.
+- Sign-up sent a user-supplied display name.
+- The owner check compacted name and email and did a substring test for the owner handles.
+- The server-side gate used that same match against the user row. It did not consult `site_state.owner_user_id`.
+
+That list is the audit's picture of the bug. It is not the live check.
+
+**Current gate:** `isSiteOwnerIdentity` in `src/lib/owner.ts`. A display name is never consulted. `src/lib/owner.server.ts` says a display name is never sufficient.
 
 **Impact:** anyone can sign up with display name `Devin Norris` (or any string containing the
 compacted name/handle) and pass `assertSiteOwner` server-side. That unlocks:
@@ -257,8 +259,7 @@ as permission to mint an owner session.
 
 ### R3 — `device` mutation surface: `deleteAllMyData` · LOW (verified correct)
 
-`charts.ts:318` — scoped to `user_id = context.userId` across all four tables, behind
-`authMiddleware`. No bulk/destructive cross-tenant path found. No action needed.
+`deleteAllMyData` is the `createServerFn` in `src/lib/charts.ts` (the 2026-09-11 audit cited this as `charts.ts:318`). It is scoped to `user_id = context.userId` across all four tables, behind `authMiddleware`. No bulk/destructive cross-tenant path found. No action needed.
 
 ---
 
@@ -274,14 +275,9 @@ ENTER / dwell / portal timing without a rendered before/after.
 
 ---
 
-### R5 — Windows dev loop can't run the repo's own browser gate · LOW
+### R5 — Windows dev loop can't run the repo's own browser gate · LOW — **OPEN**
 
-`scripts/browser-guard.mjs:37` hardcodes a POSIX `/workspace` prefix, so
-`node scripts/browser-smoke.mjs <url> <out>` always exits 1 on Windows
-(`screenshot path must be under /workspace, got C:\workspace\...`). The gate script is the
-project's stated quality bar; on this machine it silently can't run.
-
-**Fix direction:** allow a list of roots, or accept an env-provided root.
+`scripts/browser-smoke.mjs` passes `["/workspace"]` into `checkedOutputPath`. `scripts/browser-guard.mjs` checks whatever directory list it is given. The `/workspace` prefix is that caller, so the smoke script can still exit 1 on Windows. The gate is the project's stated quality bar; on that machine it cannot run. The code is unchanged. The risk stays open.
 
 ---
 
