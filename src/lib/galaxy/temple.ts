@@ -1,6 +1,8 @@
 import { SIGN_CANON, SIGN_IDS } from "@/lib/chart/sign-canon";
 import type { ChakraId, Element, Modality, SignId } from "@/lib/chart/types";
-import { CatmullRomCurve3, Color, Vector3 } from "three";
+import { CatmullRomCurve3 } from "three/src/extras/curves/CatmullRomCurve3.js";
+import { Color } from "three/src/math/Color.js";
+import { Vector3 } from "three/src/math/Vector3.js";
 
 export const STATION_N = 12;
 export const NAVE = 44;

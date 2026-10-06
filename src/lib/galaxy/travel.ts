@@ -1,5 +1,5 @@
 /** Shared mutable travel. Written every frame by the camera. Not React state. */
-import { Vector3 } from "three";
+import { Vector3 } from "three/src/math/Vector3.js";
 import { CONSTELLATIONS, nearestSign, signStation, signSteps, signedDelta } from "./constellations";
 import {
   DWELL_STILL_SEC,
