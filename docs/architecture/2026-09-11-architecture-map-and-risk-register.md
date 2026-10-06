@@ -1,7 +1,7 @@
 # TrustYourSign — Architecture Map & Risk Register
 
 **Repo:** GitHub `technotrue-bit/trustyoursign`
-**Current main:** `fce979b3e360d57f99e0020ae84feb70a8c2d5b8`
+**Current main:** refreshed in #184; test locks through #188.
 **2026-09-11 audit:** `05ac661` (merge of PR #36). That commit is history. The counts and the live host below are measured on current `main`, not copied from the audit.
 **App:** Trust Your Sign ("The Vault") — a natal fly-through. Live: https://trustyoursign.com
 **Scale:** `src/` is **53,756** lines across 327 tracked files (`git ls-files src`, then `wc -l`). `src/lib/galaxy/travel.ts` is **2,204** lines with **86** lines that begin with `export`. `src/components/scene/GalaxyIntro.tsx` is **1,737** lines.
@@ -308,21 +308,26 @@ from `research_nativity`, seeded from gitignored `seeds/private/`. See
 
 ## 6. Working on it
 
+From the repo root. CI (`.github/workflows/ci.yml`) runs these four steps, in this order:
+
 ```bash
-cd C:/Users/Devin/Projects/trustyoursign
-npm run dev          # 0.0.0.0:8080  (never call vite directly — env wrapper matters)
-npm run typecheck    # pass, clean
-npm run build        # nitro → .vercel/output, then db:migrate
-npm test             # scripts suite and app unit tests; both blocking in CI (#147)
+npm run typecheck
+npm test
+npm run build
 ```
 
-Post-change verification that actually catches this app's failure modes:
+Then it greps `.vercel/output/static/assets` for `AsyncLocalStorage`, `__vite-browser-external`, `pglite`, and `createRequire`. A hit fails the gate. That check is client assets only.
 
-1. `npm run typecheck` and `npm run build`
-2. Client-bundle boundary check — grep `.vercel/output/static/assets` for
-   `AsyncLocalStorage`, `__vite-browser-external`, `pglite`, `createRequire` → must be **0**
-3. Real render, desktop **and** mobile — a 200 is not a render
-4. For travel/3D changes: a rendered before/after, since unit tests can't see timing
+`npm run build` also runs migrations (`db:migrate` in `package.json`). A missing `DATABASE_URL` there is that migrate step. It is not a product bug.
+
+App tests are listed by path in both `package.json` scripts `test` and `test:app`. The scripts glob stays unquoted (`scripts/**/*.test.mjs`). CI runs `npm test` and must not be switched to `npm run test:app`.
+
+`npm run dev` is how you look at the site (`0.0.0.0:8080`). Do not call vite directly.
+
+Still worth doing by hand, because CI does not:
+
+- A real render, desktop and mobile. A 200 is not a render.
+- For travel or 3D changes: a rendered before/after. Unit tests cannot see timing.
 
 ## 7. PRs
 
@@ -330,7 +335,4 @@ Opened from this audit:
 
 - **#37 `fix(security): authorize the owner by immutable identity, not display name`** — fixes R1.
 
-Open at the time of the audit:
-
-#34 station-stars-scroll · #32 galaxy-locked-look · #31 login-publication ·
-#29 iphone-first-path-session · #18 security-vibecode-checklist
+The September list that used to sit here as open is history. #34 and #32 closed unmerged. #31, #29, and #18 merged (2026-09-13).
