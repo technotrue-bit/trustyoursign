@@ -53,3 +53,17 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Architecture doc §6.2. Client assets only — the server function output
+      # is allowed to contain the database driver.
+      - name: Client bundle boundary
+        run: |
+          dir=".vercel/output/static/assets"
+          if [ ! -d "$dir" ]; then
+            echo "Expected client assets at $dir"
+            exit 1
+          fi
+          if grep -R -n -E -e 'AsyncLocalStorage' -e '__vite-browser-external' -e 'pglite' -e 'createRequire' "$dir"; then
+            echo "Those markers belong on the server. They must not appear in client assets."
+            exit 1
+          fi
