@@ -3,6 +3,13 @@ import { Navigate } from "@tanstack/react-router";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn, signOut } from "./client";
 import { hasGateSessionMarker } from "./gate-session-marker";
 import { hardRecoverSession, softRecoverSession } from "./session-recover";
+import {
+  SIGNED_OUT_GRACE_MS,
+  initialSessionGateMemory,
+  reduceSessionGate,
+  resolveSessionGuardState,
+  type SessionGateMemory,
+} from "./session-guard";
 import { resolveSignInGateState } from "./sign-in-gate";
 import { useCurrentUser, useCurrentUserState } from "./use-current-user";
 
@@ -43,11 +50,81 @@ export function SignedOut({ children }: { children: ReactNode }) {
  * `window.location` reload). A hard navigation re-bootstraps the SPA and re-runs
  * session loading, which feels like a second "Loading…" on /login.
  *
- * Guard routes by waiting out `isPending` first (see `use-current-user`), then
- * render this.
+ * `RequireSession` renders this once a definite empty read has outlasted its
+ * hold. Rendering it on `user: null` alone also catches the loading state.
  */
 export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
   return <Navigate to={to} />;
+}
+
+function SessionGatePending() {
+  return (
+    <main id="main-content" className="grid vault-page place-items-center bg-bg text-fg">
+      <div className="h-8 w-32 animate-pulse rounded-md bg-bg-subtle" />
+    </main>
+  );
+}
+
+/**
+ * The one session screen for a page that needs a sign-in.
+ *
+ * Children render only once we know who is here. A failed read stays on
+ * "couldn't check". A definite empty read waits out one short hold — so a
+ * cookie that is still landing is not bounced to sign-in — then goes to
+ * login. The hold re-reads the session once per visit. It does not follow
+ * the refetch function's identity, which is what flooded `/get-session`
+ * after Log out.
+ */
+export function RequireSession({
+  children,
+  from,
+}: {
+  children?: ReactNode;
+  /** Told to the sign-in page so it can say where the visitor was headed. */
+  from?: string;
+}) {
+  const { user, isPending, isReadFailed, refetchSession } = useCurrentUserState();
+  const guard = resolveSessionGuardState({
+    isPending,
+    isReadFailed,
+    hasUser: user !== null,
+  });
+  const [memory, setMemory] = useState<SessionGateMemory>(initialSessionGateMemory);
+  const decision = reduceSessionGate(memory, { type: "observe", guard });
+  if (decision.memory !== memory) setMemory(decision.memory);
+
+  const refetchRef = useRef(refetchSession);
+  refetchRef.current = refetchSession;
+  const recheckSent = useRef(false);
+
+  useEffect(() => {
+    if (!memory.refetchOwed || recheckSent.current) return;
+    recheckSent.current = true;
+    refetchRef.current();
+    setMemory((current) => (current.refetchOwed ? { ...current, refetchOwed: false } : current));
+  }, [memory.refetchOwed]);
+
+  useEffect(() => {
+    if (guard !== "signed_out") return;
+    let cancelled = false;
+    const id = window.setTimeout(() => {
+      if (cancelled) return;
+      setMemory((current) => reduceSessionGate(current, { type: "graceElapsed" }).memory);
+    }, SIGNED_OUT_GRACE_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+    // `refetchSession` is a new function every render. Depending on it
+    // restarts this hold and asks `/get-session` again after Log out.
+  }, [guard]);
+
+  if (decision.view === "loading") return <SessionGatePending />;
+  if (decision.view === "unavailable") return <SessionUnavailable />;
+  if (decision.view === "redirect") {
+    return from ? <Navigate to="/login" search={{ from }} /> : <RedirectToSignIn />;
+  }
+  return <>{children}</>;
 }
 
 /**
