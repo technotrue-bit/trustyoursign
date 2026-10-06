@@ -1,4 +1,5 @@
-import { BufferAttribute, BufferGeometry } from "three";
+import { BufferAttribute } from "three/src/core/BufferAttribute.js";
+import { BufferGeometry } from "three/src/core/BufferGeometry.js";
 import type { SignId } from "@/lib/chart/types";
 import { isSmallGpu } from "@/lib/gpu";
 import { SIGN_ART, signArtImage } from "./signArt";

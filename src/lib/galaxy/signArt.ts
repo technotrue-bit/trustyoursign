@@ -1,4 +1,5 @@
-import { CanvasTexture, ClampToEdgeWrapping, LinearFilter, SRGBColorSpace } from "three";
+import { ClampToEdgeWrapping, LinearFilter, SRGBColorSpace } from "three/src/constants.js";
+import { CanvasTexture } from "three/src/textures/CanvasTexture.js";
 import type { SignId } from "@/lib/chart/types";
 import { isSmallGpu } from "@/lib/gpu";
 
