@@ -4,7 +4,7 @@ This product is **Trust Your Sign**, live at https://trustyoursign.com. It is no
 
 The checks from Phases A–C are what stop the ranked mistakes. Writing a rule down does not. Read this section first. The sandbox contract under the line stays so the platform rules remain on the page. That contract does not describe this product. Do not add a second instruction file.
 
-The map of the product is `docs/architecture/2026-09-11-architecture-map-and-risk-register.md`. `docs/superpowers/plans/` is history, not current work orders. The zodiac order rule in `.cursor/rules/astrological-order.mdc` stays as it is.
+The map of the product is `docs/architecture/2026-09-11-architecture-map-and-risk-register.md`. The seams an agent re-breaks are `docs/agent-seams.md`. `docs/superpowers/plans/` is history, not current work orders. The zodiac order rule in `.cursor/rules/astrological-order.mdc` stays as it is.
 
 | Mistake | Enforcement | Where |
 |---|---|---|
