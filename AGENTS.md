@@ -12,8 +12,11 @@ The map of the product is `docs/architecture/2026-09-11-architecture-map-and-ris
 | Node SQL / ALS in the client build | CI grep after `npm run build` | `ci.yml` |
 | Aries→Pisces counted as 11 steps | `signSteps(0, 11) === 1` test; `seekSign` calls `signSteps` | `constellations.ts`, `portalGlide.test.ts` |
 | Reordering `CONSTELLATIONS` for a calendar strip | Existing rule + `signAlign` / calendar-index test already in tree | `.cursor/rules/astrological-order.mdc` |
-| Failed session read treated as signed out | `RequireSession` + existing `session-guard.test.ts` | `gates.tsx` |
-| New flight timing constant exported "so the component can tweak it" | Export census; new constants stay unexported | `travel.ts` |
+| Failed session read treated as signed out | `RequireSession` on `account.tsx`, `sky-code.tsx`, `admin.tsx`, and `admin_.users.tsx` (`require-session-routes.test.ts`, #182, #187). A failed read stays "couldn't check" (`session-guard.test.ts`). | `gates.tsx` |
+| Flight helpers exported so a screen can tweak a number | Shared-helper count is 86 (`travelExport.test.ts`, #186). A red count is raised in review with the new caller named. Do not delete exports or unexport a timing constant so a component can tweak it (#183). | `travel.ts` |
+| New `src/**/*.test.ts` missing from the test list | Named in both `package.json` scripts `test` and `test:app` (#185). | `scripts/npm-test-script.test.mjs` |
+| Saved chart writing replaced when positions refresh | `mergeSavedSky` keeps the saved headline, why, and body when the fresh prose is empty (#188). | `src/lib/chart/session/open-saved.ts` |
+| Sky-code picture shared with the page link | The picture is shared alone. Do not put the link on the same share. | `src/lib/sky-code.test.ts` |
 
 Judgment a check cannot see, also recorded as risk R4 in the architecture map: do not add a second way into a sign, and do not retune ENTER / dwell / portal timing without a rendered before/after.
 
