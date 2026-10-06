@@ -8,7 +8,7 @@ import { seekSignFor, useSessionStore } from "./store";
 import { openSessionState } from "./actions";
 
 /** Keep saved prose (depth / writtenAt / headlines) while refreshing cast positions. */
-function mergeSavedSky(fresh: SkyNatal, saved: SkyNatal): SkyNatal {
+export function mergeSavedSky(fresh: SkyNatal, saved: SkyNatal): SkyNatal {
   const byId = new Map(saved.bodies.map((b) => [b.id, b]));
   const bodies: SkyBody[] = fresh.bodies.map((b) => {
     const prev = byId.get(b.id);
