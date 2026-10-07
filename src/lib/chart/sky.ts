@@ -12,6 +12,7 @@ import {
 import { answerFromSky } from "./bones-ask";
 import { buildVisitorNativity, skyNatalFromCast } from "./visitor-nativity";
 import { normalizePersistedNatal } from "./persist-natal";
+import { parseDesk, type AiDesk } from "./desk";
 import type { Nativity } from "./schema";
 
 export type { SkyNatal, SkyBody };
@@ -343,12 +344,12 @@ export const getAiDesk = createServerFn({ method: "GET" })
   });
 
 export const saveAiDesk = createServerFn({ method: "POST" })
-  .validator((input: Record<string, unknown>) => input)
+  .validator((input: unknown): AiDesk => parseDesk(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const desk = await import("./desk.server");
     await desk.assertOwner(context.userId);
-    const next = desk.parseDesk(data);
+    const next = parseDesk(data);
     await desk.saveDesk(next);
     return next;
   });
