@@ -16,9 +16,11 @@ import {
  * The host is always the live site. A code saved from a preview must still
  * open trustyoursign.com.
  *
- * Sagittarius uses the locked surround (`public/sky-code/sagittarius-frame.png`).
- * The cream pad is empty in that cut; modules are stamped into the pad only.
- * Other signs keep the star-glyph frame until their own art exists.
+ * Each sign with a card in `public/sky-code/` uses that surround. The cream
+ * pad is empty in the cut; modules are stamped into the pad only. Sagittarius
+ * is the locked illustration. The other signs set their site plate into that
+ * same card. A sign with no file, or a file that fails to load, keeps the
+ * star-glyph frame.
  */
 export const SKY_CODE_ORIGIN = "https://trustyoursign.com";
 
@@ -54,19 +56,34 @@ export type SkyCodeFrame = {
 };
 
 /**
- * Sagittarius display cut, 1200×1314.
+ * Shared card cut, 1200×1314.
  * Cream pad is 552×552 (46% of the width) at (324, 178) — #f5efe3, empty.
  * "Trust Your Sign" is already set in the art. Do not paint type over it.
+ * Sagittarius is the locked illustration. The other files are that card with
+ * the sign's site plate in the figure window (`scripts/compose-sky-code-frames.mjs`).
  */
-const SAGITTARIUS_FRAME: SkyCodeFrame = {
-  src: "/sky-code/sagittarius-frame.png",
-  width: 1200,
-  height: 1314,
-  pad: { x: 324, y: 178, size: 552 },
-};
+function lockedFrame(signId: SignId): SkyCodeFrame {
+  return {
+    src: `/sky-code/${signId}-frame.png`,
+    width: 1200,
+    height: 1314,
+    pad: { x: 324, y: 178, size: 552 },
+  };
+}
 
 const SKY_CODE_FRAMES: Partial<Record<SignId, SkyCodeFrame>> = {
-  sagittarius: SAGITTARIUS_FRAME,
+  aries: lockedFrame("aries"),
+  taurus: lockedFrame("taurus"),
+  gemini: lockedFrame("gemini"),
+  cancer: lockedFrame("cancer"),
+  leo: lockedFrame("leo"),
+  virgo: lockedFrame("virgo"),
+  libra: lockedFrame("libra"),
+  scorpio: lockedFrame("scorpio"),
+  sagittarius: lockedFrame("sagittarius"),
+  capricorn: lockedFrame("capricorn"),
+  aquarius: lockedFrame("aquarius"),
+  pisces: lockedFrame("pisces"),
 };
 
 /** Locked surround for this sign, or null when the star-glyph frame still applies. */
