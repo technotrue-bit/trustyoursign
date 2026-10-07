@@ -17,7 +17,7 @@ export type AppUser = {
   profileImageUrl: string | null;
   /** True when this is the sandbox/dev fallback (auth not configured). */
   isDevFallback: boolean;
-  /** Account cohort. `beta` is stored for later and does not unlock anything yet. */
+  /** Account cohort. `beta` shows the Closed Beta Tester mark. */
   role: AccountRole;
 };
 

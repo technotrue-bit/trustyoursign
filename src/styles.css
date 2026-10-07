@@ -590,6 +590,93 @@
     0 0 20px color-mix(in oklab, #c9a15b 18%, transparent);
 }
 
+/* Closed Beta Tester — cream on wine, Fraunces, beside the account control.
+   The phone HUD row is one 44px control tall, so the words stack under the
+   avatar there. Wider skies use the single line. The menu always uses the line. */
+.closed-beta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.2rem 0.55rem 0.24rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-wine) 68%, #efe8dc);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, #efe8dc 16%, transparent), transparent 68%),
+    color-mix(in oklab, #4a2432 82%, #141210);
+  color: #efe8dc;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.8rem;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+}
+
+.closed-beta-badge--menu {
+  margin-top: 0.4rem;
+}
+
+.closed-beta-badge--hud {
+  display: none;
+  margin-top: 0;
+  pointer-events: none;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(8, 7, 6, 0.85);
+}
+
+.closed-beta-badge__seal {
+  width: 0.72rem;
+  height: 0.72rem;
+  flex: none;
+  color: #f3d5df;
+}
+
+.closed-beta-stack {
+  position: absolute;
+  top: calc(100% + 0.15rem);
+  right: 0;
+  z-index: 2;
+  display: flex;
+  width: max-content;
+  max-width: 3.35rem;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.16rem 0.28rem 0.2rem;
+  pointer-events: none;
+  border-radius: 0.55rem;
+  border: 1px solid color-mix(in oklab, var(--color-wine) 72%, #efe8dc);
+  background: color-mix(in oklab, #3c2230 94%, #0c0b0a);
+  box-shadow:
+    0 0 0 1px rgba(8, 7, 6, 0.7),
+    0 6px 16px rgba(8, 7, 6, 0.45);
+  color: #efe8dc;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.7rem;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(8, 7, 6, 0.9);
+}
+
+.closed-beta-stack span {
+  display: block;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .closed-beta-badge--hud {
+    display: inline-flex;
+  }
+
+  .closed-beta-stack {
+    display: none;
+  }
+}
+
 /* Home HUD — starlight orb between the beta chip and Pause / Sign in. */
 .feedback-orb-slot {
   position: relative;
