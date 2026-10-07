@@ -145,3 +145,30 @@ export function decideFrameGovernor(
 export function demandShouldInvalidate(mode: FrameGovernorMode): boolean {
   return mode === "demand";
 }
+
+/**
+ * Desktop canvases at least this size already draw every other frame during
+ * the opening HUD window. Anything under it is phone-sized for that skip.
+ */
+const OPENING_DESKTOP_MIN_WIDTH = 1000;
+const OPENING_DESKTOP_MIN_HEIGHT = 700;
+
+/**
+ * Half-rate `gl.render` only while the opening HUD window is up.
+ * A large desktop still skips in that window. A phone-sized canvas (under
+ * that size) or a small GPU takes the same skip. Outside the window this is
+ * false, and the caller keeps pause / flight / 120Hz cadence.
+ */
+export function halfRateOpeningRender(input: {
+  openingHud: boolean;
+  width: number;
+  height: number;
+  smallGpu: boolean;
+}): boolean {
+  if (!input.openingHud) return false;
+  const desktopLarge =
+    input.width >= OPENING_DESKTOP_MIN_WIDTH && input.height >= OPENING_DESKTOP_MIN_HEIGHT;
+  const phoneSized =
+    input.width < OPENING_DESKTOP_MIN_WIDTH || input.height < OPENING_DESKTOP_MIN_HEIGHT;
+  return desktopLarge || phoneSized || input.smallGpu;
+}

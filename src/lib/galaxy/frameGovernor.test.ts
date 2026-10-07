@@ -4,6 +4,7 @@ import {
   HALF_RATE_MIN_MS,
   HIGH_REFRESH_MEDIAN_MS,
   decideFrameGovernor,
+  halfRateOpeningRender,
   median,
   missRatioAgainst,
   windowIntervals,
@@ -91,5 +92,40 @@ describe("frameGovernor", () => {
     const d = decideFrameGovernor(base({ intervalsMs: intervals }), undefined, 5000);
     assert.equal(d.highRefresh, false);
     assert.equal(d.renderEveryNth, 1);
+  });
+
+  it("half-rates the opening on a large desktop and on a phone, only while the HUD window is up", () => {
+    const desktop = { width: 1350, height: 940, smallGpu: false };
+    const phone = { width: 390, height: 844, smallGpu: false };
+    const phoneLandscape = { width: 844, height: 390, smallGpu: false };
+    const wideShort = { width: 1100, height: 600, smallGpu: false };
+
+    assert.equal(halfRateOpeningRender({ openingHud: true, ...desktop }), true);
+    assert.equal(
+      halfRateOpeningRender({ openingHud: true, width: 1000, height: 700, smallGpu: false }),
+      true,
+    );
+    assert.equal(halfRateOpeningRender({ openingHud: true, ...phone }), true);
+    assert.equal(
+      halfRateOpeningRender({ openingHud: true, width: 999, height: 700, smallGpu: false }),
+      true,
+    );
+    assert.equal(
+      halfRateOpeningRender({ openingHud: true, width: 1000, height: 699, smallGpu: false }),
+      true,
+    );
+    assert.equal(halfRateOpeningRender({ openingHud: true, ...phoneLandscape }), true);
+    assert.equal(halfRateOpeningRender({ openingHud: true, ...wideShort }), true);
+    assert.equal(
+      halfRateOpeningRender({ openingHud: true, width: 1350, height: 940, smallGpu: true }),
+      true,
+    );
+
+    assert.equal(halfRateOpeningRender({ openingHud: false, ...desktop }), false);
+    assert.equal(halfRateOpeningRender({ openingHud: false, ...phone }), false);
+    assert.equal(
+      halfRateOpeningRender({ openingHud: false, width: 1350, height: 940, smallGpu: true }),
+      false,
+    );
   });
 });

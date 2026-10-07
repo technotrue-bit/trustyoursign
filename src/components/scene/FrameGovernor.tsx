@@ -2,10 +2,12 @@ import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import {
   decideFrameGovernor,
+  halfRateOpeningRender,
   type FrameGovernorMode,
   type HalfRateState,
 } from "@/lib/galaxy/frameGovernor";
 import { noteOpeningMs, openingHudWindowActive } from "@/lib/galaxy/openingProfile";
+import { isSmallGpu } from "@/lib/gpu";
 import { introPlaying } from "@/lib/galaxy/intro";
 import { galaxyTravel } from "@/lib/galaxy/travel";
 
@@ -16,6 +18,8 @@ const INTERVAL_CAP = 180;
  * - `demand` when Pause + idle (invalidate on pointer/wheel/key/resize)
  * - no renders while `document.hidden`
  * - every-other-rAF on 120Hz panels that are missing vsync
+ * - every other draw during the opening HUD window on a large desktop,
+ *   a phone-sized canvas, or a small GPU. Full draws return after that window.
  *
  * Positive-priority `useFrame` takes over `gl.render` so simulation callbacks
  * at priority 0 still run every rAF for correct dt maths.
@@ -104,8 +108,12 @@ export function FrameGovernor() {
     if (hidden.current) return;
 
     tick.current += 1;
-    const introHalfRender =
-      openingHudWindowActive() && size.width >= 1000 && size.height >= 700;
+    const introHalfRender = halfRateOpeningRender({
+      openingHud: openingHudWindowActive(),
+      width: size.width,
+      height: size.height,
+      smallGpu: isSmallGpu(),
+    });
     const renderNth = introHalfRender ? 2 : everyNth.current;
     if (tick.current % renderNth !== 0) return;
     const r0 = import.meta.env.DEV ? performance.now() : 0;
