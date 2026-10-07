@@ -240,100 +240,113 @@ describe("sky code", () => {
     }
   });
 
-  it("prints the sagittarius code inside the locked cream pad and leaves the surround alone", () => {
-    const frame = skyCodeFrame("sagittarius");
-    assert.ok(frame);
-    assert.equal(frame.src, "/sky-code/sagittarius-frame.png");
-    assert.equal(frame.pad.size / frame.width, 0.46);
+  it("prints every locked card inside its cream pad and leaves that surround alone", () => {
+    const sag = skyCodeFrame("sagittarius");
+    assert.ok(sag);
+    assert.equal(sag.pad.size / sag.width, 0.46);
+    const sagSrc = readFrame("sagittarius");
+
     for (const id of SIGN_IDS) {
-      if (id === "sagittarius") continue;
-      assert.equal(skyCodeFrame(id), null, id);
-    }
+      const frame = skyCodeFrame(id);
+      assert.ok(frame, id);
+      assert.equal(frame.src, `/sky-code/${id}-frame.png`, id);
+      assert.deepEqual(frame.pad, sag.pad, id);
+      assert.equal(frame.width, sag.width, id);
+      assert.equal(frame.height, sag.height, id);
 
-    const src = decodePng(
-      readFileSync(
-        join(
-          dirname(fileURLToPath(import.meta.url)),
-          "../../public/sky-code/sagittarius-frame.png",
-        ),
-      ),
-    );
-    assert.equal(src.width, frame.width);
-    assert.equal(src.height, frame.height);
-    assertCreamPad(src, frame.pad);
+      const src = id === "sagittarius" ? sagSrc : readFrame(id);
+      assert.equal(src.width, frame.width, id);
+      assert.equal(src.height, frame.height, id);
+      assertCreamPad(src, frame.pad);
 
-    const paint = paintSkyCode("sagittarius", src.rgba);
-    assert.equal(paint.framed, true);
-    assert.equal(paint.url, skyCodeUrl("sagittarius"));
-    assert.deepEqual(paint.plate, frame.pad);
-    assert.equal(skyCodeCaptions(paint).length, 0);
-    assert.equal(decode(paint), paint.url);
+      const paint = paintSkyCode(id, src.rgba);
+      assert.equal(paint.framed, true, id);
+      assert.equal(paint.url, skyCodeUrl(id), id);
+      assert.deepEqual(paint.plate, frame.pad, id);
+      assert.equal(skyCodeCaptions(paint).length, 0, id);
+      assert.equal(decode(paint), paint.url, id);
 
-    const { x: padX, y: padY, size } = frame.pad;
-    let modules = 0;
-    let art = 0;
-    for (let y = 0; y < src.height; y++) {
-      for (let x = 0; x < src.width; x++) {
-        const i = (y * src.width + x) * 4;
-        const inside = x >= padX && x < padX + size && y >= padY && y < padY + size;
-        if (!inside) {
-          if (
+      const { x: padX, y: padY, size } = frame.pad;
+      let modules = 0;
+      let art = 0;
+      for (let y = 0; y < src.height; y++) {
+        for (let x = 0; x < src.width; x++) {
+          const i = (y * src.width + x) * 4;
+          const inside = x >= padX && x < padX + size && y >= padY && y < padY + size;
+          if (!inside) {
+            if (
+              paint.rgba[i] !== src.rgba[i] ||
+              paint.rgba[i + 1] !== src.rgba[i + 1] ||
+              paint.rgba[i + 2] !== src.rgba[i + 2] ||
+              paint.rgba[i + 3] !== src.rgba[i + 3]
+            ) {
+              assert.fail(`${id} surround pixel changed at ${x},${y}`);
+            }
+            if (src.rgba[i] !== 0x0c || src.rgba[i + 1] !== 0x0b || src.rgba[i + 2] !== 0x0a) art++;
+            continue;
+          }
+          const changed =
             paint.rgba[i] !== src.rgba[i] ||
             paint.rgba[i + 1] !== src.rgba[i + 1] ||
-            paint.rgba[i + 2] !== src.rgba[i + 2] ||
-            paint.rgba[i + 3] !== src.rgba[i + 3]
-          ) {
-            assert.fail(`surround pixel changed at ${x},${y}`);
-          }
-          if (src.rgba[i] !== 0x0c || src.rgba[i + 1] !== 0x0b || src.rgba[i + 2] !== 0x0a) art++;
-          continue;
+            paint.rgba[i + 2] !== src.rgba[i + 2];
+          if (!changed) continue;
+          modules++;
+          assert.equal(paint.rgba[i], 0x0c, `${id} ${x},${y}`);
+          assert.equal(paint.rgba[i + 1], 0x0b);
+          assert.equal(paint.rgba[i + 2], 0x0a);
         }
-        const changed =
-          paint.rgba[i] !== src.rgba[i] ||
-          paint.rgba[i + 1] !== src.rgba[i + 1] ||
-          paint.rgba[i + 2] !== src.rgba[i + 2];
-        if (!changed) continue;
-        modules++;
-        assert.equal(paint.rgba[i], 0x0c, `${x},${y}`);
-        assert.equal(paint.rgba[i + 1], 0x0b);
-        assert.equal(paint.rgba[i + 2], 0x0a);
       }
-    }
-    assert.ok(modules > 100, "modules were drawn in the pad");
-    assert.ok(art > 1000, "title, plate, and stars stay outside the pad");
+      assert.ok(modules > 100, `${id} modules were drawn in the pad`);
+      assert.ok(art > 1000, `${id} title and figure stay outside the pad`);
 
-    const qr = encode(paint.url, { ecc: "H", border: 4 });
-    const modulePx = Math.floor(size / qr.size);
-    const drawn = qr.size * modulePx;
-    const ox = padX + Math.floor((size - drawn) / 2);
-    const oy = padY + Math.floor((size - drawn) / 2);
-    assert.ok(modulePx >= 4);
-    assert.ok(ox + drawn <= padX + size);
-    assert.ok(oy + drawn <= padY + size);
-    for (let row = 0; row < qr.size; row++) {
-      for (let col = 0; col < qr.size; col++) {
-        const quiet = row < 4 || col < 4 || row >= qr.size - 4 || col >= qr.size - 4;
-        if (!quiet) continue;
-        assert.equal(Boolean(qr.data[row]?.[col]), false, `quiet module ${col},${row}`);
-        const i = ((oy + row * modulePx) * src.width + (ox + col * modulePx)) * 4;
-        assert.equal(paint.rgba[i], src.rgba[i], `quiet ${col},${row}`);
-        assert.equal(paint.rgba[i + 1], src.rgba[i + 1]);
-        assert.equal(paint.rgba[i + 2], src.rgba[i + 2]);
+      const qr = encode(paint.url, { ecc: "H", border: 4 });
+      const modulePx = Math.floor(size / qr.size);
+      const drawn = qr.size * modulePx;
+      const ox = padX + Math.floor((size - drawn) / 2);
+      const oy = padY + Math.floor((size - drawn) / 2);
+      assert.ok(modulePx >= 4, id);
+      assert.ok(ox + drawn <= padX + size, id);
+      assert.ok(oy + drawn <= padY + size, id);
+      for (let row = 0; row < qr.size; row++) {
+        for (let col = 0; col < qr.size; col++) {
+          const quiet = row < 4 || col < 4 || row >= qr.size - 4 || col >= qr.size - 4;
+          if (!quiet) continue;
+          assert.equal(Boolean(qr.data[row]?.[col]), false, `${id} quiet module ${col},${row}`);
+          const i = ((oy + row * modulePx) * src.width + (ox + col * modulePx)) * 4;
+          assert.equal(paint.rgba[i], src.rgba[i], `${id} quiet ${col},${row}`);
+          assert.equal(paint.rgba[i + 1], src.rgba[i + 1]);
+          assert.equal(paint.rgba[i + 2], src.rgba[i + 2]);
+        }
       }
+
+      if (id !== "sagittarius") {
+        let differ = 0;
+        for (let y = 800; y < 1200; y += 3) {
+          for (let x = 250; x < 950; x += 3) {
+            const i = (y * src.width + x) * 4;
+            if (src.rgba[i] !== sagSrc.rgba[i] || src.rgba[i + 1] !== sagSrc.rgba[i + 1]) differ++;
+          }
+        }
+        assert.ok(differ > 100, `${id} figure is not the Sagittarius archer`);
+      }
+
+      assert.equal(paintSkyCode(id).framed, false, id);
+      assert.equal(paintSkyCode(id, new Uint8ClampedArray(16)).framed, false, id);
     }
 
-    const leo = paintSkyCode("leo", src.rgba);
-    assert.equal(leo.framed, false);
+    const leo = paintSkyCode("leo");
     assert.equal(leo.width, SKY_CODE_SIZE.width);
-    assert.equal(decode(leo), leo.url);
     assert.ok(skyCodeCaptions(leo).some((caption) => caption.text === "Leo"));
-
-    const fallback = paintSkyCode("sagittarius");
-    assert.equal(fallback.framed, false);
-    assert.equal(decode(fallback), fallback.url);
-    assert.equal(paintSkyCode("sagittarius", new Uint8ClampedArray(16)).framed, false);
   });
 });
+
+function readFrame(signId: string) {
+  return decodePng(
+    readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), `../../public/sky-code/${signId}-frame.png`),
+    ),
+  );
+}
 
 function decode(paint: { rgba: Uint8ClampedArray; width: number; height: number }) {
   return jsQR(paint.rgba, paint.width, paint.height)?.data ?? null;
