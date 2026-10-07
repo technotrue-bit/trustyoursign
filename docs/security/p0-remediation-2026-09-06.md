@@ -10,7 +10,7 @@ Draft remediation for Vibecode checklist blockers (see audit PR / `docs/security
 | Unauthenticated `primeOwner` | **Deleted.** No public HTTP path resets the owner credential hash. |
 | Hardcoded `PREVIEW_CLIENT_SECRET` | **Removed from tree.** Load via `PreviewOAuthSecret.read()` (`GROK_PREVIEW_CLIENT_SECRET` or `PREVIEW_CLIENT_SECRET`). |
 | No Postgres RLS | **Added** `migrations/0007_rls.sql` + `AppRls` request GUCs on `getSql()`. |
-| No login rate limit / bots | Better Auth `rateLimit` (strict email rules) + login honeypot; optional Turnstile when `TURNSTILE_SECRET_KEY` is set. |
+| No login rate limit / bots | Better Auth `rateLimit` (strict email rules) + login honeypot; optional Turnstile only when both Turnstile keys are set. |
 
 ## Required env (Joey)
 
@@ -21,7 +21,7 @@ Set in deployment (Vercel / host). **Do not commit values.**
 | `OWNER_PASSWORD` | Strong owner desk password (email/password). **Rotate** — legacy `True` is compromised and rejected. |
 | `GROK_PREVIEW_CLIENT_SECRET` or `PREVIEW_CLIENT_SECRET` | Preview OAuth client secret (sandbox). Prefer broker-issued secret. |
 | `GROK_AUTH_CLIENT_SECRET` | Per-app OAuth secret when deployed (overrides preview). |
-| `TURNSTILE_SECRET_KEY` (optional) | Enables Better Auth captcha plugin (Cloudflare Turnstile). |
+| `TURNSTILE_SECRET_KEY` (optional) | Enables the login bot check only together with `VITE_TURNSTILE_SITE_KEY`. One key alone leaves the check off. |
 | `VITE_TURNSTILE_SITE_KEY` (optional) | Client site key if Turnstile UI is wired. |
 
 ## Rotate steps (Joey) — preview OAuth

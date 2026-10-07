@@ -4,7 +4,7 @@ Wires **Joey’s existing** Cloudflare Turnstile widget on `/login`. Do not crea
 
 ## Behavior
 
-- Client: `TurnstileWidget` loads when `VITE_TURNSTILE_SITE_KEY` is present at build.
+- Client: `TurnstileWidget` loads only after the server says both keys are set, and the site key is present in this build. A failed availability read leaves the check off.
 - `turnstile.render(..., { action: "login", ... })`; token → `window.__turnstileToken` → `x-captcha-response`.
 - `resetTurnstile()` after failed email sign-in / sign-up so tokens are not reused.
 - Server: Better Auth `captcha({ provider: "cloudflare-turnstile" })` enables only when **both** `TURNSTILE_SECRET_KEY` and `VITE_TURNSTILE_SITE_KEY` are set.

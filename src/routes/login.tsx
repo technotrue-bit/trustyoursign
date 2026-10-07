@@ -127,6 +127,8 @@ function Login() {
   const [otpSandbox, setOtpSandbox] = useState(false);
   const [servedProviders, setServedProviders] = useState<readonly string[]>([]);
   const [passkeyOk, setPasskeyOk] = useState(false);
+  // Starts off. The server turns it on only when the check can actually finish.
+  const [botCheck, setBotCheck] = useState(false);
   // Platform authenticator (Face ID / Touch ID) — required to offer the modal button.
   const [platformPasskey, setPlatformPasskey] = useState(false);
   // Local credential evidence — without it, Safari opens hybrid QR on discoverable get.
@@ -149,6 +151,7 @@ function Login() {
         setOtpSandbox(status.codeSandbox);
         setServedProviders(status.providers);
         setPasskeyOk(status.passkeyAvailable);
+        setBotCheck(status.botCheck);
       })
       .catch(() => {
         /* leave everything hidden rather than offer a path that may not work */
@@ -807,7 +810,7 @@ function Login() {
                 </label>
               </div>
             ) : null}
-            {turnstileSiteKey() ? <TurnstileWidget /> : null}
+            {botCheck && turnstileSiteKey() ? <TurnstileWidget /> : null}
             {/* A host can be configured to send mail and still be unable to reach
                 anyone but the owner (a provider sandbox sender). Saying so beats
                 letting a visitor wait for a code that will never arrive — and it

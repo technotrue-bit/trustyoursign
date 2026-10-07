@@ -51,6 +51,11 @@ export type SignInAvailability = {
    * broker — Face ID / Touch ID credentials live on this app's origin.
    */
   passkeyAvailable: boolean;
+  /**
+   * The login bot check is fully configured. The page shows it only then.
+   * A missing or failed read stays false so a half setup cannot block sign-in.
+   */
+  botCheck: boolean;
 };
 
 /**
@@ -63,6 +68,7 @@ export const signInAvailability = createServerFn({ method: "GET" }).handler(
   async (): Promise<SignInAvailability> => {
     const { emailDeliveryConfigured, emailSenderIsSandbox } =
       await import("@/lib/email/send.server");
+    const { loginBotCheckConfigured } = await import("./login-bot-check");
     // `authConfigured` is the flag that adds the broker's OAuth plugin to the
     // Better Auth instance (and with it `/sign-in/oauth2`) — see server.ts.
     // `passkeysConfigured` is independent: passkeys are app-owned.
@@ -73,6 +79,7 @@ export const signInAvailability = createServerFn({ method: "GET" }).handler(
       codeSandbox: available && emailSenderIsSandbox(),
       providers: servedProviderIds(authConfigured),
       passkeyAvailable: passkeysConfigured,
+      botCheck: loginBotCheckConfigured(),
     };
   },
 );

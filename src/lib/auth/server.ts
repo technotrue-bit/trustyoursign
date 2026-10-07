@@ -39,6 +39,7 @@ import { userAdditionalFields } from "./user-fields";
 import { getCookie, getRequest } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { ensureDbReady, getNeonPool, getPglite } from "../db.server";
+import { loginBotCheckConfigured } from "./login-bot-check";
 import { authRateLimit } from "./rate-limit";
 import {
   emailDeliveryConfigured,
@@ -389,9 +390,10 @@ export const auth = betterAuth({
     // the address. A display name is not consulted.
     ownerCanonicalSignIn(),
 
-    // Bot protection: Cloudflare Turnstile when TURNSTILE_SECRET_KEY is set.
-    // Pair with VITE_TURNSTILE_SITE_KEY on the login form (see docs/security/turnstile.md).
-    ...(env("TURNSTILE_SECRET_KEY") && env("VITE_TURNSTILE_SITE_KEY")
+    // Login bot check only when both keys are set. One key must not turn it
+    // on: the form cannot finish a check the server will not verify, and the
+    // server must not demand a check the form cannot show.
+    ...(loginBotCheckConfigured()
       ? [
           captcha({
             provider: "cloudflare-turnstile",
