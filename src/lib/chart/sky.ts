@@ -11,6 +11,7 @@ import {
 } from "./ephemeris";
 import { answerFromSky } from "./bones-ask";
 import { buildVisitorNativity, skyNatalFromCast } from "./visitor-nativity";
+import { normalizePersistedNatal } from "./persist-natal";
 import type { Nativity } from "./schema";
 
 export type { SkyNatal, SkyBody };
@@ -197,23 +198,23 @@ export const saveChartTone = createServerFn({ method: "POST" })
   });
 
 export const persistNatal = createServerFn({ method: "POST" })
-  .validator((input: { chartId?: string; natal: SkyNatal }) => input)
+  .validator((input: { chartId?: string; natal?: unknown }) => {
+    const chartId = typeof input?.chartId === "string" ? input.chartId.trim().slice(0, 64) : "";
+    if (!chartId) return { chartId: "", natal: null as SkyNatal | null };
+    return { chartId, natal: normalizePersistedNatal(input?.natal) };
+  })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    if (!data.chartId || !data.natal) return { id: null as string | null };
     const { getSql } = await import("@/lib/db.server");
     const sql = await getSql();
-    if (data.chartId) {
-      // Tone column is authoritative; force natal_json.tone from the column after write.
-      const tone = asTone(data.natal.tone);
-      const natal = { ...data.natal, tone };
-      await sql`
-        update charts
-        set natal_json = ${JSON.stringify(natal)}::jsonb, tone = ${tone}, updated_at = now()
-        where id = ${data.chartId} and user_id = ${context.userId}
-      `;
-      return { id: data.chartId };
-    }
-    return { id: null as string | null };
+    const natal = data.natal;
+    await sql`
+      update charts
+      set natal_json = ${JSON.stringify(natal)}::jsonb, tone = ${natal.tone}, updated_at = now()
+      where id = ${data.chartId} and user_id = ${context.userId}
+    `;
+    return { id: data.chartId };
   });
 
 function parseJsonBodies(text: string, natal: SkyNatal): SkyNatal {
