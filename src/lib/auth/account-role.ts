@@ -1,4 +1,4 @@
-/** Cohort stored on the account. `beta` is a mark only — nothing is gated on it yet. */
+/** Cohort stored on the account. `beta` is the Closed Beta Tester mark. */
 export const ACCOUNT_ROLES = ["user", "beta"] as const;
 
 export type AccountRole = (typeof ACCOUNT_ROLES)[number];

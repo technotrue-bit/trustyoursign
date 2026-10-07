@@ -6,6 +6,7 @@ import { clearBearerTokens } from "@/lib/auth/bearer-storage";
 import { signOut } from "@/lib/auth/client";
 import { getResearchChart, listResearchLibrary } from "@/lib/chart/research";
 import { isResearchChartId, type ResearchChartId } from "@/lib/chart/types";
+import { accountTriggerName } from "@/lib/auth/closed-beta-badge";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { openSavedChart, useSessionStore } from "@/lib/chart/session";
 import { listCharts } from "@/lib/charts";
@@ -35,6 +36,7 @@ import {
 } from "@/lib/owner-state";
 import { cn } from "@/lib/utils";
 import { AccountSettingsPanel } from "./AccountSettingsPanel";
+import { ClosedBetaTesterBadge } from "./ClosedBetaBadge";
 
 /** Row styling for a menu action: sky entries, Settings. */
 const ITEM_CLASS =
@@ -397,23 +399,26 @@ export function AccountMenu() {
       }}
     >
       <div className="pointer-events-auto relative" data-no-fly>
-        <DropdownMenu.Trigger asChild>
-          <button
-            type="button"
-            aria-label="Account"
-            className="grid size-11 place-items-center rounded-full border border-border bg-bg-elevated/90 text-sm tracking-wide text-fg hover:border-accent"
-          >
-            {user.profileImageUrl ? (
-              <img
-                src={user.profileImageUrl}
-                alt=""
-                className="size-11 rounded-full object-cover"
-              />
-            ) : (
-              initial
-            )}
-          </button>
-        </DropdownMenu.Trigger>
+        <div className="flex items-center justify-end gap-1.5">
+          <ClosedBetaTesterBadge role={user.role} place="hud" />
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              aria-label={accountTriggerName(user.role)}
+              className="grid size-11 shrink-0 place-items-center rounded-full border border-border bg-bg-elevated/90 text-sm tracking-wide text-fg hover:border-accent"
+            >
+              {user.profileImageUrl ? (
+                <img
+                  src={user.profileImageUrl}
+                  alt=""
+                  className="size-11 rounded-full object-cover"
+                />
+              ) : (
+                initial
+              )}
+            </button>
+          </DropdownMenu.Trigger>
+        </div>
         <DropdownMenu.Portal>
           <DropdownMenu.Content
             side="bottom"
@@ -460,8 +465,11 @@ export function AccountMenu() {
               </div>
             ) : (
               <>
-                <DropdownMenu.Label className="truncate px-4 pt-3 pb-2 text-xs tracking-[0.16em] text-fg-subtle uppercase">
-                  {owner ? "Owner" : label}
+                <DropdownMenu.Label className="px-4 pt-3 pb-2">
+                  <span className="block truncate text-xs tracking-[0.16em] text-fg-subtle uppercase">
+                    {owner ? "Owner" : label}
+                  </span>
+                  <ClosedBetaTesterBadge role={user.role} place="menu" />
                 </DropdownMenu.Label>
                 <DropdownMenu.Item
                   className={cn(ITEM_CLASS, locked && "pointer-events-none opacity-50")}
