@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { authMiddleware } from "@/lib/auth/middleware";
 import { insightsForSign } from "@/lib/galaxy/signInsights";
 import { isSignId, signName } from "./sign-canon";
 import { moonDayBrief, type MoonDayBrief } from "./moon-day";
@@ -77,21 +78,69 @@ Name the explored sign and the Moon's phase and sign. End on how this moon lands
   }
 }
 
+export type MoonBriefSpeaker = (
+  moon: MoonDayBrief,
+  exploredSignId: SignId,
+  bones: string,
+) => Promise<string | null>;
+
 /**
- * Today's moon for an explored sign galaxy.
- * Auth off — same spirit as open sign lore. Optional xAI only when enrich is true.
+ * The open moon line is always the local draft. The paid rewrite runs only
+ * when a signed-in caller asked for it. `speak` is the paid writer; tests
+ * pass a stand-in so this never calls the live service.
+ */
+export async function resolveMoonBrief(input: {
+  moon: MoonDayBrief;
+  signId: SignId;
+  enrich: boolean;
+  signedIn: boolean;
+  speak?: MoonBriefSpeaker;
+}): Promise<MoonSignBriefResult> {
+  const bones = deterministicMoonEffect(input.moon, input.signId);
+  if (!input.enrich || !input.signedIn) {
+    return { moon: input.moon, effect: bones, from: "bones" };
+  }
+  const spoken = input.speak ? await input.speak(input.moon, input.signId, bones) : null;
+  if (!spoken) return { moon: input.moon, effect: bones, from: "bones" };
+  return { moon: input.moon, effect: spoken, from: "machine" };
+}
+
+function signIdInput(input: { signId: string }): { signId: SignId } {
+  const raw = String(input?.signId ?? "").trim().toLowerCase();
+  if (!isSignId(raw)) throw new Error("Unknown sign.");
+  return { signId: raw };
+}
+
+/**
+ * Today's moon for an explored sign galaxy. Open to everyone.
+ * This path never calls the paid writer, even if a caller asks it to.
  */
 export const getMoonSignBrief = createServerFn({ method: "POST" })
-  .validator((input: { signId: string; enrich?: boolean }) => {
-    const raw = String(input?.signId ?? "").trim().toLowerCase();
-    if (!isSignId(raw)) throw new Error("Unknown sign.");
-    return { signId: raw as SignId, enrich: input?.enrich === true };
-  })
+  .validator(signIdInput)
   .handler(async ({ data }): Promise<MoonSignBriefResult> => {
     const moon = await moonDayBrief(new Date());
-    const bones = deterministicMoonEffect(moon, data.signId);
-    if (!data.enrich) return { moon, effect: bones, from: "bones" };
-    const spoken = await enrichWithXai(moon, data.signId, bones);
-    if (!spoken) return { moon, effect: bones, from: "bones" };
-    return { moon, effect: spoken, from: "machine" };
+    return resolveMoonBrief({
+      moon,
+      signId: data.signId,
+      enrich: false,
+      signedIn: false,
+    });
+  });
+
+/**
+ * Rewrite today's moon in the house voice. Same sign-in check as the other
+ * paid sky calls. A signed-out caller never reaches the writer.
+ */
+export const enrichMoonSignBrief = createServerFn({ method: "POST" })
+  .validator(signIdInput)
+  .middleware([authMiddleware])
+  .handler(async ({ data }): Promise<MoonSignBriefResult> => {
+    const moon = await moonDayBrief(new Date());
+    return resolveMoonBrief({
+      moon,
+      signId: data.signId,
+      enrich: true,
+      signedIn: true,
+      speak: enrichWithXai,
+    });
   });

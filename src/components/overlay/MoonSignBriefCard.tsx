@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { getMoonSignBrief, type MoonSignBriefResult } from "@/lib/chart/moon-brief";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { enrichMoonSignBrief, getMoonSignBrief, type MoonSignBriefResult } from "@/lib/chart/moon-brief";
 import type { SignId } from "@/lib/chart/types";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,8 @@ function writeCache(signId: SignId, result: MoonSignBriefResult) {
 
 /** Compact “Today’s moon” strip for the in-sign galaxy HUD. */
 export function MoonSignBriefCard({ signId, signName }: { signId: SignId; signName: string }) {
+  const { user } = useCurrentUserState();
+  const signedIn = Boolean(user);
   const [brief, setBrief] = useState<MoonSignBriefResult | null>(() => readCache(signId));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +49,7 @@ export function MoonSignBriefCard({ signId, signName }: { signId: SignId; signNa
     }
     setBusy(true);
     setError(null);
-    void getMoonSignBrief({ data: { signId, enrich: false } })
+    void getMoonSignBrief({ data: { signId } })
       .then((r) => {
         if (cancelled) return;
         setBrief(r);
@@ -64,10 +67,10 @@ export function MoonSignBriefCard({ signId, signName }: { signId: SignId; signNa
   }, [signId]);
 
   const enrich = () => {
-    if (busy) return;
+    if (busy || !signedIn) return;
     setBusy(true);
     setError(null);
-    void getMoonSignBrief({ data: { signId, enrich: true } })
+    void enrichMoonSignBrief({ data: { signId } })
       .then((r) => {
         setBrief(r);
         writeCache(signId, r);
@@ -109,17 +112,19 @@ export function MoonSignBriefCard({ signId, signName }: { signId: SignId; signNa
       <p className="mt-2 text-[0.6rem] tracking-[0.16em] text-fg-subtle uppercase">
         How it lands on {signName}
       </p>
-      <button
-        type="button"
-        onClick={enrich}
-        disabled={busy}
-        className={cn(
-          "mt-2 min-h-11 px-3 text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg",
-          "disabled:opacity-50",
-        )}
-      >
-        {busy ? "Reading…" : brief.from === "machine" ? "Read again" : "Read"}
-      </button>
+      {signedIn ? (
+        <button
+          type="button"
+          onClick={enrich}
+          disabled={busy}
+          className={cn(
+            "mt-2 min-h-11 px-3 text-[0.65rem] tracking-[0.2em] text-fg-subtle uppercase hover:text-fg",
+            "disabled:opacity-50",
+          )}
+        >
+          {busy ? "Reading…" : brief.from === "machine" ? "Read again" : "Read"}
+        </button>
+      ) : null}
     </div>
   );
 }
