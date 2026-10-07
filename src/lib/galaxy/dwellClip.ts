@@ -7,6 +7,22 @@ import { stationT } from "./temple";
  */
 export const DWELL_STILL_SEC = 2.5;
 
+/** Crossfade still plate ↔ life clip on the corridor plate (seconds). */
+export const DWELL_CROSSFADE_SEC = 0.2;
+
+/** Reference plate pixels for normalizing life-clip UV nudge (matches max sign art canvas). */
+export const DWELL_PLATE_REF = { w: 1024, h: 576 } as const;
+
+/** When |video aspect − plate aspect| is below this, use full UV (no cover crop). */
+export const DWELL_ASPECT_MATCH_EPS = 0.012;
+
+/**
+ * Shift life-clip texels on the plate so frame 0 stacks on SIGN_ART (plate space px).
+ * Positive x = move the animal right on screen; positive y = move it down.
+ * Aries frame 0 already stacks at 0.
+ */
+export const DWELL_LIFE_PLATE_NUDGE_PX: Partial<Record<SignId, { x: number; y: number }>> = {};
+
 /**
  * Optional life clip per sign. Absent = still plate and the 7s auto-walk.
  * Prefetch only the station the camera is aimed at.
@@ -104,12 +120,22 @@ export function primeDwellClip(id: SignId): HTMLVideoElement | null {
   return video;
 }
 
-/** Keep a paused element only for the aimed sign. Drops every other clip. */
+/**
+ * Keep a paused element only for the aimed sign. Drops every other clip that
+ * has not started. A clip that has left frame 0 stays until the station fade
+ * calls `stopDwellClip` — removing src here uploads an empty frame.
+ */
 export function syncDwellPrefetch(id: SignId | null) {
   if (typeof document === "undefined") return;
   const tracked = new Set([...videos.keys(), ...primeArmedAt.keys()]);
   for (const key of tracked) {
-    if (key !== id) stopDwellClip(key);
+    if (key === id) continue;
+    const video = videos.get(key);
+    if (video && video.currentTime > 0.02) {
+      video.pause();
+      continue;
+    }
+    stopDwellClip(key);
   }
   if (id && DWELL_CLIPS[id]) primeDwellClip(id);
 }
@@ -130,6 +156,23 @@ export function pauseDwellClip(id?: SignId) {
   if (typeof document === "undefined") return;
   const keys = id ? [id] : [...videos.keys()];
   for (const key of keys) videos.get(key)?.pause();
+}
+
+/** True when the element can paint a frame (not just metadata). */
+export function dwellVideoFrameReady(video: HTMLVideoElement): boolean {
+  return (
+    video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+    video.videoWidth > 2 &&
+    video.videoHeight > 2
+  );
+}
+
+/**
+ * Disarm playback but keep the element so the plate can fade out. Full teardown
+ * is `stopDwellClip` once the fade reaches the still.
+ */
+export function retireDwellClip(id?: SignId) {
+  pauseDwellClip(id);
 }
 
 /** Stop decoding and drop the element. Safe to call twice. */
