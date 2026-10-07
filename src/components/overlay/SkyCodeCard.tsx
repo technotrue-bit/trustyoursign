@@ -31,8 +31,9 @@ import {
  * owner's own sky (the book the account menu calls "The sky") supplies the
  * sign. Place a birth stays for a vault that truly has neither.
  *
- * Sagittarius composites the locked surround and draws the code into its cream
- * pad. Every other sign still uses the star-glyph frame. Nothing is charged.
+ * A sign with a locked surround composites that card and draws the code into
+ * its cream pad. A missing picture falls back to the star-glyph frame.
+ * Nothing is charged.
  */
 
 export function SkyCodeSection() {
