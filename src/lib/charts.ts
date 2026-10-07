@@ -5,6 +5,7 @@ import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal";
 import type { SignId } from "@/lib/chart/types";
 import { parseSignId } from "@/lib/chart/sign-canon";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
+import { normalizePersistedNatal } from "@/lib/chart/persist-natal";
 import type { FieldNote, ThreadTurn } from "@/lib/field-notes";
 import { asChartKey } from "@/lib/charts-saved";
 
@@ -145,7 +146,7 @@ function normalizeChartWrite(input: ChartWriteInput): NormalizedChartWrite {
     birthMinute = m;
   }
   const birthPlace = input.birthPlace ? input.birthPlace.trim().slice(0, 120) : null;
-  const natal = input.natal && typeof input.natal === "object" ? input.natal : null;
+  const natal = input.natal == null ? null : normalizePersistedNatal(input.natal);
   const tone = input.tone === "warm" ? "warm" : "vault";
   return {
     label,
