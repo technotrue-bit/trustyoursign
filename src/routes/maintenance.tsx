@@ -5,8 +5,10 @@ import { isSiteOwner } from "@/lib/owner";
 import { claimSite } from "@/lib/site";
 import { getMaintenanceGate } from "@/lib/maintenance";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { noindexHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/maintenance")({
+  head: noindexHead,
   beforeLoad: async () => {
     const gate = await getMaintenanceGate();
     if (!gate.on || gate.bypass) throw redirect({ to: "/" });

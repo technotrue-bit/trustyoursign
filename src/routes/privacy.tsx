@@ -1,7 +1,11 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { CONTACT_EMAIL, CONTACT_HANDLE, MIN_AGE, OPERATOR, PRIVACY_VERSION } from "@/lib/legal";
+import { pageHead } from "@/lib/seo";
 
-export const Route = createFileRoute("/privacy")({ component: Privacy });
+export const Route = createFileRoute("/privacy")({
+  head: () => pageHead("/privacy"),
+  component: Privacy,
+});
 
 function Privacy() {
   return (

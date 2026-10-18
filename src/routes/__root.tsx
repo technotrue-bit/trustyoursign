@@ -8,6 +8,7 @@ import { OwnerBind } from "@/components/OwnerBind";
 import { MaintenanceWatch } from "@/components/MaintenanceWatch";
 import { getMaintenanceGate } from "@/lib/maintenance";
 import { isMaintenanceExemptPath } from "@/lib/maintenance-paths";
+import { siteJsonLd } from "@/lib/seo";
 import {
   PWA_ICON_PATHS,
   PWA_STATUS_BAR_STYLE,
@@ -17,6 +18,11 @@ import appCss from "../styles.css?url";
 
 const APP_NAME = "Trust Your Sign";
 const GFONTS_LINK_ID = "gfonts-css";
+// Paste the token from Search Console → URL-prefix property → HTML tag.
+// Empty = no tag. Never invent a value; the DNS TXT route needs none.
+const GOOGLE_SITE_VERIFICATION = "";
+// `<` escaped so the JSON can never close its own <script> tag.
+const SITE_JSON_LD = JSON.stringify(siteJsonLd()).replace(/</g, "\\u003c");
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
@@ -40,9 +46,15 @@ export const Route = createRootRoute({
       { name: "color-scheme", content: "dark" },
       { name: "apple-mobile-web-app-title", content: APP_NAME },
       { name: "apple-mobile-web-app-status-bar-style", content: PWA_STATUS_BAR_STYLE },
+      ...(GOOGLE_SITE_VERIFICATION
+        ? [{ name: "google-site-verification", content: GOOGLE_SITE_VERIFICATION }]
+        : []),
     ],
+    // No canonical here: each public child route sets its own (src/lib/seo.ts).
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32.png" },
+      { rel: "icon", type: "image/png", sizes: "16x16", href: "/favicon-16.png" },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: PWA_ICON_PATHS.appleTouch },
@@ -69,6 +81,8 @@ export const Route = createRootRoute({
       },
     ],
     scripts: [
+      // Data, not code: the CSP does not apply to application/ld+json.
+      { type: "application/ld+json", children: SITE_JSON_LD },
       {
         children: `(function(){var l=document.getElementById(${JSON.stringify(GFONTS_LINK_ID)});if(!l)return;var go=function(){l.media="all"};if(l.sheet){go();return}l.addEventListener("load",go,{once:true})})();`,
       },

@@ -29,8 +29,10 @@ import {
   rememberLocalPasskeyCredentialIds,
 } from "@/lib/auth/passkey-local";
 import { cn } from "@/lib/utils";
+import { noindexHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/account")({
+  head: noindexHead,
   component: Account,
   validateSearch: (search: Record<string, unknown>): { enablePasskey?: true } => ({
     enablePasskey:

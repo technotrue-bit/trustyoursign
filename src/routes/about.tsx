@@ -1,7 +1,11 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { CONTACT_EMAIL, CONTACT_HANDLE, MIN_AGE, OPERATOR } from "@/lib/legal";
+import { pageHead } from "@/lib/seo";
 
-export const Route = createFileRoute("/about")({ component: About });
+export const Route = createFileRoute("/about")({
+  head: () => pageHead("/about"),
+  component: About,
+});
 
 function About() {
   return (

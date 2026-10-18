@@ -10,8 +10,9 @@ import { getMaintenanceGate, setMaintenance } from "@/lib/maintenance";
 import { listResearchLibrary } from "@/lib/chart/research";
 import { classifyOwnerFetchError } from "@/lib/owner-state";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
+import { noindexHead } from "@/lib/seo";
 
-export const Route = createFileRoute("/admin")({ component: Admin });
+export const Route = createFileRoute("/admin")({ head: noindexHead, component: Admin });
 
 function Admin() {
   const { user } = useCurrentUserState();
