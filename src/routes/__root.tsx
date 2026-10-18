@@ -1,4 +1,5 @@
 import { createRootRoute, HeadContent, Outlet, Scripts, redirect } from "@tanstack/react-router";
+import { Analytics } from "@vercel/analytics/react";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AndroidInstallCapture } from "@/components/AndroidInstallCapture";
@@ -115,6 +116,14 @@ export const Route = createRootRoute({
           <Outlet />
         </AuthProvider>
         <Scripts />
+        {/*
+          Vercel Web Analytics (free Hobby pageviews/visitors). Production builds
+          load the same-origin /_vercel/insights/script.js, which the existing
+          CSP ('self') already allows. Dev would pull the debug script from
+          va.vercel-scripts.com, which the CSP blocks, so it only mounts in
+          production builds.
+        */}
+        {import.meta.env.PROD ? <Analytics /> : null}
       </body>
     </html>
   ),
