@@ -8,6 +8,17 @@
   },
   "redirects": [
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "trustyoursign.vercel.app"
+        }
+      ],
+      "destination": "https://trustyoursign.com/",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "has": [
         {
