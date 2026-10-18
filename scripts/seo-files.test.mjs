@@ -94,9 +94,13 @@ describe("public page copy", () => {
 describe("vercel.json host rules", () => {
   const config = JSON.parse(read("vercel.json"));
 
-  const redirectFor = (host) =>
+  const redirectFor = (host, source = "/:path*") =>
     (config.redirects ?? []).find(
-      (r) => r.has?.length === 1 && r.has[0].type === "host" && r.has[0].value === host,
+      (r) =>
+        r.source === source &&
+        r.has?.length === 1 &&
+        r.has[0].type === "host" &&
+        r.has[0].value === host,
     );
 
   for (const host of ["trustyoursign.vercel.app", "www.trustyoursign.com"]) {
@@ -108,6 +112,14 @@ describe("vercel.json host rules", () => {
       assert.equal(rule.permanent, true);
     });
   }
+
+  // Vercel's "/:path*" rule doesn't catch the bare root, so the root needs its own rule.
+  it("sends the trustyoursign.vercel.app home page to the apex permanently", () => {
+    const rule = redirectFor("trustyoursign.vercel.app", "/");
+    assert.ok(rule);
+    assert.equal(rule.destination, `${SITE_ORIGIN}/`);
+    assert.equal(rule.permanent, true);
+  });
 
   it("noindexes every other vercel.app host", () => {
     const rule = config.headers.find((h) =>
