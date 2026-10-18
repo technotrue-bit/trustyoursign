@@ -7,9 +7,13 @@ import { RequireSession } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { SITE_OWNER, isSiteOwner } from "@/lib/owner";
 import { claimSite } from "@/lib/site";
+import { noindexHead } from "@/lib/seo";
 
 /** /admin/users, kept beside the desk rather than inside it. */
-export const Route = createFileRoute("/admin_/users")({ component: AdminUsers });
+export const Route = createFileRoute("/admin_/users")({
+  head: noindexHead,
+  component: AdminUsers,
+});
 
 function formatSignedUp(iso: string) {
   const d = new Date(iso);

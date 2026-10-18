@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { insightToneLabel, sampleInsightForSign } from "@/lib/galaxy/signInsights";
 import { useGalaxy, currentConstellation } from "@/lib/galaxy/store";
@@ -79,15 +80,57 @@ export function GalaxyShell() {
   const sample = sign ? sampleInsightForSign(sign.id) : undefined;
 
   if (!born) {
+    // This is what the server renders (and what shows until the sky is born),
+    // so it carries the crawlable copy and links. LegalFooter takes over once
+    // the dock is up.
     return (
       <div className="vault-overlay pointer-events-none absolute inset-0 z-40">
         <h1 className="sr-only">what&rsquo;s your sign?</h1>
+        <footer className="absolute inset-x-0 bottom-[var(--hud-bottom)] flex flex-col items-center gap-1 px-3 pb-[max(0.15rem,env(safe-area-inset-bottom,0px))] text-center md:bottom-8">
+          <p className="sky-hud-kicker max-w-md text-[0.68rem] leading-snug tracking-wide md:text-xs">
+            Trust Your Sign is a natal fly-through: pick your sign, fly its sky, and unlock a chart
+            of your sun, moon, and rising.
+          </p>
+          <nav
+            aria-label="House"
+            className="sky-hud-footer pointer-events-auto px-2 text-[0.6rem] leading-snug tracking-wide md:px-3 md:text-[0.62rem] md:leading-relaxed"
+          >
+            <Link to="/about" className="hover:text-fg">
+              About
+            </Link>
+            {" · "}
+            <Link to="/how-this-works" className="hover:text-fg">
+              How it works
+            </Link>
+            {" · "}
+            <Link to="/faq" className="hover:text-fg">
+              FAQ
+            </Link>
+            {" · "}
+            <Link to="/contact" className="hover:text-fg">
+              Contact
+            </Link>
+            {" · "}
+            <Link to="/privacy" className="hover:text-fg">
+              Privacy
+            </Link>
+            {" · "}
+            <Link to="/terms" className="hover:text-fg">
+              Terms
+            </Link>
+          </nav>
+        </footer>
       </div>
     );
   }
 
   return (
     <div className="vault-overlay pointer-events-none absolute inset-0 z-40">
+      {/* Same one-line description the pre-birth footer shows, kept for readers and crawlers. */}
+      <p className="sr-only">
+        Trust Your Sign is a natal fly-through: pick your sign, fly its sky, and unlock a chart of
+        your sun, moon, and rising.
+      </p>
       {showCornerSkip ? (
         <div className="pointer-events-none absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[70]">
           <button

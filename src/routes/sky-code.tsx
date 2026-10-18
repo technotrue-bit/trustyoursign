@@ -2,8 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AccountMenu } from "@/components/overlay/AccountMenu";
 import { SkyCodeSection } from "@/components/overlay/SkyCodeCard";
 import { RequireSession } from "@/lib/auth/gates";
+import { noindexHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/sky-code")({
+  head: noindexHead,
   component: SkyCodePage,
 });
 

@@ -32,6 +32,7 @@ import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
 import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
+import { noindexHead } from "@/lib/seo";
 
 /** Profile URL after a successful sign-in — never linger on /login. */
 function profileHref(opts?: { enablePasskey?: boolean }) {
@@ -78,6 +79,7 @@ function credentialIdFromWebauthn(result: {
 }
 
 export const Route = createFileRoute("/login")({
+  head: noindexHead,
   component: Login,
   // `?create=1` opens the Create-account tab directly, so a link can carry the
   // intent instead of dropping the visitor on the sign-in form. `?from=account`

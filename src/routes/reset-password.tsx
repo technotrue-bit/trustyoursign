@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { authClient, authEnabled } from "@/lib/auth/client";
+import { noindexHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/reset-password")({
+  head: noindexHead,
   // Better Auth's token relay lands here as `/reset-password?token=…` (valid)
   // or `?error=INVALID_TOKEN` (expired / already used).
   validateSearch: (search: Record<string, unknown>): { token?: string; error?: string } => ({

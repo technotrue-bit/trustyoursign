@@ -2,8 +2,12 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { CONTACT_EMAIL, CONTACT_HANDLE, FEEDBACK_EMAIL } from "@/lib/legal";
 import { feedbackMailtoHref } from "@/lib/feedback";
 import { FeedbackForm } from "@/components/overlay/FeedbackForm";
+import { pageHead } from "@/lib/seo";
 
-export const Route = createFileRoute("/contact")({ component: Contact });
+export const Route = createFileRoute("/contact")({
+  head: () => pageHead("/contact"),
+  component: Contact,
+});
 
 function Contact() {
   return (
