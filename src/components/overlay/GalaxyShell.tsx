@@ -21,6 +21,14 @@ import { SignGalaxyHud } from "./SignGalaxyHud";
 import { FeedbackOrb } from "./FeedbackOrb";
 import { siteVersionChrome } from "@/lib/site-version";
 
+/**
+ * The home page's crawlable description: shown in the pre-birth footer (what
+ * the server renders) and kept as sr-only copy once the sky is born. One
+ * string so the two can never drift.
+ */
+const HOME_DESCRIPTION =
+  "Trust Your Sign is a natal fly-through: pick your zodiac sign, fly its sky, and unlock a natal chart of your sun, moon, and rising. Positions come from a real astronomy library, using the tropical zodiac.";
+
 export function GalaxyShell() {
   const versionChrome = siteVersionChrome();
   const moved = useGalaxy((s) => s.moved);
@@ -85,11 +93,10 @@ export function GalaxyShell() {
     // the dock is up.
     return (
       <div className="vault-overlay pointer-events-none absolute inset-0 z-40">
-        <h1 className="sr-only">what&rsquo;s your sign?</h1>
+        <h1 className="sr-only">Trust Your Sign: what&rsquo;s your sign?</h1>
         <footer className="absolute inset-x-0 bottom-[var(--hud-bottom)] flex flex-col items-center gap-1 px-3 pb-[max(0.15rem,env(safe-area-inset-bottom,0px))] text-center md:bottom-8">
           <p className="sky-hud-kicker max-w-md text-[0.68rem] leading-snug tracking-wide md:text-xs">
-            Trust Your Sign is a natal fly-through: pick your sign, fly its sky, and unlock a chart
-            of your sun, moon, and rising.
+            {HOME_DESCRIPTION}
           </p>
           <nav
             aria-label="House"
@@ -127,10 +134,7 @@ export function GalaxyShell() {
   return (
     <div className="vault-overlay pointer-events-none absolute inset-0 z-40">
       {/* Same one-line description the pre-birth footer shows, kept for readers and crawlers. */}
-      <p className="sr-only">
-        Trust Your Sign is a natal fly-through: pick your sign, fly its sky, and unlock a chart of
-        your sun, moon, and rising.
-      </p>
+      <p className="sr-only">{HOME_DESCRIPTION}</p>
       {showCornerSkip ? (
         <div className="pointer-events-none absolute top-[var(--chrome-top)] right-[max(0.5rem,var(--safe-right))] z-[70]">
           <button
