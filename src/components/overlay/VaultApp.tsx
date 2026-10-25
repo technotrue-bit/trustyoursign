@@ -12,6 +12,7 @@ import {
   roomsFor,
 } from "@/lib/chart/session";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
+import { trackSignViewed } from "@/lib/analytics";
 import { signIndexOf } from "@/lib/chart/sign-canon";
 import { useGalaxy } from "@/lib/galaxy/store";
 import {
@@ -243,6 +244,7 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   const signIndex = useGalaxy((s) => s.signIndex);
   const explorePhase = useGalaxy((s) => s.explore.phase);
   const exploreSignIndex = useGalaxy((s) => s.explore.signIndex);
+  const lastTrackedSignRef = useRef<string | null>(null);
   const pointIndex = useGalaxy((s) => s.explore.pointIndex);
   const researchId = useSessionStore((s) =>
     s.session?.kind === "research" &&
@@ -381,6 +383,11 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
     const boot = resolveBootPlace(placeSearch ?? {});
     bootPlace(boot);
     placeReady.current = true;
+    if (placeSearch?.sign) {
+      const source = placeSearch.galaxy ? "share" : "direct";
+      lastTrackedSignRef.current = `${placeSearch.sign}:${source}`;
+      trackSignViewed(placeSearch.sign, source);
+    }
 
     // D2/F7: an in-progress guest birth survives reloads and sign-in
     // redirects — reopen it if this tab still holds one and nothing else
@@ -465,6 +472,19 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
     followHistoryPlace(fromUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed fields, not object identity
   }, [historyDesk, historySign, historyGalaxy, historyStar, meshReview]);
+
+  useEffect(() => {
+    if (explorePhase !== "fading" && explorePhase !== "inside") {
+      if (explorePhase === "idle") lastTrackedSignRef.current = null;
+      return;
+    }
+    const sign = exploreSignIndex != null ? CONSTELLATIONS[exploreSignIndex] : undefined;
+    if (!sign) return;
+    const key = `${sign.id}:corridor`;
+    if (lastTrackedSignRef.current === key || lastTrackedSignRef.current?.startsWith(`${sign.id}:`)) return;
+    lastTrackedSignRef.current = key;
+    trackSignViewed(sign.id, "corridor");
+  }, [explorePhase, exploreSignIndex]);
 
   useEffect(() => {
     // Dev-only QA hooks — see scripts/qa/enter-capture.mjs (no production cost).

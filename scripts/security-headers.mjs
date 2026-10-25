@@ -21,13 +21,13 @@
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   // App modules + TanStack $tsr inline bootstrap + Grok / Turnstile / Vercel live.
-  "script-src 'self' 'unsafe-inline' https://grok.com https://challenges.cloudflare.com https://vercel.live",
+  "script-src 'self' 'unsafe-inline' https://grok.com https://challenges.cloudflare.com https://vercel.live https://www.googletagmanager.com",
   // FOUC inline style + React style props + Google Fonts CSS.
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   // Same-origin assets, data/blob URLs, OG/card images (og.grok.me + https).
   "img-src 'self' data: blob: https:",
-  "connect-src 'self' https://challenges.cloudflare.com https://vercel.live wss://vercel.live https://*.vercel.live wss://*.vercel.live https://og.grok.me",
+  "connect-src 'self' https://challenges.cloudflare.com https://vercel.live wss://vercel.live https://*.vercel.live wss://*.vercel.live https://og.grok.me https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com",
   "frame-src https://challenges.cloudflare.com https://vercel.live",
   "frame-ancestors 'self' https://grok.com https://*.grok.com https://*.grok-sandbox.com https://vercel.live",
   "worker-src 'self' blob:",

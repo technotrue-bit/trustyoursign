@@ -29,6 +29,8 @@ import {
   rememberLocalPasskeyCredentialIds,
 } from "@/lib/auth/passkey-local";
 import { cn } from "@/lib/utils";
+import { consumePendingSignup, trackChartSaved, trackSignup } from "@/lib/analytics";
+import { isClosedBetaTester } from "@/lib/auth/closed-beta-badge";
 import { noindexHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/account")({
@@ -105,6 +107,10 @@ function Account() {
   // (fetch → setState → render → fetch) — and it would re-run `claimSite` with it.
   useEffect(() => {
     if (!userId) return;
+    const pendingMethod = consumePendingSignup();
+    if (pendingMethod) {
+      trackSignup(pendingMethod, isClosedBetaTester(user?.role));
+    }
     load();
     void acceptLegal().catch(() => undefined);
     if (owner) void claimSite().catch(() => undefined);
@@ -665,6 +671,7 @@ function AddChart({ onSaved, onError }: { onSaved: () => void; onError: (m: stri
               otherPermission: permission,
             },
           });
+          trackChartSaved(signId);
           setPersonName("");
           setConsent(false);
           setPermission(false);

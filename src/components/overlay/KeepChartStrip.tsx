@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { trackChartSaved } from "@/lib/analytics";
 import { upsertChart } from "@/lib/charts";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { shouldStartSkyGuide } from "@/lib/chart/sky-guide";
@@ -90,6 +91,7 @@ export function KeepChartStrip() {
               },
             });
             attachSavedId(row.id);
+            trackChartSaved(session.signId);
             setSaved(true);
           } catch (e) {
             setErr(e instanceof Error ? e.message : "Could not save");
