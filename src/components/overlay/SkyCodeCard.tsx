@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Share } from "lucide-react";
+import { trackShareClicked } from "@/lib/analytics";
 import type { SavedChart } from "@/lib/charts";
 import { listCharts } from "@/lib/charts";
 import { getResearchChart } from "@/lib/chart/research";
@@ -287,6 +288,7 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
   const copy = () => {
     void navigator.clipboard.writeText(url).then(
       () => {
+        trackShareClicked(signId, "copy");
         setCopied(true);
         window.setTimeout(() => setCopied(false), 2000);
       },
@@ -324,6 +326,7 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
       try {
         if (payload) {
           await navigator.share(payload);
+          trackShareClicked(signId, "native");
           if (plan.kind === "file") {
             setShareNote("Picture shared. The link above opens this sky.");
           }
@@ -331,6 +334,7 @@ function SkyCodeCard({ signId }: { signId: SavedChart["signId"] }) {
         }
         if (plan.kind === "copy") {
           await navigator.clipboard.writeText(plan.url);
+          trackShareClicked(signId, "copy");
           setShareNote("Link copied. Paste it into Messages, Mail, or anywhere else.");
         }
       } catch (err) {

@@ -6,6 +6,7 @@ import { formatBirth, formatClock, sunSignOn } from "@/lib/chart/sun";
 import { fromVisitor, useClaim, useSessionStore } from "@/lib/chart/session";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
+import { trackChartCreated, trackChartSaved } from "@/lib/analytics";
 import { upsertChart } from "@/lib/charts";
 import { computeVisitorNatal } from "@/lib/chart/sky";
 import type { SkyNatal } from "@/lib/chart/ephemeris";
@@ -190,6 +191,7 @@ export function BirthChat() {
           label: "Your natal",
         },
       });
+      trackChartCreated(sun ?? sign.id, Boolean(user));
       openSession(
         fromVisitor({
           nativity,
@@ -491,7 +493,10 @@ export function BirthChat() {
               data-initial-focus
               onClick={() => {
                 const s = sketch();
-                if (s) openShelf(s);
+                if (s) {
+                  trackChartCreated(sun ?? s.signId, Boolean(user));
+                  openShelf(s);
+                }
               }}
               className="min-h-12 w-full rounded-md bg-accent px-4 text-xs tracking-[0.22em] text-accent-fg uppercase hover:bg-fg md:min-h-11"
             >
@@ -542,6 +547,7 @@ export function BirthChat() {
                       if (useSessionStore.getState().session) {
                         useSessionStore.getState().attachSavedId(row.id);
                       }
+                      trackChartSaved(sun ?? sign.id);
                       setSaved(true);
                     } catch (e) {
                       setSaveErr(e instanceof Error ? e.message : "Could not save");

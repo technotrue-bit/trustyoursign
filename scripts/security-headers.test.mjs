@@ -37,6 +37,8 @@ describe("security headers (P1-18)", () => {
     assert.match(csp, /script-src[^;]*https:\/\/grok\.com/);
     assert.match(csp, /script-src[^;]*https:\/\/challenges\.cloudflare\.com/);
     assert.match(csp, /script-src[^;]*https:\/\/vercel\.live/);
+    assert.match(csp, /script-src[^;]*https:\/\/www\.googletagmanager\.com/);
+    assert.match(csp, /connect-src[^;]*https:\/\/www\.google-analytics\.com/);
     assert.match(csp, /style-src[^;]*'unsafe-inline'/);
     assert.match(csp, /style-src[^;]*https:\/\/fonts\.googleapis\.com/);
     assert.match(csp, /font-src[^;]*https:\/\/fonts\.gstatic\.com/);

@@ -32,6 +32,7 @@ import { SITE_OWNER, isOwnerLogin } from "@/lib/owner";
 import { resolveSessionGuardState } from "@/lib/auth/session-guard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
+import { rememberPendingSignup, trackSignup } from "@/lib/analytics";
 import { noindexHead } from "@/lib/seo";
 
 /** Profile URL after a successful sign-in — never linger on /login. */
@@ -337,6 +338,11 @@ function Login() {
         fetchOptions: { headers: turnstileCaptchaHeaders() },
       });
       if (err) throw new Error(err.message ?? "That code did not work");
+      if (mode === "up") {
+        trackSignup("email", false);
+      } else {
+        rememberPendingSignup("email");
+      }
       // Everyone lands on their profile. Nudge Face ID enroll when this device
       // can do UVPA but has no local passkey evidence yet.
       await goToProfileAfterPasswordlessGate(platformPasskey);
@@ -370,6 +376,8 @@ function Login() {
     try {
       // OAuth / preview popup both use callbackURL=/account — do not navigate
       // here afterward or we overwrite the broker redirect with /account.
+      const method = GROK_PROVIDERS.find((p) => p.providerId === id)?.idp ?? id;
+      rememberPendingSignup(method);
       await signIn(id, { callbackURL: "/account" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign-in failed");
@@ -431,6 +439,7 @@ function Login() {
           },
         });
         if (err) throw new Error(err.message ?? "Could not create the account");
+        trackSignup("email", false);
       } else {
         const { error: err } = await authClient.signIn.email({
           email: addr,
