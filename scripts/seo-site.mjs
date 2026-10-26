@@ -74,8 +74,8 @@ export const PUBLIC_PAGES = [
 ];
 
 /**
- * Sign-in, account, owner and API paths. robots.txt disallows each one and
- * the routes that render a page also send `<meta name="robots" content="noindex">`.
+ * Sign-in, account, owner and API paths. None is in the sitemap, and the
+ * routes that render a page send `<meta name="robots" content="noindex">`.
  */
 export const PRIVATE_PATHS = [
   "/login",
@@ -89,6 +89,14 @@ export const PRIVATE_PATHS = [
   "/api/",
   "/__grok/",
 ];
+
+/**
+ * The only paths robots.txt disallows: ones that never render a page. A page
+ * kept out of search relies on its noindex tag instead, because Google can't
+ * see that tag on a page robots.txt blocks, and indexes the bare URL from
+ * links ("Indexed, though blocked by robots.txt").
+ */
+export const ROBOTS_DISALLOW = ["/api/", "/__grok/"];
 
 /** Absolute canonical URL for a site path. */
 export function canonicalUrl(path) {

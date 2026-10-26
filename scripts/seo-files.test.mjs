@@ -1,12 +1,18 @@
 /**
  * Search files stay in step with scripts/seo-site.mjs: robots.txt lets
- * crawlers in but keeps private paths out, the sitemap lists exactly the
+ * crawlers in and blocks only paths that never render a page, the sitemap lists exactly the
  * public pages, and vercel.json sends duplicate hosts to the apex.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { PRIVATE_PATHS, PUBLIC_PAGES, SITE_ORIGIN, canonicalUrl } from "./seo-site.mjs";
+import {
+  PRIVATE_PATHS,
+  PUBLIC_PAGES,
+  ROBOTS_DISALLOW,
+  SITE_ORIGIN,
+  canonicalUrl,
+} from "./seo-site.mjs";
 import { CONTENT_SECURITY_POLICY, STRICT_TRANSPORT_SECURITY } from "./security-headers.mjs";
 
 const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf8");
@@ -41,8 +47,18 @@ describe("robots.txt", () => {
     assert.deepEqual(sitemaps, [`${SITE_ORIGIN}/sitemap.xml`]);
   });
 
-  it("disallows every private path", () => {
-    for (const path of PRIVATE_PATHS) assert.ok(disallowed.includes(path), path);
+  it("disallows exactly the paths that never render a page", () => {
+    assert.deepEqual(disallowed, [...ROBOTS_DISALLOW]);
+  });
+
+  // A blocked page's noindex tag is never read, so Google indexes the bare URL.
+  it("lets crawlers reach every noindex page so they can read the tag", () => {
+    const pages = PRIVATE_PATHS.filter((path) => !ROBOTS_DISALLOW.includes(path));
+    for (const path of pages) {
+      for (const rule of disallowed) {
+        assert.equal(path.startsWith(rule), false, `${rule} blocks ${path}`);
+      }
+    }
   });
 
   it("does not disallow a public page", () => {

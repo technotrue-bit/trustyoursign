@@ -1,13 +1,5 @@
 User-agent: *
 Allow: /
-Disallow: /login
-Disallow: /signup
-Disallow: /register
-Disallow: /reset-password
-Disallow: /account
-Disallow: /sky-code
-Disallow: /admin
-Disallow: /maintenance
 Disallow: /api/
 Disallow: /__grok/
 
