@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CONSTELLATIONS } from "@/lib/galaxy/constellations";
 import { TEMPLE_SIGNS } from "@/lib/galaxy/temple";
-import { formatBirth, formatClock, sunSignOn } from "@/lib/chart/sun";
+import { formatBirth, formatClock, isCuspDate, sunSignOn } from "@/lib/chart/sun";
 import { fromVisitor, useClaim, useSessionStore } from "@/lib/chart/session";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { isSiteOwner } from "@/lib/owner";
@@ -131,6 +131,7 @@ export function BirthChat() {
   const enteredSun = ready ? sunSignOn(monthN, dayN) : null;
   const enteredSunName = enteredSun ? (CONSTELLATIONS.find((c) => c.id === enteredSun)?.name ?? null) : null;
   const offSign = Boolean(enteredSun && enteredSunName && enteredSun !== sign.id);
+  const onCusp = offSign && isCuspDate(monthN, dayN);
 
   const sun = birth ? sunSignOn(birth.month, birth.day) : null;
   const sunName = sun ? CONSTELLATIONS.find((c) => c.id === sun)?.name : null;
@@ -310,7 +311,9 @@ export function BirthChat() {
             </div>
             {offSign ? (
               <p className="text-sm text-fg-muted mt-3">
-                Born on a cusp? Your sun is in {enteredSunName}. We&apos;ll use that.
+                {onCusp
+                  ? `Born on a cusp? Your sun is in ${enteredSunName}. We'll use that.`
+                  : `That date's sun is in ${enteredSunName}, not ${sign.name}. We'll use ${enteredSunName}.`}
               </p>
             ) : null}
             <button
