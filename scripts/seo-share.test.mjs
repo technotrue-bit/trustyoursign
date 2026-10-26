@@ -59,12 +59,26 @@ describe("seo share rewrite", () => {
     assert.deepEqual(m["twitter:card"], ["summary_large_image"]);
   });
 
-  it("leaves og:type and the x:game banner as the injector wrote them", () => {
+  it("replaces the injector's x:game type with website and drops the game banner", () => {
     const before = metas(injected("trustyoursign.com"));
+    assert.deepEqual(before["og:type"], ["x:game"]);
+    assert.ok(before["x:game:image"]);
     const after = metas(rewriteShareHead(injected("trustyoursign.com")));
-    assert.deepEqual(after["og:type"], ["x:game"]);
-    assert.deepEqual(after["x:game:image"], before["x:game:image"]);
+    assert.deepEqual(after["og:type"], ["website"]);
+    assert.equal(after["x:game:image"], undefined);
+    assert.equal(after["x:game:image:width"], undefined);
+    assert.equal(after["x:game:image:height"], undefined);
     assert.deepEqual(after["og:image:width"], ["1200"]);
+  });
+
+  it("writes og:type website when the injector wrote none", () => {
+    const raw = injectGrokPwaHead(page(ABOUT_HEAD), {
+      host: "trustyoursign.com",
+      site: { ...SITE, type: undefined },
+      cwd: "/nonexistent",
+    });
+    assert.equal(metas(raw)["og:type"], undefined);
+    assert.deepEqual(metas(rewriteShareHead(raw))["og:type"], ["website"]);
   });
 
   it("adds the apex share card when the injector left og:image out (vercel.app)", () => {

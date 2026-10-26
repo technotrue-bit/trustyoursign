@@ -10,13 +10,23 @@
  *   og:site_name                         ← SITE_NAME
  *   twitter:image                        ← og:image (SITE_OG_IMAGE when the
  *                                          injector left it out, e.g. vercel.app)
+ *   og:type                              ← "website"
  *
- * og:type and x:game:* are left as the injector wrote them.
+ * The injector writes og:type=x:game and x:game:image* from site.json for X's
+ * game card. Trust Your Sign is a chart app, not a game, and x:game is not an
+ * Open Graph type other scrapers know, so the share set says "website" and
+ * drops the x:game banner tags.
  */
 import { escapeHtml } from "./grok-pwa-shared.mjs";
 import { SITE_NAME, SITE_OG_IMAGE } from "./seo-site.mjs";
 
+const OG_TYPE = "website";
+
+/** Injector tags this rewriter removes outright. */
+const DROPPED_KEYS = new Set(["x:game:image", "x:game:image:width", "x:game:image:height"]);
+
 const REWRITTEN_KEYS = new Set([
+  "og:type",
   "og:title",
   "og:description",
   "og:url",
@@ -74,8 +84,7 @@ export function readShareSource(html) {
   return source;
 }
 
-const meta = (attr, key, content) =>
-  `<meta ${attr}="${key}" content="${escapeHtml(content)}">`;
+const meta = (attr, key, content) => `<meta ${attr}="${key}" content="${escapeHtml(content)}">`;
 
 /** Rewrite the share tags in an HTML head (or a whole document). */
 export function rewriteShareHead(html) {
@@ -89,6 +98,7 @@ export function rewriteShareHead(html) {
     tags.push(meta(attr, key, content));
   };
 
+  set("property", "og:type", OG_TYPE);
   set("property", "og:title", src.title);
   set("property", "og:description", src.description);
   set("property", "og:url", src.canonical);
@@ -107,6 +117,7 @@ export function rewriteShareHead(html) {
 
   const stripped = html.replace(/<meta\b[^>]*>/gi, (tag) => {
     const key = metaKey(attrs(tag));
+    if (DROPPED_KEYS.has(key)) return "";
     return REWRITTEN_KEYS.has(key) && replace.has(key) ? "" : tag;
   });
   return stripped.replace(/<\/head>/i, `${tags.join("")}</head>`);

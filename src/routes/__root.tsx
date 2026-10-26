@@ -9,7 +9,7 @@ import { MaintenanceWatch } from "@/components/MaintenanceWatch";
 import { getMaintenanceGate } from "@/lib/maintenance";
 import { isMaintenanceExemptPath } from "@/lib/maintenance-paths";
 import { GA_MEASUREMENT_ID } from "@/lib/analytics";
-import { siteJsonLd } from "@/lib/seo";
+import { jsonLdText, siteJsonLd } from "@/lib/seo";
 import {
   PWA_ICON_PATHS,
   PWA_STATUS_BAR_STYLE,
@@ -22,8 +22,7 @@ const GFONTS_LINK_ID = "gfonts-css";
 // Paste the token from Search Console → URL-prefix property → HTML tag.
 // Empty = no tag. Never invent a value; the DNS TXT route needs none.
 const GOOGLE_SITE_VERIFICATION = "";
-// `<` escaped so the JSON can never close its own <script> tag.
-const SITE_JSON_LD = JSON.stringify(siteJsonLd()).replace(/</g, "\\u003c");
+const SITE_JSON_LD = jsonLdText(siteJsonLd());
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
