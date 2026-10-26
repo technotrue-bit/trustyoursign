@@ -244,6 +244,8 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
   const signIndex = useGalaxy((s) => s.signIndex);
   const explorePhase = useGalaxy((s) => s.explore.phase);
   const exploreSignIndex = useGalaxy((s) => s.explore.signIndex);
+  // The note sits over the star row once a sign is open, so it only shows on the belt.
+  const fallbackNote = gate === "galaxy" && explorePhase === "idle" ? FALLBACK_NOTE : undefined;
   const lastTrackedSignRef = useRef<string | null>(null);
   const pointIndex = useGalaxy((s) => s.explore.pointIndex);
   const researchId = useSessionStore((s) =>
@@ -582,7 +584,7 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
           key={sceneEpoch}
           fallback={
             <Suspense fallback={null}>
-              <FallbackSky note={FALLBACK_NOTE} />
+              <FallbackSky note={fallbackNote} />
             </Suspense>
           }
         >
@@ -594,7 +596,7 @@ export function VaultApp({ meshParam, placeSearch }: VaultAppProps = {}) {
         <Suspense fallback={null}>
           {/* Reduced motion chose the 2D sky on purpose — only a real
               WebGL failure gets the "could not load" note. */}
-          <FallbackSky note={prefersReducedMotion() ? undefined : FALLBACK_NOTE} />
+          <FallbackSky note={prefersReducedMotion() ? undefined : fallbackNote} />
         </Suspense>
       ) : (
         <div className="canvas-root" style={{ background: "#0c0b0a" }} aria-hidden />
