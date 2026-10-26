@@ -14,3 +14,7 @@ export declare const PUBLIC_PAGES: readonly PublicPage[];
 export declare const PRIVATE_PATHS: readonly string[];
 export declare function canonicalUrl(path: string): string;
 export declare function publicPage(path: string): PublicPage | undefined;
+export declare function siteJsonLd(): Record<string, unknown>;
+export declare function pageName(page: PublicPage): string;
+export declare function pageJsonLd(path: string): Record<string, unknown> | undefined;
+export declare function jsonLdText(data: unknown): string;

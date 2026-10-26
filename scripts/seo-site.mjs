@@ -100,3 +100,68 @@ export function canonicalUrl(path) {
 export function publicPage(path) {
   return PUBLIC_PAGES.find((page) => page.path === path);
 }
+
+const AUTHOR_ID = `${SITE_ORIGIN}/#author`;
+
+/**
+ * Site-wide schema.org data for the root head: one graph whose nodes point at
+ * each other by @id, so search engines read the site, the app and its author
+ * as one entity rather than three loose ones.
+ */
+export function siteJsonLd() {
+  const url = canonicalUrl("/");
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": `${SITE_ORIGIN}/#website`,
+        name: SITE_NAME,
+        url,
+        inLanguage: "en",
+        publisher: { "@id": AUTHOR_ID },
+      },
+      {
+        "@type": "Person",
+        "@id": AUTHOR_ID,
+        name: SITE_AUTHOR.name,
+        sameAs: SITE_AUTHOR.sameAs,
+      },
+      {
+        "@type": "WebApplication",
+        "@id": `${SITE_ORIGIN}/#app`,
+        name: SITE_NAME,
+        url,
+        applicationCategory: "LifestyleApplication",
+        operatingSystem: "Web",
+        description: publicPage("/")?.description,
+        offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        author: { "@id": AUTHOR_ID },
+      },
+    ],
+  };
+}
+
+/** Short page name for breadcrumbs: the title before " · ". */
+export function pageName(page) {
+  return page.title.split(" · ", 1)[0];
+}
+
+/** Home → page breadcrumb for a public page below the home page; undefined otherwise. */
+export function pageJsonLd(path) {
+  const page = publicPage(path);
+  if (!page || page.path === "/") return undefined;
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: SITE_NAME, item: canonicalUrl("/") },
+      { "@type": "ListItem", position: 2, name: pageName(page), item: canonicalUrl(page.path) },
+    ],
+  };
+}
+
+/** JSON for an application/ld+json script, `<` escaped so it can never close its own tag. */
+export function jsonLdText(data) {
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
