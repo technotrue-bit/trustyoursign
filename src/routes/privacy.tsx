@@ -35,6 +35,11 @@ function Privacy() {
           </li>
           <li>Legal acceptances: that you agreed to these terms and this policy, and when.</li>
           <li>A session cookie so you stay signed in. We do not use advertising cookies.</li>
+          <li>
+            Anonymous visit counts from Vercel Web Analytics and Google Analytics, set so neither stores a cookie on
+            your device. They see pages visited and which features are used (for example, that a chart was made, and
+            for which sign), never your name, email, or birth details.
+          </li>
         </ul>
         <p className="mt-2">
           We do not sell personal data. We do not use your charts to train public models.

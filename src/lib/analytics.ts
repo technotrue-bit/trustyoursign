@@ -2,6 +2,28 @@ import { track } from "@vercel/analytics";
 
 export const GA_MEASUREMENT_ID = "G-KSC2J8LGVM";
 
+/**
+ * Inline head script for GA4. Consent mode starts denied, so GA sends
+ * cookieless visit pings and the cookie notice stays true. gtag.js is fetched
+ * after `load` and an idle slot, off the opening's main thread. Events fired
+ * earlier queue in `dataLayer` and send once it arrives.
+ */
+export function gaBootstrapScript(id: string): string {
+  const src = `https://www.googletagmanager.com/gtag/js?id=${id}`;
+  return [
+    "window.dataLayer=window.dataLayer||[];",
+    "function gtag(){window.dataLayer.push(arguments);}",
+    "window.gtag=gtag;",
+    "gtag('consent','default',{analytics_storage:'denied',ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied'});",
+    "gtag('js',new Date());",
+    `gtag('config',${JSON.stringify(id)});`,
+    "(function(){var go=function(){var s=document.createElement('script');s.async=true;",
+    `s.src=${JSON.stringify(src)};document.head.appendChild(s)};`,
+    "var idle=function(){if(window.requestIdleCallback)window.requestIdleCallback(go,{timeout:4000});else setTimeout(go,1500)};",
+    "if(document.readyState==='complete')idle();else window.addEventListener('load',idle,{once:true})})();",
+  ].join("");
+}
+
 export type AnalyticsParams = Record<string, string | number | boolean>;
 
 type GtagFn = (

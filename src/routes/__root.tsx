@@ -8,7 +8,7 @@ import { OwnerBind } from "@/components/OwnerBind";
 import { MaintenanceWatch } from "@/components/MaintenanceWatch";
 import { getMaintenanceGate } from "@/lib/maintenance";
 import { isMaintenanceExemptPath } from "@/lib/maintenance-paths";
-import { GA_MEASUREMENT_ID } from "@/lib/analytics";
+import { GA_MEASUREMENT_ID, gaBootstrapScript } from "@/lib/analytics";
 import { jsonLdText, siteJsonLd } from "@/lib/seo";
 import {
   PWA_ICON_PATHS,
@@ -86,13 +86,7 @@ export const Route = createRootRoute({
       {
         children: `(function(){var l=document.getElementById(${JSON.stringify(GFONTS_LINK_ID)});if(!l)return;var go=function(){l.media="all"};if(l.sheet){go();return}l.addEventListener("load",go,{once:true})})();`,
       },
-      {
-        async: true,
-        src: `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`,
-      },
-      {
-        children: `window.dataLayer = window.dataLayer || [];\nfunction gtag(){dataLayer.push(arguments);}\ngtag('js', new Date());\ngtag('config', '${GA_MEASUREMENT_ID}');`,
-      },
+      { children: gaBootstrapScript(GA_MEASUREMENT_ID) },
     ],
   }),
   component: () => (
