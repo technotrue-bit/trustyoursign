@@ -147,28 +147,18 @@ export function demandShouldInvalidate(mode: FrameGovernorMode): boolean {
 }
 
 /**
- * Desktop canvases at least this size already draw every other frame during
- * the opening HUD window. Anything under it is phone-sized for that skip.
+ * Cadence for `gl.render` while the opening HUD window is up. Draw every
+ * frame while frames land on time. Once the miss ratio crosses
+ * MISS_RATIO_ENTER, drop to every other frame and stay there until the window
+ * closes, so the opening never flickers between rates. Outside the window
+ * this returns 1 and the caller keeps pause / flight / 120Hz cadence.
  */
-const OPENING_DESKTOP_MIN_WIDTH = 1000;
-const OPENING_DESKTOP_MIN_HEIGHT = 700;
-
-/**
- * Half-rate `gl.render` only while the opening HUD window is up.
- * A large desktop still skips in that window. A phone-sized canvas (under
- * that size) or a small GPU takes the same skip. Outside the window this is
- * false, and the caller keeps pause / flight / 120Hz cadence.
- */
-export function halfRateOpeningRender(input: {
+export function openingRenderEveryNth(input: {
   openingHud: boolean;
-  width: number;
-  height: number;
-  smallGpu: boolean;
-}): boolean {
-  if (!input.openingHud) return false;
-  const desktopLarge =
-    input.width >= OPENING_DESKTOP_MIN_WIDTH && input.height >= OPENING_DESKTOP_MIN_HEIGHT;
-  const phoneSized =
-    input.width < OPENING_DESKTOP_MIN_WIDTH || input.height < OPENING_DESKTOP_MIN_HEIGHT;
-  return desktopLarge || phoneSized || input.smallGpu;
+  missRatio: number;
+  latched: boolean;
+}): { nth: 1 | 2; latched: boolean } {
+  if (!input.openingHud) return { nth: 1, latched: false };
+  const latched = input.latched || input.missRatio > MISS_RATIO_ENTER;
+  return { nth: latched ? 2 : 1, latched };
 }
