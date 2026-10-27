@@ -8,6 +8,7 @@ import {
 } from "@/lib/galaxy/frameGovernor";
 import { noteOpeningMs, openingHudWindowActive } from "@/lib/galaxy/openingProfile";
 import { introPlaying } from "@/lib/galaxy/intro";
+import { noteSkyDraw } from "@/lib/frame-meter";
 import { galaxyTravel } from "@/lib/galaxy/travel";
 
 const INTERVAL_CAP = 180;
@@ -118,6 +119,7 @@ export function FrameGovernor() {
     if (tick.current % renderNth !== 0) return;
     const r0 = import.meta.env.DEV ? performance.now() : 0;
     gl.render(scene, camera);
+    noteSkyDraw();
     if (import.meta.env.DEV) noteOpeningMs("webglRender", performance.now() - r0);
   }, 1);
 

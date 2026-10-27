@@ -4,6 +4,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AndroidInstallCapture } from "@/components/AndroidInstallCapture";
 import { StageLock } from "@/components/StageLock";
+import { FrameMeter } from "@/components/FrameMeter";
 import { OwnerBind } from "@/components/OwnerBind";
 import { MaintenanceWatch } from "@/components/MaintenanceWatch";
 import { getMaintenanceGate } from "@/lib/maintenance";
@@ -125,6 +126,7 @@ export const Route = createRootRoute({
         <PreviewHostBridge />
         <AndroidInstallCapture />
         <StageLock />
+        <FrameMeter />
         <AuthProvider>
           <OwnerBind />
           <MaintenanceWatch />
