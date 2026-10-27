@@ -1,0 +1,38 @@
+# Trust Your Sign
+
+> A free astrology site: pick your zodiac sign, fly through its sky in 3D, and unlock a natal chart of your sun, moon and rising sign (the Big Three), computed from real astronomy. Also a free daily reading for every sign.
+
+Trust Your Sign uses the tropical zodiac (the familiar one) and works out positions with a real astronomy library, not a lookup table. A birth date alone gives the sun sign. Adding a birth time and place unlocks the moon and rising signs; the site does not guess them without that. Readings are cultural and for entertainment, not medical, legal, financial or psychological advice. It is a small independent project by Devin Norris, in closed beta, free to use. Saving charts needs an account (16 and up); exploring and the daily readings do not.
+
+## Pages
+
+- [Home: the natal fly-through](https://trustyoursign.com/): pick a sign, fly its sky, and unlock a chart. Runs in the browser with 3D graphics.
+- [Today's sky](https://trustyoursign.com/today): a daily reading for each sign from where the Moon is today, its phase, and how it lands on that sign. New every day at local midnight.
+- [How this works](https://trustyoursign.com/how-this-works): how a chart is computed and what the Big Three are.
+- [About](https://trustyoursign.com/about): what the site is, who made it, and what is still unfinished.
+- [FAQ](https://trustyoursign.com/faq): entertainment or advice, data, deleting it, the beta, and why time and place matter.
+- [Contact](https://trustyoursign.com/contact): how to reach the site about privacy, bugs and feedback.
+- [Privacy Policy](https://trustyoursign.com/privacy): what is collected and why. No selling personal data, no advertising cookies, no training public models on charts.
+- [Terms of Use](https://trustyoursign.com/terms): the rules for using the site.
+
+## Today's reading for each sign
+
+Each link opens that sign's reading for the visitor's local date. The reading is drawn in the browser, so it needs a page that runs JavaScript.
+
+- [Aries today](https://trustyoursign.com/today?sign=aries): Mar 21 – Apr 19.
+- [Taurus today](https://trustyoursign.com/today?sign=taurus): Apr 20 – May 20.
+- [Gemini today](https://trustyoursign.com/today?sign=gemini): May 21 – Jun 20.
+- [Cancer today](https://trustyoursign.com/today?sign=cancer): Jun 21 – Jul 22.
+- [Leo today](https://trustyoursign.com/today?sign=leo): Jul 23 – Aug 22.
+- [Virgo today](https://trustyoursign.com/today?sign=virgo): Aug 23 – Sep 22.
+- [Libra today](https://trustyoursign.com/today?sign=libra): Sep 23 – Oct 22.
+- [Scorpio today](https://trustyoursign.com/today?sign=scorpio): Oct 23 – Nov 21.
+- [Sagittarius today](https://trustyoursign.com/today?sign=sagittarius): Nov 22 – Dec 21.
+- [Capricorn today](https://trustyoursign.com/today?sign=capricorn): Dec 22 – Jan 19.
+- [Aquarius today](https://trustyoursign.com/today?sign=aquarius): Jan 20 – Feb 18.
+- [Pisces today](https://trustyoursign.com/today?sign=pisces): Feb 19 – Mar 20.
+
+## Optional
+
+- [Sitemap](https://trustyoursign.com/sitemap.xml)
+- [Trust Your Sign's maker on X](https://x.com/ItsMeTrueG)

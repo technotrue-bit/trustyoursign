@@ -2,8 +2,9 @@
  * Search-engine facts in one place: the canonical origin, the public pages
  * (titles, descriptions, sitemap), and the private paths robots.txt keeps out.
  * Plain ESM so `node --test`, the Nitro middleware and `src/lib/seo.ts` all
- * read the same list. public/robots.txt and public/sitemap.xml are static;
- * scripts/seo-files.test.mjs fails when they drift from this file.
+ * read the same list. public/robots.txt, public/sitemap.xml and public/llms.txt
+ * (the guide for AI assistants) are static; scripts/seo-files.test.mjs and
+ * scripts/llms-txt.test.mjs fail when they drift from this file.
  */
 
 /** Canonical URLs always use this origin, never the request host. */
