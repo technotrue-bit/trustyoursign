@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   GA_MEASUREMENT_ID,
+  gaBootstrapScript,
   trackChartCreated,
   trackChartSaved,
   trackEvent,
@@ -50,5 +51,46 @@ describe("GA4 + Vercel analytics helpers", () => {
         (globalThis as { window?: unknown }).window = prevWindow;
       }
     }
+  });
+
+  it("starts GA with no cookies and loads it only after the page is idle", () => {
+    const appended: Array<{ src: string; async: boolean }> = [];
+    const listeners: Record<string, () => void> = {};
+    let idle: (() => void) | null = null;
+    const win: Record<string, unknown> = {
+      addEventListener: (type: string, fn: () => void) => {
+        listeners[type] = fn;
+      },
+      requestIdleCallback: (fn: () => void) => {
+        idle = fn;
+      },
+      document: {
+        readyState: "loading",
+        createElement: () => ({ src: "", async: false }),
+        head: { appendChild: (el: { src: string; async: boolean }) => appended.push(el) },
+      },
+    };
+    new Function("window", "document", gaBootstrapScript(GA_MEASUREMENT_ID))(win, win.document);
+
+    const layer = win.dataLayer as unknown[][];
+    assert.deepEqual(Array.from(layer[0]!), [
+      "consent",
+      "default",
+      {
+        analytics_storage: "denied",
+        ad_storage: "denied",
+        ad_user_data: "denied",
+        ad_personalization: "denied",
+      },
+    ]);
+    assert.deepEqual(Array.from(layer.at(-1)!), ["config", GA_MEASUREMENT_ID]);
+    assert.equal(appended.length, 0, "gtag.js waits for load");
+
+    listeners.load!();
+    assert.equal(appended.length, 0, "gtag.js waits for idle after load");
+    idle!();
+    assert.equal(appended.length, 1);
+    assert.equal(appended[0]!.src, `https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`);
+    assert.equal(appended[0]!.async, true);
   });
 });

@@ -59,9 +59,18 @@ export function databaseTimeoutError(err: unknown): Error | null {
   return wrapped;
 }
 
+/**
+ * pg already treats require / prefer / verify-ca as verify-full and logs a
+ * warning on every cold start saying so. Naming verify-full keeps the same
+ * check and drops the warning.
+ */
+function explicitSslMode(connectionString: string): string {
+  return connectionString.replace(/([?&]sslmode=)(?:require|prefer|verify-ca)(?=&|$)/, "$1verify-full");
+}
+
 export function neonPoolConfig(connectionString: string) {
   return {
-    connectionString,
+    connectionString: explicitSslMode(connectionString),
     max: NEON_POOL_MAX,
     connectionTimeoutMillis: NEON_CONNECTION_TIMEOUT_MS,
     query_timeout: NEON_QUERY_TIMEOUT_MS,

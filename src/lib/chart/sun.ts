@@ -17,6 +17,17 @@ export function sunSignOn(month: number, day: number): SignId {
   return "pisces";
 }
 
+/** Within two days of a sign change, where the birth year and hour decide the sun. */
+export function isCuspDate(month: number, day: number): boolean {
+  const sign = sunSignOn(month, day);
+  const at = Date.UTC(2000, month - 1, day);
+  for (const offset of [-2, -1, 1, 2]) {
+    const d = new Date(at + offset * 86_400_000);
+    if (sunSignOn(d.getUTCMonth() + 1, d.getUTCDate()) !== sign) return true;
+  }
+  return false;
+}
+
 function monthLength(month: number, year?: number) {
   if (year && year >= 1) return new Date(year, month, 0).getDate();
   if (month === 2) return 29;
