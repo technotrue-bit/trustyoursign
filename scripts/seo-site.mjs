@@ -24,6 +24,14 @@ export const PUBLIC_PAGES = [
     priority: "1.0",
   },
   {
+    path: "/today",
+    title: "Today's sky for your sign · Trust Your Sign",
+    description:
+      "A daily astrology reading for each zodiac sign from the real sky: the Moon's phase and sign today, how it lands on yours, and what to lean into.",
+    changefreq: "daily",
+    priority: "0.8",
+  },
+  {
     path: "/about",
     title: "About · Trust Your Sign",
     description:

@@ -95,6 +95,10 @@ export function GalaxyShell() {
             aria-label="House"
             className="sky-hud-footer pointer-events-auto px-2 text-[0.6rem] leading-snug tracking-wide md:px-3 md:text-[0.62rem] md:leading-relaxed"
           >
+            <Link to="/today" className="hover:text-fg">
+              Today
+            </Link>
+            {" · "}
             <Link to="/about" className="hover:text-fg">
               About
             </Link>

@@ -14,6 +14,8 @@ import { Gloss, GlossRoot } from "./Gloss";
 import { streetForPlanet } from "@/lib/chart/digest";
 import { ChartSheet } from "./ChartSheet";
 import { cn } from "@/lib/utils";
+import { ShareBigThreeButton } from "@/components/ShareBigThreeButton";
+import { bigThreeFromLons } from "@/lib/share-card";
 
 export function DetailPanel() {
   const session = useSession();
@@ -83,6 +85,13 @@ function ShelfPanel() {
   if (!shelf) return null;
   const sign = TEMPLE_SIGNS.find((s) => s.id === shelf.signId);
   const natal = shelf.skyNatal;
+  const bodyLon = (id: "sun" | "moon" | "asc") => natal?.bodies.find((b) => b.id === id)?.lon;
+  const shelfSun = bodyLon("sun");
+  const shelfMoon = bodyLon("moon");
+  const shelfThree =
+    shelfSun != null && shelfMoon != null
+      ? bigThreeFromLons({ sun: shelfSun, moon: shelfMoon, asc: bodyLon("asc") })
+      : null;
   return (
     <ChartSheet label="the shelf">
       <div className="panel-enter">
@@ -110,6 +119,13 @@ function ShelfPanel() {
               : `Yours is the sun in ${sign?.name ?? shelf.signId}. No time, no place, no planets.`}
           </p>
         )}
+        {shelfThree ? (
+          <ShareBigThreeButton
+            three={shelfThree}
+            label={shelf.relation === "self" ? "Share my Big Three" : "Share this Big Three"}
+            className="mt-4"
+          />
+        ) : null}
         <div className="mt-4 flex gap-2 text-xs tracking-[0.16em] uppercase">
           <button
             type="button"
@@ -423,6 +439,14 @@ function SkyIndex() {
     "asc",
     "mc",
   ];
+  const visitorThree =
+    nat.planetById.sun && nat.planetById.moon
+      ? bigThreeFromLons({
+          sun: nat.planetById.sun.lon,
+          moon: nat.planetById.moon.lon,
+          asc: nat.planetById.asc?.lon,
+        })
+      : null;
   return (
     <ListPanel kicker="The sky" title={nat.meta.oneCut}>
       {session?.kind === "visitor" ? (
@@ -452,6 +476,13 @@ function SkyIndex() {
           );
         })}
       </ul>
+      {session?.kind === "visitor" && visitorThree ? (
+        <ShareBigThreeButton
+          three={visitorThree}
+          label={session.relation === "self" ? "Share my Big Three" : "Share this Big Three"}
+          className="mt-4"
+        />
+      ) : null}
       <p className="mt-4 hidden text-sm leading-relaxed text-fg-muted md:block">
         <Gloss>Drag the wheel. Click a sign on the ring, or a point in this list.</Gloss>
       </p>
