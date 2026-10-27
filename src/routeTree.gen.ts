@@ -24,6 +24,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SkyCodeRouteImport } from './routes/sky-code'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as TodayRouteImport } from './routes/today'
 import { Route as AdminUsersRouteImport } from './routes/admin_.users'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -103,6 +104,11 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TodayRoute = TodayRouteImport.update({
+  id: '/today',
+  path: '/today',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminUsersRoute = AdminUsersRouteImport.update({
   id: '/admin_/users',
   path: '/admin/users',
@@ -135,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/sky-code': typeof SkyCodeRoute
   '/terms': typeof TermsRoute
+  '/today': typeof TodayRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -155,6 +162,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/sky-code': typeof SkyCodeRoute
   '/terms': typeof TermsRoute
+  '/today': typeof TodayRoute
   '/admin/users': typeof AdminUsersRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -176,6 +184,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/sky-code': typeof SkyCodeRoute
   '/terms': typeof TermsRoute
+  '/today': typeof TodayRoute
   '/admin_/users': typeof AdminUsersRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -198,6 +207,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/sky-code'
     | '/terms'
+    | '/today'
     | '/admin/users'
     | '/api/feedback'
     | '/api/auth/$'
@@ -218,6 +228,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/sky-code'
     | '/terms'
+    | '/today'
     | '/admin/users'
     | '/api/feedback'
     | '/api/auth/$'
@@ -238,6 +249,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/sky-code'
     | '/terms'
+    | '/today'
     | '/admin_/users'
     | '/api/feedback'
     | '/api/auth/$'
@@ -259,6 +271,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   SkyCodeRoute: typeof SkyCodeRoute
   TermsRoute: typeof TermsRoute
+  TodayRoute: typeof TodayRoute
   AdminUsersRoute: typeof AdminUsersRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -371,6 +384,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/today': {
+      id: '/today'
+      path: '/today'
+      fullPath: '/today'
+      preLoaderRoute: typeof TodayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/users': {
       id: '/admin_/users'
       path: '/admin/users'
@@ -411,6 +431,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   SkyCodeRoute: SkyCodeRoute,
   TermsRoute: TermsRoute,
+  TodayRoute: TodayRoute,
   AdminUsersRoute: AdminUsersRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

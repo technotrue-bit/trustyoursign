@@ -239,7 +239,7 @@ export function composeDailySky(input: DailySkyInput): DailySky {
 /** Real sky for `when`. Lazy-loads astronomy-engine; no network. */
 export async function dailySky(signId: SignId, when: Date = new Date()): Promise<DailySky> {
   const { Body, Ecliptic, GeoVector, Illumination, MoonPhase } = await loadAstronomy();
-  const lonOf = (body: typeof Body.Moon, at: Date) =>
+  const lonOf = (body: typeof Body.Moon | typeof Body.Sun, at: Date) =>
     wrap360(Ecliptic(GeoVector(body, at, true)).elon);
 
   const moonLon = lonOf(Body.Moon, when);

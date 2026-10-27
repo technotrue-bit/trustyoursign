@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { enrichMoonSignBrief, getMoonSignBrief, type MoonSignBriefResult } from "@/lib/chart/moon-brief";
 import type { SignId } from "@/lib/chart/types";
@@ -112,6 +113,13 @@ export function MoonSignBriefCard({ signId, signName }: { signId: SignId; signNa
       <p className="mt-2 text-[0.6rem] tracking-[0.16em] text-fg-subtle uppercase">
         How it lands on {signName}
       </p>
+      <Link
+        to="/today"
+        search={{ sign: signId }}
+        className="mt-1 inline-flex min-h-11 items-center px-3 text-[0.65rem] tracking-[0.2em] text-fg uppercase underline-offset-4 hover:underline"
+      >
+        {signName}’s full sky today
+      </Link>
       {signedIn ? (
         <button
           type="button"
