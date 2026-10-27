@@ -71,3 +71,19 @@ describe("pool timeouts", () => {
     assert.equal(databaseTimeoutError(new Error("relation does not exist")), null);
   });
 });
+
+describe("ssl mode", () => {
+  it("names verify-full, the check pg already runs for require", () => {
+    const config = neonPoolConfig(`${SECRET}?sslmode=require&channel_binding=require`);
+    assert.equal(
+      config.connectionString,
+      `${SECRET}?sslmode=verify-full&channel_binding=require`,
+    );
+  });
+
+  it("leaves a url without sslmode, or with verify-full or disable, alone", () => {
+    for (const url of ["postgres://localhost/app", `${SECRET}?sslmode=verify-full`, `${SECRET}?sslmode=disable`]) {
+      assert.equal(neonPoolConfig(url).connectionString, url);
+    }
+  });
+});
