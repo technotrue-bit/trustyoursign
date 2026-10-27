@@ -313,7 +313,7 @@ function paintBackdrop(ctx: CanvasRenderingContext2D, card: CardLayout) {
     const ox = w / 2 - ((minX + maxX) / 2) * scale;
     const oy = h * 0.34 + ((minY + maxY) / 2) * scale;
     const at = (s: { x: number; y: number }) => ({ x: ox + s.x * scale, y: oy - s.y * scale });
-    ctx.strokeStyle = hexToRgba(card.tint, 0.16);
+    ctx.strokeStyle = hexToRgba(card.tint, 0.12);
     ctx.lineWidth = 2;
     for (const [a, b] of figure.lines) {
       const p = figure.stars[a];
@@ -328,9 +328,9 @@ function paintBackdrop(ctx: CanvasRenderingContext2D, card: CardLayout) {
     }
     for (const s of figure.stars) {
       const p = at(s);
-      ctx.fillStyle = hexToRgba(CREAM, 0.28 + s.mag * 0.3);
+      ctx.fillStyle = hexToRgba(CREAM, 0.2 + s.mag * 0.25);
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 2.5 + s.mag * 5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 2 + s.mag * 4, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -395,6 +395,9 @@ export function paintShareCard(ctx: CanvasRenderingContext2D, card: CardLayout):
     const step = size * (item.lineHeight ?? 1.2);
     const top = item.y - ((lines.length - 1) * step) / 2;
     ctx.fillStyle = item.color;
+    // A soft ink halo lets the constellation fall away behind the type.
+    ctx.shadowColor = INK;
+    ctx.shadowBlur = Math.max(12, size * 0.5);
     lines.forEach((line, i) => {
       // Letter spacing adds a trailing gap; nudge it back so tracked caps stay centred.
       const nudge = ((item.tracking ?? 0) * size) / 2;
@@ -402,4 +405,6 @@ export function paintShareCard(ctx: CanvasRenderingContext2D, card: CardLayout):
     });
   }
   ctx.letterSpacing = "0px";
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = "transparent";
 }
