@@ -4,7 +4,8 @@ import {
   HALF_RATE_MIN_MS,
   HIGH_REFRESH_MEDIAN_MS,
   decideFrameGovernor,
-  halfRateOpeningRender,
+  MISS_RATIO_ENTER,
+  openingRenderEveryNth,
   median,
   missRatioAgainst,
   windowIntervals,
@@ -94,38 +95,23 @@ describe("frameGovernor", () => {
     assert.equal(d.renderEveryNth, 1);
   });
 
-  it("half-rates the opening on a large desktop and on a phone, only while the HUD window is up", () => {
-    const desktop = { width: 1350, height: 940, smallGpu: false };
-    const phone = { width: 390, height: 844, smallGpu: false };
-    const phoneLandscape = { width: 844, height: 390, smallGpu: false };
-    const wideShort = { width: 1100, height: 600, smallGpu: false };
+  it("draws every frame in the opening while frames land, and half-rates only once they miss", () => {
+    const smooth = openingRenderEveryNth({ openingHud: true, missRatio: 0, latched: false });
+    assert.deepEqual(smooth, { nth: 1, latched: false });
 
-    assert.equal(halfRateOpeningRender({ openingHud: true, ...desktop }), true);
-    assert.equal(
-      halfRateOpeningRender({ openingHud: true, width: 1000, height: 700, smallGpu: false }),
-      true,
-    );
-    assert.equal(halfRateOpeningRender({ openingHud: true, ...phone }), true);
-    assert.equal(
-      halfRateOpeningRender({ openingHud: true, width: 999, height: 700, smallGpu: false }),
-      true,
-    );
-    assert.equal(
-      halfRateOpeningRender({ openingHud: true, width: 1000, height: 699, smallGpu: false }),
-      true,
-    );
-    assert.equal(halfRateOpeningRender({ openingHud: true, ...phoneLandscape }), true);
-    assert.equal(halfRateOpeningRender({ openingHud: true, ...wideShort }), true);
-    assert.equal(
-      halfRateOpeningRender({ openingHud: true, width: 1350, height: 940, smallGpu: true }),
-      true,
-    );
+    const struggling = openingRenderEveryNth({
+      openingHud: true,
+      missRatio: MISS_RATIO_ENTER + 0.01,
+      latched: false,
+    });
+    assert.deepEqual(struggling, { nth: 2, latched: true });
 
-    assert.equal(halfRateOpeningRender({ openingHud: false, ...desktop }), false);
-    assert.equal(halfRateOpeningRender({ openingHud: false, ...phone }), false);
-    assert.equal(
-      halfRateOpeningRender({ openingHud: false, width: 1350, height: 940, smallGpu: true }),
-      false,
-    );
+    // Once latched, the rest of the window stays at half rate so it can't flicker.
+    const recovered = openingRenderEveryNth({ openingHud: true, missRatio: 0, latched: true });
+    assert.deepEqual(recovered, { nth: 2, latched: true });
+
+    // The window closing hands cadence back to the 120Hz latch and clears the opening one.
+    const after = openingRenderEveryNth({ openingHud: false, missRatio: 0.5, latched: true });
+    assert.deepEqual(after, { nth: 1, latched: false });
   });
 });
